@@ -6,7 +6,7 @@ import { MemoryFlush } from './core/flush.js';
 import { LifecycleEngine } from './decay/lifecycle.js';
 import { HybridSearchEngine } from './search/hybrid.js';
 import { MarkdownExporter } from './export/markdown.js';
-import { SqliteVecBackend } from './vector/sqlite-vec.js';
+import { createVectorBackend } from './vector/index.js';
 import { createCascadeLLM } from './llm/cascade.js';
 import { createCascadeEmbedding } from './embedding/cascade.js';
 import type { VectorBackend } from './vector/interface.js';
@@ -32,7 +32,7 @@ export class CortexApp {
     this.llmExtraction = createCascadeLLM(config.llm.extraction);
     this.llmLifecycle = createCascadeLLM(config.llm.lifecycle);
     this.embeddingProvider = createCascadeEmbedding(config.embedding);
-    this.vectorBackend = new SqliteVecBackend();
+    this.vectorBackend = createVectorBackend(config.vectorBackend as any);
 
     // Initialize engines
     this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, config.search);
