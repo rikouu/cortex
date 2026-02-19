@@ -1,0 +1,139 @@
+// Cortex Configuration System
+import { z } from 'zod';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const LLMProviderSchema = z.object({
+  provider: z.enum(['openai', 'anthropic', 'google', 'openrouter', 'ollama', 'none']),
+  model: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+  timeoutMs: z.number().optional(),
+});
+
+const EmbeddingProviderSchema = z.object({
+  provider: z.enum(['openai', 'ollama', 'none']),
+  model: z.string().optional(),
+  dimensions: z.number().optional(),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+  timeoutMs: z.number().optional(),
+});
+
+const VectorBackendSchema = z.object({
+  provider: z.enum(['sqlite-vec', 'qdrant', 'milvus', 'none']).default('sqlite-vec'),
+  qdrant: z.object({
+    url: z.string(),
+    collection: z.string(),
+    apiKey: z.string().optional(),
+  }).optional(),
+});
+
+const CortexConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  port: z.number().default(21100),
+  host: z.string().default('127.0.0.1'),
+  storage: z.object({
+    dbPath: z.string().default('cortex/brain.db'),
+    walMode: z.boolean().default(true),
+  }).default({}),
+  llm: z.object({
+    extraction: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o-mini' }),
+    lifecycle: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o-mini' }),
+  }).default({}),
+  embedding: EmbeddingProviderSchema.default({
+    provider: 'openai',
+    model: 'text-embedding-3-small',
+    dimensions: 1536,
+  }),
+  vectorBackend: VectorBackendSchema.default({ provider: 'sqlite-vec' }),
+  layers: z.object({
+    working: z.object({ ttl: z.string().default('48h') }).default({}),
+    core: z.object({ maxEntries: z.number().default(1000) }).default({}),
+    archive: z.object({
+      ttl: z.string().default('90d'),
+      compressBackToCore: z.boolean().default(true),
+    }).default({}),
+  }).default({}),
+  gate: z.object({
+    maxInjectionTokens: z.number().default(2000),
+    skipSmallTalk: z.boolean().default(true),
+    layerWeights: z.object({
+      core: z.number().default(1.0),
+      working: z.number().default(0.8),
+      archive: z.number().default(0.5),
+    }).default({}),
+  }).default({}),
+  sieve: z.object({
+    highSignalImmediate: z.boolean().default(true),
+  }).default({}),
+  lifecycle: z.object({
+    schedule: z.string().default('0 3 * * *'),
+    promotionThreshold: z.number().default(0.6),
+    archiveThreshold: z.number().default(0.2),
+    decayLambda: z.number().default(0.03),
+  }).default({}),
+  flush: z.object({
+    enabled: z.boolean().default(true),
+    softThresholdTokens: z.number().default(40000),
+  }).default({}),
+  search: z.object({
+    hybrid: z.boolean().default(true),
+    vectorWeight: z.number().default(0.7),
+    textWeight: z.number().default(0.3),
+    recencyBoostWindow: z.string().default('7d'),
+    accessBoostCap: z.number().default(10),
+  }).default({}),
+  markdownExport: z.object({
+    enabled: z.boolean().default(true),
+    exportMemoryMd: z.boolean().default(true),
+    debounceMs: z.number().default(300000),
+  }).default({}),
+});
+
+export type CortexConfig = z.infer<typeof CortexConfigSchema>;
+
+let _config: CortexConfig | null = null;
+
+export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
+  // 1. Try loading from config file
+  let fileConfig: Record<string, unknown> = {};
+  const configPaths = [
+    path.resolve('cortex.json'),
+    path.resolve('cortex.config.json'),
+    path.join(process.env.HOME || '', '.config/cortex/config.json'),
+  ];
+
+  for (const p of configPaths) {
+    if (fs.existsSync(p)) {
+      try {
+        fileConfig = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        break;
+      } catch { /* skip invalid */ }
+    }
+  }
+
+  // 2. Env overrides
+  const envOverrides: Record<string, unknown> = {};
+  if (process.env.CORTEX_PORT) envOverrides.port = parseInt(process.env.CORTEX_PORT);
+  if (process.env.CORTEX_HOST) envOverrides.host = process.env.CORTEX_HOST;
+  if (process.env.CORTEX_DB_PATH) envOverrides.storage = { dbPath: process.env.CORTEX_DB_PATH };
+
+  // 3. Merge and validate
+  const merged = { ...fileConfig, ...envOverrides, ...overrides };
+  _config = CortexConfigSchema.parse(merged);
+  return _config;
+}
+
+export function getConfig(): CortexConfig {
+  if (!_config) {
+    return loadConfig();
+  }
+  return _config;
+}
+
+export function updateConfig(partial: Partial<CortexConfig>): CortexConfig {
+  const current = getConfig();
+  _config = CortexConfigSchema.parse({ ...current, ...partial });
+  return _config;
+}
