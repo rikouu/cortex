@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { listMemories, createMemory, updateMemory, deleteMemory } from '../api/client.js';
+import MemoryDetail from './MemoryDetail.js';
 
 interface Memory {
   id: string;
@@ -23,6 +24,7 @@ export default function MemoryBrowser() {
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState<Memory | null>(null);
   const [creating, setCreating] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [newMem, setNewMem] = useState({ layer: 'core', category: 'fact', content: '', importance: 0.5 });
   const limit = 20;
 
@@ -64,6 +66,10 @@ export default function MemoryBrowser() {
 
   return (
     <div>
+      {detailId ? (
+        <MemoryDetail memoryId={detailId} onBack={() => setDetailId(null)} />
+      ) : (
+      <>
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
         <h1 className="page-title" style={{marginBottom: 0}}>Memories</h1>
         <button className="btn primary" onClick={() => setCreating(true)}>+ New Memory</button>
@@ -102,6 +108,7 @@ export default function MemoryBrowser() {
               <span>Access: {m.access_count}</span>
               <span>Agent: {m.agent_id}</span>
               <div style={{marginLeft: 'auto', display: 'flex', gap: 8}}>
+                <button className="btn" onClick={() => setDetailId(m.id)} style={{fontSize: 12}}>View</button>
                 <button className="btn" onClick={() => setEditing({...m})}>Edit</button>
                 <button className="btn danger" onClick={() => handleDelete(m.id)}>Delete</button>
               </div>
@@ -182,7 +189,9 @@ export default function MemoryBrowser() {
               <button className="btn primary" onClick={handleCreate} disabled={!newMem.content.trim()}>Create</button>
             </div>
           </div>
-        </div>
+              </div>
+      )}
+      </>
       )}
     </div>
   );
