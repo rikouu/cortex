@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getExtractionLogs, listAgents } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
+import { toLocal } from '../utils/time.js';
 
 interface ExtractedMemory {
   content: string;
@@ -142,7 +143,7 @@ export default function ExtractionLogs() {
                   onClick={() => setExpandedId(expanded ? null : log.id)}
                 >
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 130 }}>
-                    {log.created_at?.slice(0, 19).replace('T', ' ')}
+                    {toLocal(log.created_at)}
                   </span>
                   <span style={{
                     fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,

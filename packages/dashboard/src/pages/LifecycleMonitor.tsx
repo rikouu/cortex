@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getLifecycleLogs, runLifecycle, previewLifecycle, getConfig, listMemories } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
+import { toLocal } from '../utils/time.js';
 
 interface PreviewDetail {
   promoted: number;
@@ -215,7 +216,7 @@ export default function LifecycleMonitor() {
                             <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.content}</td>
                             <td>{importance.toFixed(2)}</td>
                             <td>{decay.toFixed(3)}</td>
-                            <td>{m.created_at?.slice(0, 10)}</td>
+                            <td>{toLocal(m.created_at, 'date')}</td>
                             <td style={{ color: actionColor, fontWeight: 600 }}>{action}</td>
                           </tr>
                         );
@@ -279,7 +280,7 @@ export default function LifecycleMonitor() {
                   <td><span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: '#818cf8' }}>{log.action}</span></td>
                   <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.memory_ids}</td>
                   <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.details || '\u2014'}</td>
-                  <td>{log.executed_at?.slice(0, 19)}</td>
+                  <td>{toLocal(log.executed_at)}</td>
                 </tr>
               ))}
             </tbody>

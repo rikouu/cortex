@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { listRelations, createRelation, deleteRelation, search } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
+import { toLocal } from '../utils/time.js';
 
 interface Relation {
   id: string;
@@ -689,7 +690,7 @@ export default function RelationGraph() {
                     {r.expired ? <span style={{ marginLeft: 4, fontSize: 10, color: '#f59e0b' }}>{t('relations.expired')}</span> : null}
                   </td>
                   <td>{sourceBadge(r.source)}</td>
-                  <td>{r.created_at?.slice(0, 10)}</td>
+                  <td>{toLocal(r.created_at, 'date')}</td>
                   <td><button className="btn danger" onClick={() => handleDelete(r.id)}>x</button></td>
                 </tr>
               ))}

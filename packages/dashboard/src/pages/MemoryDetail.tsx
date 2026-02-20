@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getMemory, updateMemory, search, getMemoryChain } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
+import { toLocal } from '../utils/time.js';
 
 interface Memory {
   id: string;
@@ -215,8 +216,8 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
               </div>
             </td></tr>
             <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.accessCount')}</td><td>{memory.access_count}</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.created')}</td><td>{memory.created_at}</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.updated')}</td><td>{memory.updated_at}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.created')}</td><td>{toLocal(memory.created_at)}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.updated')}</td><td>{toLocal(memory.updated_at)}</td></tr>
             {memory.agent_id && <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.agent')}</td><td>{memory.agent_id}</td></tr>}
             {memory.source && <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.source')}</td><td>{memory.source}</td></tr>}
             {memory.metadata && (
@@ -340,7 +341,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                           {t('memoryDetail.replaced')}
                         </span>
                       )}
-                      <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{m.created_at?.slice(0, 19)}</span>
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{toLocal(m.created_at)}</span>
                     </div>
                     <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.content}</div>
                     {updateReasoning && (
