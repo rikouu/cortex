@@ -1,7 +1,18 @@
 import { uuidv7 } from 'uuidv7';
+import * as OpenCC from 'opencc-js';
+
+const t2s = OpenCC.Converter({ from: 't', to: 'cn' });
 
 export function generateId(): string {
   return uuidv7();
+}
+
+/**
+ * Normalize an entity name for consistent relation matching.
+ * Applies: trim → NFKC unicode normalization → Traditional→Simplified Chinese → collapse whitespace.
+ */
+export function normalizeEntity(text: string): string {
+  return t2s(text.trim().normalize('NFKC')).replace(/\s+/g, ' ');
 }
 
 /**

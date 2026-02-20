@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { getDb } from './connection.js';
-import { generateId } from '../utils/helpers.js';
+import { generateId, normalizeEntity } from '../utils/helpers.js';
 
 // ============ Memory Types ============
 
@@ -252,11 +252,14 @@ export function insertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'update
   const db = getDb();
   const id = generateId();
   const now = new Date().toISOString();
+  const subject = normalizeEntity(rel.subject);
+  const predicate = normalizeEntity(rel.predicate);
+  const object = normalizeEntity(rel.object);
 
   db.prepare(`
     INSERT INTO relations (id, subject, predicate, object, confidence, source_memory_id, agent_id, source, extraction_count, expired, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, rel.subject, rel.predicate, rel.object, rel.confidence, rel.source_memory_id || null, rel.agent_id || 'default', rel.source || 'manual', rel.extraction_count ?? 1, rel.expired ?? 0, now, now);
+  `).run(id, subject, predicate, object, rel.confidence, rel.source_memory_id || null, rel.agent_id || 'default', rel.source || 'manual', rel.extraction_count ?? 1, rel.expired ?? 0, now, now);
 
   return db.prepare('SELECT * FROM relations WHERE id = ?').get(id) as Relation;
 }
@@ -265,11 +268,14 @@ export function upsertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'update
   const db = getDb();
   const agentId = rel.agent_id || 'default';
   const now = new Date().toISOString();
+  const subject = normalizeEntity(rel.subject);
+  const predicate = normalizeEntity(rel.predicate);
+  const object = normalizeEntity(rel.object);
 
-  // Check for existing relation with same subject+predicate+object+agent_id
+  // Check for existing relation with same normalized subject+predicate+object+agent_id
   const existing = db.prepare(
     'SELECT * FROM relations WHERE subject = ? AND predicate = ? AND object = ? AND agent_id = ?'
-  ).get(rel.subject, rel.predicate, rel.object, agentId) as Relation | undefined;
+  ).get(subject, predicate, object, agentId) as Relation | undefined;
 
   if (existing) {
     // EMA confidence update: new = 0.3 * incoming + 0.7 * existing
@@ -288,13 +294,13 @@ export function upsertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'update
     return { ...updated, action: 'updated' };
   }
 
-  // Insert new
+  // Insert new with normalized entity names
   const id = generateId();
   const expired = rel.expired ?? 0;
   db.prepare(`
     INSERT INTO relations (id, subject, predicate, object, confidence, source_memory_id, agent_id, source, extraction_count, expired, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, rel.subject, rel.predicate, rel.object, rel.confidence, rel.source_memory_id || null, agentId, rel.source || 'manual', 1, expired, now, now);
+  `).run(id, subject, predicate, object, rel.confidence, rel.source_memory_id || null, agentId, rel.source || 'manual', 1, expired, now, now);
 
   // Record initial evidence
   db.prepare(
@@ -310,8 +316,8 @@ export function listRelations(opts?: { subject?: string; object?: string; agent_
   const conditions: string[] = [];
   const params: any[] = [];
 
-  if (opts?.subject) { conditions.push('subject = ?'); params.push(opts.subject); }
-  if (opts?.object) { conditions.push('object = ?'); params.push(opts.object); }
+  if (opts?.subject) { conditions.push('subject = ?'); params.push(normalizeEntity(opts.subject)); }
+  if (opts?.object) { conditions.push('object = ?'); params.push(normalizeEntity(opts.object)); }
   if (opts?.agent_id) { conditions.push('agent_id = ?'); params.push(opts.agent_id); }
   if (!opts?.include_expired) { conditions.push('expired = 0'); }
 
