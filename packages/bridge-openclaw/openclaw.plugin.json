@@ -1,7 +1,7 @@
 {
   "id": "cortex-bridge",
   "name": "Cortex Memory Bridge",
-  "kind": "memory",
+  "kind": "tool",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

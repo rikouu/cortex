@@ -7,18 +7,15 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/dashboard/package.json packages/dashboard/
-COPY packages/bridge-openclaw/package.json packages/bridge-openclaw/ 2>/dev/null || true
-COPY packages/mcp-client/package.json packages/mcp-client/ 2>/dev/null || true
+COPY packages/bridge-openclaw/package.json packages/bridge-openclaw/
+COPY packages/mcp-client/package.json packages/mcp-client/
 RUN pnpm install --frozen-lockfile || pnpm install
 
 # Copy source
 COPY . .
 
-# Build dashboard
-RUN cd packages/dashboard && pnpm build || true
-
-# Build server
-RUN cd packages/server && pnpm build || true
+# Build all packages
+RUN pnpm -r build
 
 # ============ Runtime Stage ============
 FROM node:22-slim AS runtime
@@ -29,8 +26,8 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/dashboard/package.json packages/dashboard/
-COPY packages/bridge-openclaw/package.json packages/bridge-openclaw/ 2>/dev/null || true
-COPY packages/mcp-client/package.json packages/mcp-client/ 2>/dev/null || true
+COPY packages/bridge-openclaw/package.json packages/bridge-openclaw/
+COPY packages/mcp-client/package.json packages/mcp-client/
 RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
 
 # Copy built server
@@ -38,7 +35,7 @@ COPY --from=builder /app/packages/server/dist packages/server/dist/
 COPY --from=builder /app/packages/server/src packages/server/src/
 
 # Copy built dashboard static files
-COPY --from=builder /app/packages/dashboard/dist packages/dashboard/dist/ 2>/dev/null || true
+COPY --from=builder /app/packages/dashboard/dist packages/dashboard/dist/
 
 # Runtime config
 ENV NODE_ENV=production

@@ -105,15 +105,22 @@ function GlobalSearch() {
 
 function AppContent() {
   const { t, locale, setLocale } = useI18n();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      {/* Mobile menu button */}
+      <button className="mobile-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu">
+        {sidebarOpen ? '✕' : '☰'}
+      </button>
+      {/* Overlay */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-logo">🧠 <span>Cortex</span></div>
         <div style={{ padding: '8px 12px' }}>
           <GlobalSearch />
         </div>
-        <nav>
+        <nav onClick={() => setSidebarOpen(false)}>
           <NavLink to="/" end className={({ isActive }) => isActive ? 'active' : ''}>📊 {t('nav.dashboard')}</NavLink>
           <NavLink to="/memories" className={({ isActive }) => isActive ? 'active' : ''}>🗂️ {t('nav.memories')}</NavLink>
           <NavLink to="/agents" className={({ isActive }) => isActive ? 'active' : ''}>🤖 {t('nav.agents')}</NavLink>

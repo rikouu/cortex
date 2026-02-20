@@ -55,7 +55,6 @@ async function main() {
     await app.register(fastifyStatic, {
       root: dashboardPath,
       prefix: '/',
-      decorateReply: false,
     });
     // SPA fallback: serve index.html for non-API routes
     app.setNotFoundHandler(async (req, reply) => {
@@ -69,7 +68,7 @@ async function main() {
   }
 
   // Error handler
-  app.setErrorHandler((error, req, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number }, req, reply) => {
     log.error({ error: error.message, url: req.url, method: req.method }, 'Request error');
     reply.code(error.statusCode || 500).send({
       error: error.message,
