@@ -9,6 +9,7 @@ import { MarkdownExporter } from './export/markdown.js';
 import { createVectorBackend } from './vector/index.js';
 import { createCascadeLLM } from './llm/cascade.js';
 import { createCascadeEmbedding } from './embedding/cascade.js';
+import { CachedEmbeddingProvider } from './embedding/cache.js';
 import type { VectorBackend } from './vector/interface.js';
 import type { LLMProvider } from './llm/interface.js';
 import type { EmbeddingProvider } from './embedding/interface.js';
@@ -31,7 +32,8 @@ export class CortexApp {
     // Initialize providers
     this.llmExtraction = createCascadeLLM(config.llm.extraction);
     this.llmLifecycle = createCascadeLLM(config.llm.lifecycle);
-    this.embeddingProvider = createCascadeEmbedding(config.embedding);
+    const baseEmbedding = createCascadeEmbedding(config.embedding);
+    this.embeddingProvider = new CachedEmbeddingProvider(baseEmbedding, 2000);
     this.vectorBackend = createVectorBackend(config.vectorBackend as any);
 
     // Initialize engines
