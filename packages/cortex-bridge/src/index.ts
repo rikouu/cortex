@@ -131,18 +131,14 @@ export default {
     log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${agentId}`);
 
     // ── Hook: before_agent_start → Recall memories ──────
+    // event: { prompt: string, messages?: { role: string, content: string }[] }
     api.on('before_agent_start', async (event: any) => {
       try {
-        // Extract the latest user message from session context
-        const sessionMessages: { role: string; content: string }[] =
-          event?.context?.sessionEntry?.messages || [];
-        const lastUserMsg = [...sessionMessages]
-          .reverse()
-          .find((m: { role: string }) => m.role === 'user');
+        // event.prompt is the current user input
+        const query: string = event?.prompt || '';
+        if (!query) return;
 
-        if (!lastUserMsg) return;
-
-        const result = await cortexRecall(cortexUrl, lastUserMsg.content, agentId);
+        const result = await cortexRecall(cortexUrl, query, agentId);
         if (result) {
           log.info(`[cortex-bridge] Recalled ${result.count} memories`);
           return { prependContext: result.context };
@@ -155,13 +151,13 @@ export default {
     });
 
     // ── Hook: agent_end → Ingest conversation ───────────
+    // event: { messages: { role: string, content: string }[], success: boolean, error?: string, durationMs?: number }
     api.on('agent_end', async (event: any) => {
       try {
-        const sessionMessages: { role: string; content: string }[] =
-          event?.context?.sessionEntry?.messages || [];
+        const messages: { role: string; content: string }[] = event?.messages || [];
 
         // Find the last user + assistant pair
-        const reversed = [...sessionMessages].reverse();
+        const reversed = [...messages].reverse();
         const lastAssistant = reversed.find((m: { role: string }) => m.role === 'assistant');
         const lastUser = reversed.find((m: { role: string }) => m.role === 'user');
 
@@ -172,7 +168,6 @@ export default {
           lastUser.content,
           lastAssistant.content,
           agentId,
-          event?.context?.sessionId,
         );
 
         if (debug) {
@@ -186,13 +181,13 @@ export default {
     });
 
     // ── Hook: before_compaction → Emergency flush ───────
+    // event: { messages: { role: string, content: string }[] }
     api.on('before_compaction', async (event: any) => {
       try {
-        const messages: { role: string; content: string }[] =
-          event?.context?.sessionEntry?.messages || [];
+        const messages: { role: string; content: string }[] = event?.messages || [];
         if (messages.length === 0) return;
 
-        await cortexFlush(cortexUrl, messages, agentId, event?.context?.sessionId);
+        await cortexFlush(cortexUrl, messages, agentId);
 
         if (debug) {
           log.info(`[cortex-bridge] Flushed ${messages.length} messages before compaction`);
