@@ -55,7 +55,11 @@ const TOOLS: MCPTool[] = [
         content: { type: 'string', description: 'What to remember' },
         category: {
           type: 'string',
-          enum: ['preference', 'fact', 'decision', 'identity', 'todo', 'correction'],
+          enum: [
+            'identity', 'preference', 'decision', 'fact', 'entity',
+            'correction', 'todo', 'skill', 'relationship', 'goal',
+            'insight', 'project_state',
+          ],
           description: 'Memory category',
           default: 'fact',
         },

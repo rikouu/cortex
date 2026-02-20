@@ -169,6 +169,38 @@ Conversations → [Working Memory] → [Core Memory] → [Archive]
 
 **Nothing is ever truly lost.** Archived memories are compressed into summaries that live permanently in Core.
 
+### Memory Categories
+
+Cortex classifies memories into 14 categories, each with a tuned importance and decay rate:
+
+| Category | Description | Importance |
+|----------|-------------|------------|
+| `identity` | Name, profession, role, location | 0.9-1.0 |
+| `preference` | Tools, workflows, styles, habits | 0.8-0.9 |
+| `correction` | Updates to previously known info | 0.9-1.0 |
+| `skill` | Expertise, proficiency, tech stack | 0.8-0.9 |
+| `relationship` | Colleagues, friends, organizations | 0.8-0.9 |
+| `goal` | Objectives, plans, milestones | 0.7-0.9 |
+| `decision` | Concrete choices committed to | 0.8-0.9 |
+| `entity` | Named tools, projects, organizations | 0.6-0.8 |
+| `project_state` | Project progress, status changes | 0.5-0.7 |
+| `insight` | Lessons learned, experience-based wisdom | 0.5-0.7 |
+| `fact` | Factual knowledge about the user | 0.5-0.8 |
+| `todo` | Action items, follow-ups | 0.6-0.8 |
+| `context` | Session context (system use) | 0.2 |
+| `summary` | Compressed summaries (system use) | 0.4 |
+
+### Memory Sieve (Extraction)
+
+The Memory Sieve uses a **dual-channel extraction** pipeline:
+
+1. **Fast Channel** — Regex-based pattern matching detects high-signal information (identity, preferences, corrections, skills, relationships, goals) with zero LLM latency
+2. **Deep Channel** — LLM-powered structured extraction outputs categorized JSON with importance scores, reasoning, and source attribution
+
+Both channels run in parallel. Results are cross-deduplicated using vector similarity. Memories with importance ≥ 0.8 go directly to Core; lower-importance items go to Working with a TTL.
+
+The Sieve also supports **user profile injection** — a synthesized profile of the user's Core memories is injected into the extraction prompt, helping the LLM avoid re-extracting known facts and better identify incremental new information.
+
 ### Memory Lifecycle
 
 The lifecycle engine runs automatically (configurable schedule) and handles:
@@ -177,6 +209,7 @@ The lifecycle engine runs automatically (configurable schedule) and handles:
 - **Merging**: Duplicate/similar Core memories → single enriched entry
 - **Archival**: Decayed Core memories → Archive
 - **Compression**: Old Archive entries → compressed Core summaries
+- **Profile Synthesis**: Auto-generates user profiles from Core memories
 
 ---
 
@@ -235,6 +268,7 @@ The [`@cortexmem/cortex-bridge`](https://www.npmjs.com/package/@cortexmem/cortex
 | `GET/POST/DELETE` | `/api/v1/relations` | Entity relation CRUD |
 | `GET/POST/PATCH/DELETE` | `/api/v1/agents` | Agent management |
 | `GET` | `/api/v1/agents/:id/config` | Agent merged configuration |
+| `GET` | `/api/v1/extraction-logs` | Extraction quality audit logs |
 | `POST` | `/api/v1/lifecycle/run` | Trigger lifecycle engine |
 | `GET` | `/api/v1/lifecycle/preview` | Dry-run preview |
 | `GET` | `/api/v1/health` | Health check |

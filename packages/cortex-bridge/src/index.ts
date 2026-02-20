@@ -52,6 +52,19 @@ function extractText(content: any): string {
   return '';
 }
 
+// Strip <cortex_memory> and other injected tags to prevent nested pollution.
+// Without this, previously recalled memories get re-ingested as new content.
+const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
+const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
+
+function stripInjectedTags(text: string): string {
+  return text
+    .replace(INJECTED_TAG_RE, '')
+    .replace(SYSTEM_TAG_RE, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // ── Cortex HTTP helpers ─────────────────────────────────
 function getCortexUrl(config: Record<string, any>): string {
   return config.cortexUrl || process.env.CORTEX_URL || 'http://localhost:21100';
@@ -190,7 +203,11 @@ export default {
           category: {
             type: 'string',
             description: 'Memory category',
-            enum: ['fact', 'preference', 'skill', 'identity', 'relationship', 'goal', 'procedure', 'other'],
+            enum: [
+              'identity', 'preference', 'decision', 'fact', 'entity',
+              'correction', 'todo', 'skill', 'relationship', 'goal',
+              'insight', 'project_state',
+            ],
             default: 'fact',
           },
         },
@@ -236,7 +253,12 @@ export default {
       },
       async execute(_id: string, params: { user_message: string; assistant_message: string }) {
         try {
-          const result = await cortexIngest(cortexUrl, params.user_message, params.assistant_message, agentId);
+          const result = await cortexIngest(
+            cortexUrl,
+            stripInjectedTags(params.user_message),
+            stripInjectedTags(params.assistant_message),
+            agentId,
+          );
           if (result.ok) {
             return { content: [{ type: 'text', text: 'Conversation ingested — memories will be extracted automatically.' }] };
           }
@@ -306,11 +328,13 @@ export default {
 
         if (!lastUser || !lastAssistant) return;
 
-        const userText = extractText(lastUser.content);
-        const assistantText = extractText(lastAssistant.content);
+        // Extract text and strip injected <cortex_memory> tags
+        // to prevent previously recalled memories from being re-ingested
+        const userText = stripInjectedTags(extractText(lastUser.content));
+        const assistantText = stripInjectedTags(extractText(lastAssistant.content));
 
         if (!userText || !assistantText) {
-          if (debug) log.warn('[cortex-bridge] agent_end: extracted empty text');
+          if (debug) log.warn('[cortex-bridge] agent_end: empty after tag stripping');
           return;
         }
 
@@ -327,10 +351,10 @@ export default {
         const rawMessages: any[] = event?.messages || [];
         if (rawMessages.length === 0) return;
 
-        // Normalize multimodal content to plain text for Cortex
+        // Normalize multimodal content to plain text, strip injected tags
         const messages = rawMessages.map((m: any) => ({
           role: m.role as string,
-          content: extractText(m.content),
+          content: stripInjectedTags(extractText(m.content)),
         })).filter(m => m.content);
 
         if (messages.length === 0) return;

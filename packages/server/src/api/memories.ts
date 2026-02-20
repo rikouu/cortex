@@ -33,7 +33,14 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
         required: ['layer', 'category', 'content'],
         properties: {
           layer: { type: 'string', enum: ['working', 'core', 'archive'] },
-          category: { type: 'string' },
+          category: {
+            type: 'string',
+            enum: [
+              'identity', 'preference', 'decision', 'fact', 'entity',
+              'correction', 'todo', 'context', 'summary',
+              'skill', 'relationship', 'goal', 'insight', 'project_state',
+            ],
+          },
           content: { type: 'string' },
           agent_id: { type: 'string' },
           importance: { type: 'number' },
