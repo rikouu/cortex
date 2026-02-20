@@ -82,21 +82,55 @@ OPENAI_API_KEY=sk-xxx docker compose up -d
 claude mcp add cortex -- npx cortex-mcp --server-url http://localhost:21100
 ```
 
-### 方式 D：OpenClaw
+### 方式 D：其他 MCP 客户端
+
+任何兼容 MCP 的应用（Windsurf、Cline 等），将以下配置添加到客户端的 MCP 配置文件中：
+
+```json
+{
+  "mcpServers": {
+    "cortex": {
+      "command": "npx",
+      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
+      "env": {
+        "CORTEX_AGENT_ID": "default"
+      }
+    }
+  }
+}
+```
+
+具体配置文件位置因客户端而异，请查阅你所用客户端的文档。
+
+### 方式 E：OpenClaw
 
 ```bash
 openclaw plugins install @cortexmem/bridge-openclaw
 ```
 
-在 `.env` 中添加：
+然后设置 Cortex 服务器地址，以下两种方式选**其一**：
+
+**方式 A — `.env` 文件（推荐）**
+
+把这行加到你项目的 `.env` 文件中，插件启动时会自动读取：
 
 ```
 CORTEX_URL=http://localhost:21100
 ```
 
+**方式 B — Shell 配置文件**
+
+如果你不使用 `.env` 文件，添加到 shell 配置中：
+
+```bash
+echo 'export CORTEX_URL=http://localhost:21100' >> ~/.zshrc
+```
+
+然后重启终端或执行 `source ~/.zshrc` 使其生效。
+
 搞定。插件会自动在回复前召回记忆、回复后保存新记忆 — 不需要写任何代码。
 
-### 方式 E：任意应用（REST API）
+### 方式 F：任意应用（REST API）
 
 ```bash
 # 存储记忆

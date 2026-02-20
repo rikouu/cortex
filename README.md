@@ -82,21 +82,55 @@ Run this in your terminal:
 claude mcp add cortex -- npx cortex-mcp --server-url http://localhost:21100
 ```
 
-### Option D: OpenClaw
+### Option D: Other MCP Clients
+
+For any MCP-compatible app (Windsurf, Cline, etc.), add this to your client's MCP config file:
+
+```json
+{
+  "mcpServers": {
+    "cortex": {
+      "command": "npx",
+      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
+      "env": {
+        "CORTEX_AGENT_ID": "default"
+      }
+    }
+  }
+}
+```
+
+Check your client's documentation for the exact config file location.
+
+### Option E: OpenClaw
 
 ```bash
 openclaw plugins install @cortexmem/bridge-openclaw
 ```
 
-Add to your `.env`:
+Then set the Cortex server address. Pick **one** of the two methods:
+
+**Method A — `.env` file (recommended)**
+
+Add this line to your project's `.env` file. The plugin reads it automatically on startup:
 
 ```
 CORTEX_URL=http://localhost:21100
 ```
 
+**Method B — Shell profile**
+
+If you don't use `.env` files, add to your shell config instead:
+
+```bash
+echo 'export CORTEX_URL=http://localhost:21100' >> ~/.zshrc
+```
+
+Then restart your terminal or run `source ~/.zshrc` to apply.
+
 That's it. The plugin automatically recalls memories before responses and saves new ones after — zero code needed.
 
-### Option E: Any App (REST API)
+### Option F: Any App (REST API)
 
 ```bash
 # Store a memory
