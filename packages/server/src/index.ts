@@ -9,6 +9,7 @@ import { loadConfig, createLogger } from './utils/index.js';
 import { initDatabase, closeDatabase } from './db/index.js';
 import { CortexApp } from './app.js';
 import { registerAllRoutes } from './api/router.js';
+import { registerAuthMiddleware, registerRateLimiting } from './api/security.js';
 
 const log = createLogger('server');
 
@@ -31,9 +32,18 @@ async function main() {
 
   // CORS
   await app.register(cors, {
-    origin: true,
+    origin: config.cors?.origin ?? true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
+
+  // Security middleware
+  registerAuthMiddleware(app, config.auth?.token);
+  if (config.rateLimit?.enabled !== false) {
+    registerRateLimiting(app, {
+      windowMs: config.rateLimit?.windowMs,
+      maxRequests: config.rateLimit?.maxRequests,
+    });
+  }
 
   // Register routes
   registerAllRoutes(app, cortex);

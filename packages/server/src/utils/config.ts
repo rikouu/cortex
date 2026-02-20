@@ -33,6 +33,17 @@ const CortexConfigSchema = z.object({
   enabled: z.boolean().default(true),
   port: z.number().default(21100),
   host: z.string().default('127.0.0.1'),
+  auth: z.object({
+    token: z.string().optional(),
+  }).default({}),
+  cors: z.object({
+    origin: z.union([z.string(), z.array(z.string()), z.boolean()]).default(true),
+  }).default({}),
+  rateLimit: z.object({
+    enabled: z.boolean().default(true),
+    windowMs: z.number().default(60000),
+    maxRequests: z.number().default(120),
+  }).default({}),
   storage: z.object({
     dbPath: z.string().default('cortex/brain.db'),
     walMode: z.boolean().default(true),
