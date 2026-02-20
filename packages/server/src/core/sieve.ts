@@ -1,5 +1,5 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, type Memory, type MemoryCategory } from '../db/index.js';
+import { insertMemory, getMemoryById, deleteMemory, type Memory, type MemoryCategory } from '../db/index.js';
 import { detectHighSignals, type DetectedSignal } from '../signals/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
@@ -414,9 +414,15 @@ export class MemorySieve {
       }
 
       if (isDup) {
-        // Remove the deep extraction from DB
+        // Actually remove the deep extraction from DB and vector store
+        try {
+          deleteMemory(deepMem.id);
+          await this.vectorBackend.delete([deepMem.id]);
+        } catch (e: any) {
+          log.warn({ id: deepMem.id, error: e.message }, 'Cross-dedup: failed to delete duplicate');
+        }
         removed++;
-        log.info({ content: deepMem.content.slice(0, 50) }, 'Cross-dedup: deep item removed');
+        log.info({ id: deepMem.id, content: deepMem.content.slice(0, 50) }, 'Cross-dedup: deep item deleted');
       } else {
         kept.push(deepMem);
       }

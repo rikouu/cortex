@@ -15,6 +15,11 @@ const CATEGORY_LABELS: Record<string, string> = {
   entity: 'Entities',
   correction: 'Corrections',
   todo: 'To-Do / Reminders',
+  skill: 'Skills & Expertise',
+  relationship: 'Relationships',
+  goal: 'Goals & Plans',
+  insight: 'Insights & Lessons',
+  project_state: 'Project Status',
   context: 'Context',
   summary: 'Historical Memory Summary',
 };
@@ -77,7 +82,7 @@ export class MarkdownExporter {
     ];
 
     // Ordered categories
-    const categoryOrder = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'summary'];
+    const categoryOrder = ['identity', 'preference', 'decision', 'skill', 'relationship', 'goal', 'fact', 'entity', 'insight', 'project_state', 'correction', 'todo', 'summary'];
 
     for (const cat of categoryOrder) {
       const entries = sections.get(cat);

@@ -98,7 +98,7 @@ async function cortexIngest(
   userMessage: string,
   assistantMessage: string,
   agentId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; extracted?: number; deduplicated?: number; error?: string }> {
   try {
     const res = await fetch(`${cortexUrl}/api/v1/ingest`, {
       method: 'POST',
@@ -110,7 +110,17 @@ async function cortexIngest(
       }),
       signal: AbortSignal.timeout(INGEST_TIMEOUT),
     });
-    return { ok: res.ok, error: res.ok ? undefined : `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    try {
+      const data = (await res.json()) as any;
+      return {
+        ok: true,
+        extracted: data.extracted?.length ?? 0,
+        deduplicated: data.deduplicated ?? 0,
+      };
+    } catch {
+      return { ok: true };
+    }
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -120,13 +130,18 @@ async function cortexFlush(
   cortexUrl: string,
   messages: { role: string; content: string }[],
   agentId: string,
-): Promise<void> {
-  await fetch(`${cortexUrl}/api/v1/flush`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, agent_id: agentId, reason: 'compaction' }),
-    signal: AbortSignal.timeout(FLUSH_TIMEOUT),
-  });
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${cortexUrl}/api/v1/flush`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, agent_id: agentId, reason: 'compaction' }),
+      signal: AbortSignal.timeout(FLUSH_TIMEOUT),
+    });
+    return { ok: res.ok, error: res.ok ? undefined : `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }
 
 async function cortexHealthCheck(cortexUrl: string): Promise<{ ok: boolean; latency_ms: number; error?: string }> {
@@ -222,7 +237,7 @@ export default {
               content: params.content,
               category: params.category || 'fact',
               agent_id: agentId,
-              layer: 'working',
+              layer: 'core',
               importance: 0.7,
               confidence: 0.9,
             }),
@@ -260,7 +275,10 @@ export default {
             agentId,
           );
           if (result.ok) {
-            return { content: [{ type: 'text', text: 'Conversation ingested — memories will be extracted automatically.' }] };
+            const parts = ['Conversation ingested'];
+            if (result.extracted !== undefined) parts.push(`${result.extracted} memories extracted`);
+            if (result.deduplicated) parts.push(`${result.deduplicated} deduplicated`);
+            return { content: [{ type: 'text', text: parts.join(' — ') + '.' }] };
           }
           return { content: [{ type: 'text', text: `Ingest failed: ${result.error}` }] };
         } catch (e) {

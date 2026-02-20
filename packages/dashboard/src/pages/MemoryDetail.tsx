@@ -19,7 +19,7 @@ interface Memory {
   source?: string;
 }
 
-const CATEGORIES = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary'];
+const CATEGORIES = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state'];
 
 export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; onBack: () => void }) {
   const [memory, setMemory] = useState<Memory | null>(null);

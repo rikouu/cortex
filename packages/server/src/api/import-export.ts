@@ -9,7 +9,7 @@ import path from 'node:path';
 const log = createLogger('import-export');
 
 const VALID_LAYERS = new Set(['working', 'core', 'archive']);
-const VALID_CATEGORIES = new Set(['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary']);
+const VALID_CATEGORIES = new Set(['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state']);
 
 export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexApp): void {
   // ============ EXPORT ============
