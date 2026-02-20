@@ -1038,10 +1038,6 @@ export default function Settings() {
               input.click();
             }}>{t('settings.importConfig')}</button>
             <button className="btn" onClick={() => {
-              navigator.clipboard.writeText(JSON.stringify(config, null, 2));
-              setToast({ message: t('common.copied'), type: 'success' });
-            }}>{t('common.copy')}</button>
-            <button className="btn" onClick={() => {
               const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a'); a.href = url; a.download = `cortex-config-${new Date().toISOString().slice(0, 10)}.json`; a.click();

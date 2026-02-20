@@ -366,8 +366,12 @@ export default {
     // ── Hook: before_agent_start → Recall memories ──────
     api.on('before_agent_start', async (event: any) => {
       try {
-        const query = extractText(event?.prompt) || '';
-        if (!query) return;
+        const rawQuery = extractText(event?.prompt) || '';
+        if (!rawQuery) return;
+
+        // Clean the query: strip metadata, code, JSON, system tags
+        const query = cleanForIngestion(rawQuery).slice(0, 500);
+        if (!query || query.length < 5) return;
 
         const result = await cortexRecall(cortexUrl, query, agentId);
         if (result) {

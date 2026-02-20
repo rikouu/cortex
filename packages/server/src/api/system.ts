@@ -77,6 +77,9 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
           if (embeddings[j] && embeddings[j]!.length > 0) {
             await cortex.vectorBackend.upsert(batch[j]!.id, embeddings[j]!);
             indexed++;
+          } else {
+            log.warn({ id: batch[j]!.id }, 'Reindex: embedding returned empty, provider may be unavailable');
+            errors++;
           }
         }
       } catch (e: any) {

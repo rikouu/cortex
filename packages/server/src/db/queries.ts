@@ -173,10 +173,36 @@ export function bumpAccessCount(memoryIds: string[], query?: string): void {
 
 // ============ FTS5 Search ============
 
+/**
+ * Sanitize a query string for FTS5 MATCH.
+ * Strips all FTS5 operators and special characters that could cause syntax errors.
+ * With trigram tokenizer, bare terms are implicitly ANDed.
+ */
+function sanitizeFTSQuery(query: string): string {
+  const cleaned = query
+    // Strip FTS5 special characters that cause syntax errors
+    .replace(/["\*\(\)\{\}\[\]\+\~\^\:\;\!\?\<\>\=\&\|\\\/@#\$%`]/g, ' ')
+    // Strip FTS5 boolean keywords (case-insensitive, whole words only)
+    .replace(/\b(AND|OR|NOT|NEAR)\b/gi, ' ')
+    // Strip leading hyphens from words (FTS5 NOT operator)
+    .replace(/(?:^|\s)-+(\w)/g, ' $1')
+    // Collapse whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned || cleaned.length < 2) return '';
+
+  // Truncate to reasonable length (avoid huge queries from metadata)
+  return cleaned.slice(0, 500);
+}
+
 export function searchFTS(query: string, opts?: { layer?: MemoryLayer; limit?: number; agent_id?: string }): (Memory & { rank: number })[] {
+  const sanitized = sanitizeFTSQuery(query);
+  if (!sanitized) return [];
+
   const db = getDb();
   const conditions = ['memories_fts MATCH ?'];
-  const params: any[] = [query];
+  const params: any[] = [sanitized];
 
   if (opts?.layer) { conditions.push('m.layer = ?'); params.push(opts.layer); }
   if (opts?.agent_id) { conditions.push('m.agent_id = ?'); params.push(opts.agent_id); }
