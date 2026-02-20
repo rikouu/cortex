@@ -279,18 +279,25 @@ export default {
 
     // ── Hook: agent_end → Ingest conversation ───────────
     api.on('agent_end', async (event: any) => {
+      // Always log — diagnosing why this hook may not fire
+      log.info(`[cortex-bridge] agent_end fired, event keys: ${Object.keys(event || {}).join(', ')}`);
       try {
         const messages: { role: string; content: string }[] = event?.messages || [];
+        log.info(`[cortex-bridge] agent_end messages count: ${messages.length}`);
+
         const reversed = [...messages].reverse();
         const lastAssistant = reversed.find((m: { role: string }) => m.role === 'assistant');
         const lastUser = reversed.find((m: { role: string }) => m.role === 'user');
 
-        if (!lastUser || !lastAssistant) return;
+        if (!lastUser || !lastAssistant) {
+          log.warn(`[cortex-bridge] agent_end: missing pair — user=${!!lastUser}, assistant=${!!lastAssistant}`);
+          return;
+        }
 
-        await cortexIngest(cortexUrl, lastUser.content, lastAssistant.content, agentId);
-        if (debug) log.info('[cortex-bridge] Hook ingested conversation pair');
+        const result = await cortexIngest(cortexUrl, lastUser.content, lastAssistant.content, agentId);
+        log.info(`[cortex-bridge] agent_end ingest result: ok=${result.ok}`);
       } catch (e) {
-        if (debug) log.warn(`[cortex-bridge] Hook ingest failed: ${(e as Error).message}`);
+        log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
       }
     });
 
