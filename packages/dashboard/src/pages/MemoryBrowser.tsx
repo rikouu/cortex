@@ -109,9 +109,14 @@ export default function MemoryBrowser() {
 
   const handleDelete = async (id: string) => {
     if (!confirm(t('memories.confirmDelete'))) return;
-    await deleteMemory(id);
-    setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
-    load();
+    try {
+      await deleteMemory(id);
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setToast({ message: t('memories.toastDeleted', { count: 1 }), type: 'success' });
+      load();
+    } catch (e: any) {
+      setToast({ message: e.message || 'Delete failed', type: 'error' });
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -174,15 +179,25 @@ export default function MemoryBrowser() {
 
     if (bulkAction === 'delete') {
       if (!confirm(t('memories.confirmBulkDelete', { count: ids.length }))) return;
+      let deleted = 0;
       for (const id of ids) {
-        try { await deleteMemory(id); } catch {}
+        try { await deleteMemory(id); deleted++; } catch {}
       }
-      setToast({ message: t('memories.toastDeleted', { count: ids.length }), type: 'success' });
+      if (deleted > 0) {
+        setToast({ message: t('memories.toastDeleted', { count: deleted }), type: 'success' });
+      } else {
+        setToast({ message: t('memories.toastDeleteFailed'), type: 'error' });
+      }
     } else if (bulkAction === 'category') {
+      let updated = 0;
       for (const id of ids) {
-        try { await updateMemory(id, { category: bulkCategory }); } catch {}
+        try { await updateMemory(id, { category: bulkCategory }); updated++; } catch {}
       }
-      setToast({ message: t('memories.toastCategoryUpdated', { count: ids.length, category: bulkCategory }), type: 'success' });
+      if (updated > 0) {
+        setToast({ message: t('memories.toastCategoryUpdated', { count: updated, category: bulkCategory }), type: 'success' });
+      } else {
+        setToast({ message: t('memories.toastUpdateFailed'), type: 'error' });
+      }
     }
 
     setSelected(new Set());

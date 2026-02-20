@@ -55,6 +55,15 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
     const body = req.body as any;
     if (body.agent_id) ensureAgent(body.agent_id);
     const mem = insertMemory(body);
+
+    // Index vector
+    try {
+      const embedding = await cortex.embeddingProvider.embed(body.content);
+      if (embedding.length > 0) {
+        await cortex.vectorBackend.upsert(mem.id, embedding);
+      }
+    } catch { /* best effort */ }
+
     reply.code(201);
     return mem;
   });
@@ -65,21 +74,28 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
     const body = req.body as any;
     const mem = updateMemory(id, body);
     if (!mem) { reply.code(404); return { error: 'Memory not found' }; }
+
+    // Re-index vector if content changed
+    if (body.content) {
+      try {
+        const embedding = await cortex.embeddingProvider.embed(mem.content);
+        if (embedding.length > 0) {
+          await cortex.vectorBackend.upsert(mem.id, embedding);
+        }
+      } catch { /* best effort */ }
+    }
+
     return mem;
   });
 
-  // Delete memory (soft delete — moves to archive)
+  // Delete memory
   app.delete('/api/v1/memories/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const existing = getMemoryById(id);
     if (!existing) { reply.code(404); return { error: 'Memory not found' }; }
 
-    // Soft delete: move to archive instead of actually deleting
-    if (existing.layer !== 'archive') {
-      updateMemory(id, { layer: 'archive' });
-    } else {
-      deleteMemory(id);
-    }
+    deleteMemory(id);
+    try { await cortex.vectorBackend.delete([id]); } catch { /* best effort */ }
     return { ok: true, id };
   });
 }

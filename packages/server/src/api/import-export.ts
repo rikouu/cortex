@@ -3,13 +3,28 @@ import type { CortexApp } from '../app.js';
 import { getDb } from '../db/connection.js';
 import { insertMemory, type Memory, type MemoryLayer, type MemoryCategory } from '../db/queries.js';
 import { createLogger } from '../utils/logger.js';
-import fs from 'node:fs';
-import path from 'node:path';
 
 const log = createLogger('import-export');
 
 const VALID_LAYERS = new Set(['working', 'core', 'archive']);
 const VALID_CATEGORIES = new Set(['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state']);
+
+const CATEGORY_LABELS: Record<string, string> = {
+  identity: 'User Profile',
+  preference: 'Preferences & Habits',
+  decision: 'Key Decisions',
+  fact: 'Facts',
+  entity: 'Entities',
+  correction: 'Corrections',
+  todo: 'To-Do / Reminders',
+  skill: 'Skills & Expertise',
+  relationship: 'Relationships',
+  goal: 'Goals & Plans',
+  insight: 'Insights & Lessons',
+  project_state: 'Project Status',
+  context: 'Context',
+  summary: 'Historical Memory Summary',
+};
 
 export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexApp): void {
   // ============ EXPORT ============
@@ -30,8 +45,48 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
       }
 
       case 'markdown': {
-        await cortex.exporter.exportAll();
-        return { status: 'ok', message: 'Markdown files exported successfully' };
+        const db = getDb();
+        const memories = db.prepare(
+          "SELECT * FROM memories WHERE superseded_by IS NULL ORDER BY layer, category, importance DESC"
+        ).all() as Memory[];
+
+        const lines: string[] = [
+          '# Cortex Memory Export',
+          '',
+          `> Exported at ${new Date().toISOString()}`,
+          `> Total: ${memories.length} memories`,
+          '',
+        ];
+
+        // Group by layer then category
+        const grouped = new Map<string, Map<string, Memory[]>>();
+        for (const m of memories) {
+          if (!grouped.has(m.layer)) grouped.set(m.layer, new Map());
+          const layerMap = grouped.get(m.layer)!;
+          if (!layerMap.has(m.category)) layerMap.set(m.category, []);
+          layerMap.get(m.category)!.push(m);
+        }
+
+        const layerOrder = ['core', 'working', 'archive'];
+        for (const layer of layerOrder) {
+          const categories = grouped.get(layer);
+          if (!categories || categories.size === 0) continue;
+          lines.push(`## ${layer.charAt(0).toUpperCase() + layer.slice(1)} Layer`);
+          lines.push('');
+          for (const [category, mems] of categories) {
+            lines.push(`### ${CATEGORY_LABELS[category] || category}`);
+            lines.push('');
+            for (const m of mems) {
+              lines.push(`- ${m.content}`);
+            }
+            lines.push('');
+          }
+        }
+
+        // Also trigger disk export if enabled
+        cortex.exporter.exportAll().catch(() => {});
+
+        return { content: lines.join('\n'), format: 'markdown', total: memories.length };
       }
 
       case 'sqlite': {
@@ -42,7 +97,7 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
           return { error: 'Cannot export in-memory database as SQLite dump' };
         }
 
-        // Return the db file path for download
+        const fs = await import('node:fs');
         if (!fs.existsSync(dbPath)) {
           reply.code(404);
           return { error: 'Database file not found' };
@@ -76,13 +131,15 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
 
           let imported = 0;
           let skipped = 0;
+          const insertedMems: { id: string; content: string }[] = [];
+
           for (const m of memories) {
             if (!m.content || !VALID_LAYERS.has(m.layer) || !VALID_CATEGORIES.has(m.category)) {
               skipped++;
               continue;
             }
             try {
-              insertMemory({
+              const mem = insertMemory({
                 layer: m.layer as MemoryLayer,
                 category: m.category as MemoryCategory,
                 content: m.content,
@@ -92,12 +149,16 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
                 source: m.source || 'import',
                 metadata: m.metadata ? (typeof m.metadata === 'string' ? m.metadata : JSON.stringify(m.metadata)) : null,
               });
+              insertedMems.push({ id: mem.id, content: m.content });
               imported++;
             } catch (e: any) {
               log.warn({ error: e.message }, 'Failed to import memory');
               skipped++;
             }
           }
+
+          // Batch index vectors
+          await batchIndexVectors(cortex, insertedMems);
 
           reply.code(201);
           return { status: 'ok', imported, skipped, total: memories.length };
@@ -110,7 +171,11 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
             return { error: 'Missing "content" field with MEMORY.md text' };
           }
 
-          const { imported, skipped } = importFromMemoryMd(content);
+          const { imported, skipped, insertedMems } = importFromMemoryMd(content);
+
+          // Batch index vectors
+          await batchIndexVectors(cortex, insertedMems);
+
           reply.code(201);
           return { status: 'ok', imported, skipped, format: 'memory_md' };
         }
@@ -128,19 +193,39 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
 }
 
 /**
- * Parse a MEMORY.md file and import its entries.
- * Expected format:
- *   ## Section Header
- *   - Entry text
- *   - Another entry
+ * Batch index vectors for a list of memories
  */
-function importFromMemoryMd(content: string): { imported: number; skipped: number } {
+async function batchIndexVectors(
+  cortex: CortexApp,
+  mems: { id: string; content: string }[],
+): Promise<void> {
+  if (mems.length === 0) return;
+  const batchSize = 20;
+  for (let i = 0; i < mems.length; i += batchSize) {
+    const batch = mems.slice(i, i + batchSize);
+    try {
+      const embeddings = await cortex.embeddingProvider.embedBatch(batch.map(b => b.content));
+      for (let j = 0; j < batch.length; j++) {
+        if (embeddings[j]?.length && embeddings[j]!.length > 0) {
+          await cortex.vectorBackend.upsert(batch[j].id, embeddings[j]!);
+        }
+      }
+    } catch (e: any) {
+      log.warn({ error: e.message }, 'Failed to index vectors for imported batch');
+    }
+  }
+}
+
+/**
+ * Parse a MEMORY.md file and import its entries.
+ */
+function importFromMemoryMd(content: string): { imported: number; skipped: number; insertedMems: { id: string; content: string }[] } {
   const lines = content.split('\n');
   let currentCategory: MemoryCategory = 'fact';
   let imported = 0;
   let skipped = 0;
+  const insertedMems: { id: string; content: string }[] = [];
 
-  // Category mapping from common section headers
   const categoryMap: Record<string, MemoryCategory> = {
     'profile': 'identity',
     'identity': 'identity',
@@ -164,12 +249,21 @@ function importFromMemoryMd(content: string): { imported: number; skipped: numbe
     'tasks': 'todo',
     'summary': 'summary',
     'context': 'context',
+    'skill': 'skill',
+    'skills': 'skill',
+    'relationship': 'relationship',
+    'relationships': 'relationship',
+    'goal': 'goal',
+    'goals': 'goal',
+    'insight': 'insight',
+    'insights': 'insight',
+    'project': 'project_state',
+    'project_state': 'project_state',
   };
 
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Section header
     if (trimmed.startsWith('## ') || trimmed.startsWith('### ')) {
       const header = trimmed.replace(/^#+\s*/, '').toLowerCase();
       for (const [key, cat] of Object.entries(categoryMap)) {
@@ -181,7 +275,6 @@ function importFromMemoryMd(content: string): { imported: number; skipped: numbe
       continue;
     }
 
-    // Bullet entries
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       const entryContent = trimmed.slice(2).trim();
       if (entryContent.length < 3) {
@@ -190,7 +283,7 @@ function importFromMemoryMd(content: string): { imported: number; skipped: numbe
       }
 
       try {
-        insertMemory({
+        const mem = insertMemory({
           layer: 'core',
           category: currentCategory,
           content: entryContent,
@@ -199,6 +292,7 @@ function importFromMemoryMd(content: string): { imported: number; skipped: numbe
           agent_id: 'default',
           source: 'import:memory_md',
         });
+        insertedMems.push({ id: mem.id, content: entryContent });
         imported++;
       } catch (e: any) {
         skipped++;
@@ -206,5 +300,5 @@ function importFromMemoryMd(content: string): { imported: number; skipped: numbe
     }
   }
 
-  return { imported, skipped };
+  return { imported, skipped, insertedMems };
 }

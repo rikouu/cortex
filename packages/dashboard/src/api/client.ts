@@ -38,9 +38,11 @@ export async function verifyToken(token: string): Promise<{ valid: boolean }> {
 async function request(path: string, opts?: RequestInit) {
   const token = getStoredToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...opts?.headers as Record<string, string>,
   };
+  if (opts?.body) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }

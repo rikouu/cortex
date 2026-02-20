@@ -210,6 +210,7 @@ export class LifecycleEngine {
           // Keep the newer one (it's first due to ORDER BY DESC)
           if (!dryRun) {
             updateMemory(entry.id, { superseded_by: existing.id });
+            try { await this.vectorBackend.delete([entry.id]); } catch { /* best effort */ }
             insertLifecycleLog('merge', [entry.id, existing.id], {
               kept: existing.id,
               removed: entry.id,
