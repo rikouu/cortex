@@ -8,9 +8,24 @@ Cortex gives your AI agent **persistent memory**. It runs alongside your agent a
 
 ---
 
+## Features
+
+- **Three-layer memory** — Working (48h) → Core (permanent) → Archive (90d, compressed back to Core)
+- **Dual-channel extraction** — Fast regex + deep LLM extraction run in parallel
+- **20 memory categories** — Identity, preferences, constraints, agent persona, and more
+- **Hybrid search** — BM25 keyword + vector semantic search with RRF fusion
+- **Entity relations** — Auto-extracted knowledge graph (who uses what, who knows whom)
+- **Smart dedup** — Three-tier matching prevents duplicate memories
+- **Multi-provider** — OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Ollama
+- **Multi-agent** — Per-agent config overrides, isolated memory namespaces
+- **Dashboard** — Full management UI with search debug, lifecycle preview, extraction logs
+- **Zero config** — Works out of the box with just an OpenAI API key
+
+---
+
 ## 30-Second Setup
 
-**Prerequisites**: Node.js ≥ 20, an OpenAI API key (for LLM + embedding)
+**Prerequisites**: Node.js ≥ 20, an OpenAI API key (or any [supported provider](#supported-providers))
 
 ```bash
 git clone https://github.com/rikouu/cortex.git
@@ -33,7 +48,7 @@ Open http://localhost:21100 — you'll see the management dashboard.
 
 Choose your setup. Each takes under 2 minutes.
 
-### Option A: Claude Desktop
+### Option A: Claude Desktop (MCP)
 
 1. Open Claude Desktop → **Settings** → **Developer** → **Edit Config**
 2. Paste this, save, then **fully quit and restart** Claude Desktop:
@@ -54,7 +69,7 @@ Choose your setup. Each takes under 2 minutes.
 
 3. Start a new conversation and say: *"What do you remember about me?"*
 
-### Option B: Cursor
+### Option B: Cursor (MCP)
 
 1. Open Cursor → **Settings** → **MCP** → **+ Add new global MCP server**
 2. Paste this and save:
@@ -74,7 +89,7 @@ Choose your setup. Each takes under 2 minutes.
 }
 ```
 
-### Option C: Claude Code
+### Option C: Claude Code (MCP)
 
 Run this in your terminal:
 
@@ -104,31 +119,7 @@ Check your client's documentation for the exact config file location.
 
 ### Option E: OpenClaw
 
-```bash
-openclaw plugins install @cortexmem/cortex-bridge
-```
-
-Then set the Cortex server address. Pick **one** of the two methods:
-
-**Method A — `.env` file (recommended)**
-
-Add this line to your project's `.env` file. The plugin reads it automatically on startup:
-
-```
-CORTEX_URL=http://localhost:21100
-```
-
-**Method B — Shell profile**
-
-If you don't use `.env` files, add to your shell config instead:
-
-```bash
-echo 'export CORTEX_URL=http://localhost:21100' >> ~/.zshrc
-```
-
-Then restart your terminal or run `source ~/.zshrc` to apply.
-
-The plugin automatically recalls memories before each response. Auto-saving after responses has a known upstream issue in streaming mode — see [Known Issues](#known-issues) below.
+See the full step-by-step guide: **[OpenClaw Quick Start](#openclaw-quick-start)**.
 
 ### Option F: Any App (REST API)
 
@@ -147,6 +138,124 @@ curl -X POST http://localhost:21100/api/v1/recall \
 ### Verify It Works
 
 Tell your AI something memorable (e.g., *"My favorite color is blue"*). Then start a **new conversation** and ask *"What's my favorite color?"*. If it answers correctly, Cortex is working.
+
+---
+
+## OpenClaw Quick Start
+
+A complete beginner-friendly guide for adding persistent memory to your OpenClaw agent.
+
+### What You'll Get
+
+After following these steps, your OpenClaw agent will:
+- Automatically **recall** relevant memories before every response
+- Automatically **save** important facts from conversations
+- **Emergency save** key info before context compression
+- Have `cortex_recall` and `cortex_remember` tools available for on-demand use
+
+### Step 1: Start Cortex
+
+If you haven't already, get Cortex running first:
+
+```bash
+# Option A: From source
+git clone https://github.com/rikouu/cortex.git
+cd cortex && pnpm install
+cp .env.example .env     # add your OPENAI_API_KEY
+pnpm dev
+
+# Option B: Docker (one line)
+OPENAI_API_KEY=sk-xxx docker compose up -d
+```
+
+Verify it's running:
+```bash
+curl http://localhost:21100/api/v1/health
+# Should return: {"status":"ok", ...}
+```
+
+### Step 2: Install the Plugin
+
+```bash
+openclaw plugins install @cortexmem/cortex-bridge
+```
+
+That's it — no config files, no manual setup.
+
+### Step 3: Tell the Plugin Where Cortex Is
+
+Pick **one** of the two methods:
+
+**Method A — `.env` file (recommended)**
+
+Add this line to your project's `.env` file:
+
+```
+CORTEX_URL=http://localhost:21100
+```
+
+**Method B — Shell profile**
+
+```bash
+echo 'export CORTEX_URL=http://localhost:21100' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Step 4: Test It
+
+1. Start a conversation with your agent and say something memorable:
+   > *"My favorite programming language is Rust and I work at Acme Corp."*
+
+2. Start a **new conversation** and ask:
+   > *"What do you know about me?"*
+
+3. If the agent mentions Rust and Acme Corp, everything is working!
+
+You can also type `/cortex-status` in OpenClaw to check the connection.
+
+### What Happens Under the Hood
+
+The plugin uses OpenClaw's `register(api)` interface to automatically set up:
+
+| Hook | When | What it does |
+|------|------|-------------|
+| `onBeforeResponse` | Before AI responds | Recalls relevant memories and injects them as context |
+| `onAfterResponse` | After AI responds | Extracts and saves important information (fire-and-forget) |
+| `onBeforeCompaction` | Before context compression | Emergency saves key info before it's lost |
+
+Two tools are also registered:
+
+| Tool | What it does |
+|------|-------------|
+| `cortex_recall` | Agent can search memories on demand |
+| `cortex_remember` | Agent can store important facts explicitly |
+
+### Deploying for Production
+
+For a persistent setup (server + OpenClaw agent always running):
+
+```bash
+# 1. Run Cortex with Docker (auto-restarts, data persisted)
+OPENAI_API_KEY=sk-xxx docker compose up -d
+
+# 2. Optional: set auth token for security
+echo 'CORTEX_AUTH_TOKEN=your-secret-token' >> .env
+docker compose up -d  # restart to apply
+
+# 3. In your OpenClaw project, set the URL
+echo 'CORTEX_URL=http://your-server-ip:21100' >> .env
+```
+
+> **Tip:** If running Cortex and OpenClaw on the same machine, use `http://localhost:21100`. If on different machines, replace with your server's IP or domain.
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Agent doesn't recall memories | Check `curl http://localhost:21100/api/v1/health` returns OK |
+| Plugin not loading | Run `openclaw plugins list` to verify `@cortexmem/cortex-bridge` is installed |
+| Memories not saving after responses | Known upstream issue in streaming mode — see [Known Issues](#known-issues) |
+| Connection refused | Make sure `CORTEX_URL` is set and Cortex is running |
 
 ---
 
@@ -274,15 +383,31 @@ When connected via MCP, the AI automatically gets these tools:
 | `cortex_search_debug` | Debug search scoring details |
 | `cortex_stats` | Get memory statistics |
 
-### OpenClaw Bridge Hooks
+---
 
-The [`@cortexmem/cortex-bridge`](https://www.npmjs.com/package/@cortexmem/cortex-bridge) plugin provides three automatic hooks:
+## Supported Providers
 
-| Hook | When | What it does |
-|------|------|-------------|
-| `onBeforeResponse` | Before AI responds | Recalls relevant memories, injects as context |
-| `onAfterResponse` | After AI responds | Extracts and saves memories (fire-and-forget) |
-| `onBeforeCompaction` | Before context compression | Emergency saves key info before it's lost |
+### LLM Providers
+
+| Provider | Models | Notes |
+|----------|--------|-------|
+| **OpenAI** | gpt-4o-mini, gpt-4.1-nano/mini, gpt-4o, o3/o4-mini | Default. Best cost-performance ratio |
+| **Anthropic** | claude-haiku-4-5, claude-sonnet-4-5, claude-opus-4-5 | Highest extraction quality |
+| **Google Gemini** | gemini-2.5-flash/pro, gemini-2.0-flash | Free tier available on AI Studio |
+| **DeepSeek** | deepseek-chat, deepseek-reasoner | Cheapest. OpenAI-compatible API |
+| **OpenRouter** | 100+ models from all providers | Unified gateway |
+| **Ollama** | qwen2.5, llama3.2, mistral, deepseek-r1, etc. | Fully local, no API key |
+
+### Embedding Providers
+
+| Provider | Models | Notes |
+|----------|--------|-------|
+| **OpenAI** | text-embedding-3-small/large | Default (1536d). Most reliable |
+| **Google Gemini** | gemini-embedding-001, text-embedding-004 | Free on AI Studio |
+| **Voyage AI** | voyage-3, voyage-3-lite, voyage-code-3 | High quality |
+| **Ollama** | bge-m3, nomic-embed-text, mxbai-embed-large | Local, zero cost |
+
+All providers are configurable via the Dashboard UI or `cortex.json`. See `cortex-provider-reference.md` for detailed model comparisons and pricing.
 
 ---
 
@@ -313,13 +438,13 @@ Cortex works out of the box with just an `OPENAI_API_KEY`. For advanced setups:
 
 | Option | Description |
 |--------|-------------|
-| **LLM Provider** | OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama (local) |
-| **Embedding Provider** | OpenAI, Google, Voyage AI, Ollama (local) |
+| **LLM Provider** | OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Ollama |
+| **Embedding Provider** | OpenAI, Google, Voyage AI, Ollama |
 | **Vector Backend** | SQLite vec0 (default), Qdrant, Milvus |
 | **Per-Agent Config** | Each agent can override global LLM/embedding settings |
 | **Offline Mode** | Use Ollama for fully local, no-API-key setup |
 
-See `DESIGN.md` for full configuration options.
+See `DESIGN.md` for full configuration options and `cortex-provider-reference.md` for provider selection guide.
 
 ---
 
@@ -333,7 +458,8 @@ cortex/
 │   ├── cortex-bridge/   # OpenClaw plugin (npm: @cortexmem/cortex-bridge)
 │   └── dashboard/       # React management SPA
 ├── docker-compose.yml
-└── DESIGN.md            # Full technical design document
+├── DESIGN.md            # Full technical design document
+└── cortex-provider-reference.md  # LLM/Embedding provider guide
 ```
 
 ## Cost
@@ -341,6 +467,7 @@ cortex/
 With default settings (gpt-4o-mini + text-embedding-3-small):
 - ~$0.55/month at 50 conversations/day
 - Scales linearly; even 3x usage stays under $2/month
+- With DeepSeek + Google Embedding: as low as ~$0.10/month
 
 ## Known Issues
 
