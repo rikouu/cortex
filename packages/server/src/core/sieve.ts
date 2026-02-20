@@ -606,7 +606,7 @@ export class MemorySieve {
       const similar: SimilarMemory[] = [];
       for (const r of results) {
         const mem = getMemoryById(r.id);
-        if (mem && !mem.superseded_by) {
+        if (mem && !mem.superseded_by && !mem.is_pinned) {
           similar.push({ memory: mem, distance: r.distance });
         }
       }

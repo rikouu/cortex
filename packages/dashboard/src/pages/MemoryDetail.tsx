@@ -17,6 +17,7 @@ interface Memory {
   metadata: string | null;
   agent_id?: string;
   source?: string;
+  is_pinned?: number;
 }
 
 const CATEGORIES = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state', 'constraint', 'policy', 'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona'];
@@ -33,7 +34,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
   const [similar, setSimilar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<{ content: string; category: string; importance: number }>({ content: '', category: '', importance: 0 });
+  const [draft, setDraft] = useState<{ content: string; category: string; importance: number; is_pinned: boolean }>({ content: '', category: '', importance: 0, is_pinned: false });
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const { t } = useI18n();
 
@@ -53,7 +54,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
     try {
       const mem = await getMemory(id);
       setMemory(mem);
-      setDraft({ content: mem.content, category: mem.category, importance: mem.importance });
+      setDraft({ content: mem.content, category: mem.category, importance: mem.importance, is_pinned: !!mem.is_pinned });
 
       // Load version chain via API (single call)
       try {
@@ -78,7 +79,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
   const handleSave = async () => {
     if (!memory) return;
     try {
-      await updateMemory(memory.id, draft);
+      await updateMemory(memory.id, { ...draft, is_pinned: draft.is_pinned ? 1 : 0 });
       const updated = await getMemory(memory.id);
       setMemory(updated);
       setEditing(false);
@@ -134,6 +135,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <span className={`badge ${memory.layer}`}>{memory.layer}</span>
           <span className="badge">{memory.category}</span>
+          {memory.is_pinned ? <span className="badge" style={{ background: 'rgba(255,170,0,0.2)', color: '#b8860b' }}>{t('memoryDetail.pinned')}</span> : null}
         </div>
 
         {editing ? (
@@ -153,8 +155,26 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
               <input type="range" min="0" max="1" step="0.05" value={draft.importance}
                 onChange={e => setDraft({ ...draft, importance: parseFloat(e.target.value) })} />
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <label style={{ fontWeight: 500 }}>{t('memoryDetail.pinLabel')}</label>
+              <div
+                onClick={() => setDraft({ ...draft, is_pinned: !draft.is_pinned })}
+                style={{
+                  width: 40, height: 22, borderRadius: 11,
+                  background: draft.is_pinned ? 'var(--primary)' : 'var(--border)',
+                  position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                }}
+              >
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  background: '#fff', position: 'absolute', top: 2,
+                  left: draft.is_pinned ? 20 : 2, transition: 'left 0.2s',
+                }} />
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('memoryDetail.pinDesc')}</span>
+            </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => { setEditing(false); setDraft({ content: memory.content, category: memory.category, importance: memory.importance }); }}>{t('common.cancel')}</button>
+              <button className="btn" onClick={() => { setEditing(false); setDraft({ content: memory.content, category: memory.category, importance: memory.importance, is_pinned: !!memory.is_pinned }); }}>{t('common.cancel')}</button>
               <button className="btn primary" onClick={handleSave}>{t('common.save')}</button>
             </div>
           </>

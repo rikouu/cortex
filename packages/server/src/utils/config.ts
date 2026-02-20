@@ -49,7 +49,7 @@ const CortexConfigSchema = z.object({
     walMode: z.boolean().default(true),
   }).default({}),
   llm: z.object({
-    extraction: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o-mini' }),
+    extraction: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o' }),
     lifecycle: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o-mini' }),
   }).default({}),
   embedding: EmbeddingProviderSchema.default({

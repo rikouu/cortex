@@ -210,6 +210,7 @@ export class LifecycleEngine {
     const seen = new Map<string, Memory>();
 
     for (const entry of coreEntries) {
+      if (entry.is_pinned) continue;  // 跳过锁定记忆
       // Check for near-duplicate content (simple substring check)
       let isDuplicate = false;
       for (const [, existing] of seen) {

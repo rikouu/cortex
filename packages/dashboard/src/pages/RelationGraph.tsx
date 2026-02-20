@@ -24,6 +24,12 @@ interface Node {
   vy: number;
 }
 
+interface Transform {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
+
 export default function RelationGraph() {
   const [relations, setRelations] = useState<Relation[]>([]);
   const [filteredRelations, setFilteredRelations] = useState<Relation[]>([]);
@@ -38,8 +44,20 @@ export default function RelationGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const nodesRef = useRef<Map<string, Node>>(new Map());
-  const dragRef = useRef<{ nodeId: string | null; offsetX: number; offsetY: number }>({ nodeId: null, offsetX: 0, offsetY: 0 });
+  const dragRef = useRef<{
+    nodeId: string | null;
+    offsetX: number;
+    offsetY: number;
+    isPanning: boolean;
+    startX: number;
+    startY: number;
+    startTx: number;
+    startTy: number;
+  }>({ nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 });
+  const transformRef = useRef<Transform>({ scale: 1, offsetX: 0, offsetY: 0 });
+  const alphaRef = useRef(1.0);
   const selectedRef = useRef<string | null>(null);
+  const hasAutoFitRef = useRef(false);
   const { t } = useI18n();
 
   const load = () => {
@@ -112,7 +130,68 @@ export default function RelationGraph() {
     );
   };
 
-  // Force-directed graph simulation
+  // ── Coordinate helpers ──
+
+  /** Convert mouse event to canvas pixel coordinates */
+  const getCanvasPixel = (e: React.MouseEvent<HTMLCanvasElement> | MouseEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      cx: (e.clientX - rect.left) * (canvas.width / rect.width),
+      cy: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  };
+
+  /** Convert canvas pixel coords to world (graph) coords */
+  const canvasToWorld = (cx: number, cy: number) => {
+    const t = transformRef.current;
+    return {
+      wx: (cx - t.offsetX) / t.scale,
+      wy: (cy - t.offsetY) / t.scale,
+    };
+  };
+
+  /** Convert world coords to canvas pixel coords */
+  const worldToCanvas = (wx: number, wy: number) => {
+    const t = transformRef.current;
+    return {
+      sx: wx * t.scale + t.offsetX,
+      sy: wy * t.scale + t.offsetY,
+    };
+  };
+
+  // ── Fit to view ──
+
+  const fitToView = useCallback(() => {
+    const nodes = nodesRef.current;
+    const canvas = canvasRef.current;
+    if (!canvas || nodes.size === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const n of nodes.values()) {
+      minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y);
+      maxY = Math.max(maxY, n.y);
+    }
+
+    const padding = 80;
+    const graphW = maxX - minX + padding * 2;
+    const graphH = maxY - minY + padding * 2;
+
+    const scale = Math.min(canvas.width / graphW, canvas.height / graphH, 2.5);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    transformRef.current = {
+      scale,
+      offsetX: canvas.width / 2 - centerX * scale,
+      offsetY: canvas.height / 2 - centerY * scale,
+    };
+  }, []);
+
+  // ── Force-directed graph simulation ──
+
   const simulate = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || filteredRelations.length === 0) return;
@@ -124,6 +203,7 @@ export default function RelationGraph() {
     const H = canvas.height;
     const nodes = nodesRef.current;
     const sel = selectedRef.current;
+    const cam = transformRef.current;
 
     // Build nodes from relations
     const nodeIds = new Set<string>();
@@ -131,7 +211,7 @@ export default function RelationGraph() {
 
     for (const id of nodeIds) {
       if (!nodes.has(id)) {
-        nodes.set(id, { id, x: W / 2 + (Math.random() - 0.5) * 300, y: H / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0 });
+        nodes.set(id, { id, x: (Math.random() - 0.5) * 400, y: (Math.random() - 0.5) * 300, vx: 0, vy: 0 });
       }
     }
     for (const id of nodes.keys()) {
@@ -139,16 +219,25 @@ export default function RelationGraph() {
     }
 
     const nodeArr = Array.from(nodes.values());
-    const REPULSION = 3000;
-    const ATTRACTION = 0.005;
-    const DAMPING = 0.85;
-    const CENTER_GRAVITY = 0.01;
-    const IDEAL_DIST = 120;
+    const REPULSION = 2000;
+    const ATTRACTION = 0.008;
+    const DAMPING = 0.55;
+    const CENTER_GRAVITY = 0.02;
+    const IDEAL_DIST = 140;
+    const MAX_VELOCITY = 5;
+    const ALPHA_DECAY = 0.995;
+    const ALPHA_MIN = 0.001;
+
+    // Cool down over time
+    const alpha = alphaRef.current;
+    alphaRef.current = Math.max(alpha * ALPHA_DECAY, ALPHA_MIN);
 
     for (const n of nodeArr) {
       let fx = 0, fy = 0;
-      fx += (W / 2 - n.x) * CENTER_GRAVITY;
-      fy += (H / 2 - n.y) * CENTER_GRAVITY;
+
+      // Center gravity toward origin (world 0,0)
+      fx += (0 - n.x) * CENTER_GRAVITY;
+      fy += (0 - n.y) * CENTER_GRAVITY;
 
       for (const m of nodeArr) {
         if (m === n) continue;
@@ -174,16 +263,26 @@ export default function RelationGraph() {
       }
 
       if (dragRef.current.nodeId !== n.id) {
-        n.vx = (n.vx + fx) * DAMPING;
-        n.vy = (n.vy + fy) * DAMPING;
+        n.vx = (n.vx + fx * alpha) * DAMPING;
+        n.vy = (n.vy + fy * alpha) * DAMPING;
+
+        // Clamp velocity
+        const speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+        if (speed > MAX_VELOCITY) {
+          n.vx = (n.vx / speed) * MAX_VELOCITY;
+          n.vy = (n.vy / speed) * MAX_VELOCITY;
+        } else if (speed < 0.1) {
+          n.vx = 0;
+          n.vy = 0;
+        }
+
         n.x += n.vx;
         n.y += n.vy;
       }
-      n.x = Math.max(40, Math.min(W - 40, n.x));
-      n.y = Math.max(40, Math.min(H - 40, n.y));
+      // No boundary clamp — camera handles visibility
     }
 
-    // Draw
+    // ── Draw ──
     ctx.clearRect(0, 0, W, H);
 
     // Build connected set for selected node
@@ -202,20 +301,23 @@ export default function RelationGraph() {
       const o = nodes.get(r.object);
       if (!s || !o) continue;
 
+      const { sx: sx1, sy: sy1 } = worldToCanvas(s.x, s.y);
+      const { sx: sx2, sy: sy2 } = worldToCanvas(o.x, o.y);
+
       const isHighlighted = sel && (r.subject === sel || r.object === sel);
-      const lineWidth = 1 + (r.confidence ?? 0.5) * 3;
+      const baseWidth = 1 + (r.confidence ?? 0.5) * 3;
 
       ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(o.x, o.y);
+      ctx.moveTo(sx1, sy1);
+      ctx.lineTo(sx2, sy2);
       ctx.strokeStyle = isHighlighted ? 'rgba(99, 102, 241, 0.7)' : sel ? 'rgba(100, 100, 140, 0.15)' : 'rgba(100, 100, 140, 0.4)';
-      ctx.lineWidth = isHighlighted ? lineWidth + 1 : lineWidth;
+      ctx.lineWidth = isHighlighted ? baseWidth + 1 : baseWidth;
       ctx.stroke();
 
-      // Arrow
-      const angle = Math.atan2(o.y - s.y, o.x - s.x);
-      const midX = (s.x + o.x) / 2;
-      const midY = (s.y + o.y) / 2;
+      // Arrow at midpoint
+      const angle = Math.atan2(sy2 - sy1, sx2 - sx1);
+      const midX = (sx1 + sx2) / 2;
+      const midY = (sy1 + sy2) / 2;
       ctx.beginPath();
       ctx.moveTo(midX + 8 * Math.cos(angle), midY + 8 * Math.sin(angle));
       ctx.lineTo(midX - 5 * Math.cos(angle - 0.5), midY - 5 * Math.sin(angle - 0.5));
@@ -223,15 +325,16 @@ export default function RelationGraph() {
       ctx.fillStyle = isHighlighted ? 'rgba(99, 102, 241, 0.8)' : sel ? 'rgba(100, 100, 140, 0.2)' : 'rgba(100, 100, 140, 0.6)';
       ctx.fill();
 
-      // Label
+      // Edge label
       ctx.fillStyle = isHighlighted ? '#a5b4fc' : sel ? '#555' : '#888';
       ctx.font = '10px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(r.predicate, midX, midY - 8);
     }
 
-    // Nodes
+    // Nodes — constant screen-space size
     for (const n of nodeArr) {
+      const { sx, sy } = worldToCanvas(n.x, n.y);
       const isSel = n.id === sel;
       const isConnected = connectedToSel.has(n.id);
       const dimmed = sel && !isConnected;
@@ -242,7 +345,7 @@ export default function RelationGraph() {
       const radius = Math.min(16 + degree * 2, 28);
 
       ctx.beginPath();
-      ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
       ctx.fillStyle = isSel ? '#818cf8' : dimmed ? '#2a2e3a' : dragRef.current.nodeId === n.id ? '#6366f1' : '#4f46e5';
       ctx.fill();
       ctx.strokeStyle = isSel ? '#c7d2fe' : dimmed ? '#3a3e4a' : '#818cf8';
@@ -254,8 +357,16 @@ export default function RelationGraph() {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const label = n.id.length > 10 ? n.id.slice(0, 9) + '.' : n.id;
-      ctx.fillText(label, n.x, n.y);
+      ctx.fillText(label, sx, sy);
     }
+
+    // Zoom indicator
+    const zoomPct = Math.round(cam.scale * 100);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`${zoomPct}%`, W - 10, H - 10);
 
     animRef.current = requestAnimationFrame(simulate);
   }, [filteredRelations]);
@@ -265,56 +376,109 @@ export default function RelationGraph() {
 
   useEffect(() => {
     if (filteredRelations.length > 0) {
+      alphaRef.current = 1.0; // reheat on data change
       animRef.current = requestAnimationFrame(simulate);
     }
     return () => cancelAnimationFrame(animRef.current);
   }, [filteredRelations, simulate]);
 
-  // Mouse interaction
-  const getNodeAt = (x: number, y: number): string | null => {
+  // Auto-fit after initial physics settle
+  useEffect(() => {
+    if (filteredRelations.length > 0 && !hasAutoFitRef.current) {
+      const timer = setTimeout(() => {
+        fitToView();
+        hasAutoFitRef.current = true;
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [filteredRelations, fitToView]);
+
+  // Reset auto-fit flag when filter changes
+  useEffect(() => {
+    hasAutoFitRef.current = false;
+  }, [predicateFilter]);
+
+  // ── Mouse interaction ──
+
+  const getNodeAt = (wx: number, wy: number): string | null => {
+    // Hit test in world coords; use a generous radius
     for (const [id, n] of nodesRef.current) {
-      const dx = x - n.x;
-      const dy = y - n.y;
-      if (dx * dx + dy * dy < 600) return id;
+      const dx = wx - n.x;
+      const dy = wy - n.y;
+      // 30px radius in world space (roughly matches visual node size)
+      if (dx * dx + dy * dy < 900) return id;
     }
     return null;
   };
 
-  const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) * (canvasRef.current!.width / rect.width),
-      y: (e.clientY - rect.top) * (canvasRef.current!.height / rect.height),
-    };
-  };
-
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { x, y } = getCanvasCoords(e);
-    const nodeId = getNodeAt(x, y);
+    const { cx, cy } = getCanvasPixel(e);
+    const { wx, wy } = canvasToWorld(cx, cy);
+    const nodeId = getNodeAt(wx, wy);
+
     if (nodeId) {
+      // Start dragging a node
       const n = nodesRef.current.get(nodeId)!;
-      dragRef.current = { nodeId, offsetX: n.x - x, offsetY: n.y - y };
+      dragRef.current = {
+        nodeId,
+        offsetX: n.x - wx,
+        offsetY: n.y - wy,
+        isPanning: false,
+        startX: 0, startY: 0, startTx: 0, startTy: 0,
+      };
+    } else {
+      // Start panning
+      const t = transformRef.current;
+      dragRef.current = {
+        nodeId: null,
+        offsetX: 0, offsetY: 0,
+        isPanning: true,
+        startX: cx,
+        startY: cy,
+        startTx: t.offsetX,
+        startTy: t.offsetY,
+      };
     }
   };
 
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!dragRef.current.nodeId) return;
-    const { x, y } = getCanvasCoords(e);
-    const n = nodesRef.current.get(dragRef.current.nodeId);
-    if (n) { n.x = x + dragRef.current.offsetX; n.y = y + dragRef.current.offsetY; n.vx = 0; n.vy = 0; }
+    const d = dragRef.current;
+    const { cx, cy } = getCanvasPixel(e);
+
+    if (d.nodeId) {
+      // Dragging a node
+      const { wx, wy } = canvasToWorld(cx, cy);
+      const n = nodesRef.current.get(d.nodeId);
+      if (n) {
+        n.x = wx + d.offsetX;
+        n.y = wy + d.offsetY;
+        n.vx = 0;
+        n.vy = 0;
+      }
+    } else if (d.isPanning) {
+      // Panning the camera
+      transformRef.current = {
+        ...transformRef.current,
+        offsetX: d.startTx + (cx - d.startX),
+        offsetY: d.startTy + (cy - d.startY),
+      };
+    }
   };
 
   const onMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    // If not dragged much, treat as click
-    if (dragRef.current.nodeId) {
-      const { x, y } = getCanvasCoords(e);
-      const n = nodesRef.current.get(dragRef.current.nodeId);
+    const d = dragRef.current;
+
+    if (d.nodeId) {
+      // Check if it was a click (minimal movement)
+      const { cx, cy } = getCanvasPixel(e);
+      const { wx, wy } = canvasToWorld(cx, cy);
+      const n = nodesRef.current.get(d.nodeId);
       if (n) {
-        const dx = n.x - (x + dragRef.current.offsetX);
-        const dy = n.y - (y + dragRef.current.offsetY);
+        const dx = n.x - (wx + d.offsetX);
+        const dy = n.y - (wy + d.offsetY);
         if (Math.abs(dx) < 3 && Math.abs(dy) < 3) {
           // Click — select/deselect
-          const clickedNode = dragRef.current.nodeId;
+          const clickedNode = d.nodeId;
           if (selectedNode === clickedNode) {
             setSelectedNode(null);
             setNodeMemories([]);
@@ -324,13 +488,68 @@ export default function RelationGraph() {
           }
         }
       }
+      alphaRef.current = Math.max(alphaRef.current, 0.3); // reheat after drag
     }
-    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0 };
+
+    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
   };
 
   const onMouseLeave = () => {
-    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0 };
+    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
   };
+
+  // ── Wheel zoom ──
+
+  const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const cy = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const t = transformRef.current;
+    const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.min(Math.max(t.scale * zoomFactor, 0.1), 8);
+
+    // Zoom centered on cursor: keep world point under cursor fixed
+    const wx = (cx - t.offsetX) / t.scale;
+    const wy = (cy - t.offsetY) / t.scale;
+
+    transformRef.current = {
+      scale: newScale,
+      offsetX: cx - wx * newScale,
+      offsetY: cy - wy * newScale,
+    };
+  }, []);
+
+  // Attach wheel handler with passive:false to allow preventDefault
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const cy = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+      const t = transformRef.current;
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const newScale = Math.min(Math.max(t.scale * zoomFactor, 0.1), 8);
+
+      const wx = (cx - t.offsetX) / t.scale;
+      const wy = (cy - t.offsetY) / t.scale;
+
+      transformRef.current = {
+        scale: newScale,
+        offsetX: cx - wx * newScale,
+        offsetY: cy - wy * newScale,
+      };
+    };
+    canvas.addEventListener('wheel', handler, { passive: false });
+    return () => canvas.removeEventListener('wheel', handler);
+  }, [filteredRelations]);
 
   // Node stats
   const nodeSet = new Set<string>();
@@ -363,6 +582,9 @@ export default function RelationGraph() {
             </button>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn" onClick={fitToView} style={{ fontSize: 12, padding: '4px 10px' }}>
+              {t('relations.fit')}
+            </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
               <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
               {t('relations.autoRefresh')}
@@ -381,7 +603,7 @@ export default function RelationGraph() {
             ref={canvasRef}
             width={900}
             height={500}
-            style={{ width: '100%', height: 'auto', background: '#0f0f1a', borderRadius: 8, cursor: dragRef.current.nodeId ? 'grabbing' : 'grab' }}
+            style={{ width: '100%', height: 'auto', background: '#0f0f1a', borderRadius: 8, cursor: dragRef.current.nodeId ? 'grabbing' : dragRef.current.isPanning ? 'grabbing' : 'grab' }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
@@ -390,6 +612,7 @@ export default function RelationGraph() {
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
             {t('relations.graphHint')}
             {' '}{t('relations.lineThickness')}
+            {' '}{t('relations.zoomHint')}
           </p>
           {tooMany && (
             <p style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>

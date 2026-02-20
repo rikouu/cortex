@@ -14,6 +14,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
       offset: q.offset ? parseInt(q.offset) : undefined,
       orderBy: q.order_by,
       orderDir: q.order_dir,
+      include_superseded: q.include_superseded === 'true',
     });
   });
 

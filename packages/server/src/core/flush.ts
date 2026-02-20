@@ -287,7 +287,7 @@ export class MemoryFlush {
       const similar: SimilarMemory[] = [];
       for (const r of results) {
         const mem = getMemoryById(r.id);
-        if (mem && !mem.superseded_by) {
+        if (mem && !mem.superseded_by && !mem.is_pinned) {
           similar.push({ memory: mem, distance: r.distance });
         }
       }
@@ -389,7 +389,7 @@ export class MemoryFlush {
       if (similar.length > 0 && similar[0]!.distance < LEGACY_DEDUP_THRESHOLD) {
         return { action: 'skipped' };
       }
-      return { action: 'inserted', memory: this.insertNewMemory(extraction, agentId, sessionId) };
+      return { action: 'inserted', memory: await this.insertNewMemory(extraction, agentId, sessionId) };
     }
 
     if (similar.length > 0) {
@@ -407,10 +407,10 @@ export class MemoryFlush {
       }
     }
 
-    return { action: 'inserted', memory: this.insertNewMemory(extraction, agentId, sessionId) };
+    return { action: 'inserted', memory: await this.insertNewMemory(extraction, agentId, sessionId) };
   }
 
-  private insertNewMemory(extraction: ExtractedMemory, agentId: string, sessionId?: string): Memory {
+  private async insertNewMemory(extraction: ExtractedMemory, agentId: string, sessionId?: string): Promise<Memory> {
     const layer = extraction.importance >= 0.8 ? 'core' : 'working';
     const ttlMs = parseDuration(this.config.layers.working.ttl);
     const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
@@ -427,10 +427,13 @@ export class MemoryFlush {
       metadata: JSON.stringify({ extraction_source: extraction.source, reasoning: extraction.reasoning }),
     });
 
-    // Index vector (best-effort)
-    this.embeddingProvider.embed(extraction.content).then(embedding => {
-      if (embedding.length > 0) this.vectorBackend.upsert(mem.id, embedding);
-    }).catch(() => {});
+    // Index vector
+    try {
+      const embedding = await this.embeddingProvider.embed(extraction.content);
+      if (embedding.length > 0) {
+        await this.vectorBackend.upsert(mem.id, embedding);
+      }
+    } catch { /* best-effort */ }
 
     return mem;
   }

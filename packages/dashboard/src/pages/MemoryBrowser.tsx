@@ -15,6 +15,8 @@ interface Memory {
   created_at: string;
   agent_id: string;
   source: string | null;
+  superseded_by: string | null;
+  is_pinned?: number;
 }
 
 type SortField = 'created_at' | 'importance' | 'decay_score' | 'access_count' | 'confidence';
@@ -344,6 +346,7 @@ export default function MemoryBrowser() {
                 />
                 <span className={`badge ${m.layer}`}>{m.layer}</span>
                 <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>{m.category}</span>
+                {m.is_pinned ? <span className="badge" style={{ background: 'rgba(255,170,0,0.2)', color: '#b8860b' }}>{t('memoryDetail.pinned')}</span> : null}
                 <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>{m.created_at?.slice(0, 16)}</span>
               </div>
               <div className="content">{m.content}</div>

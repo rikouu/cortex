@@ -406,6 +406,12 @@ const migrations = [
       SELECT id, source_memory_id, source, confidence FROM relations;
     `,
   },
+  {
+    name: '008_memory_pinned',
+    sql: `
+      ALTER TABLE memories ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

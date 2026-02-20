@@ -153,6 +153,9 @@ export default {
     merged: 'Merged',
     replaced: 'Replaced',
     updateReason: 'Reason',
+    pinLabel: 'Lock memory',
+    pinDesc: 'Locked memories will not be overwritten by automatic smart updates.',
+    pinned: 'Locked',
   },
   agents: {
     title: 'Agents',
@@ -337,6 +340,8 @@ export default {
     nodeEdgeCount: '{{nodes}} nodes, {{edges}} edges',
     graphHint: 'Drag nodes to rearrange. Click a node to see its connections and related memories.',
     lineThickness: 'Line thickness = confidence score.',
+    zoomHint: 'Scroll to zoom, drag empty area to pan.',
+    fit: 'Fit',
     entity: 'Entity: {{name}}',
     connections: 'Connections ({{count}})',
     conf: 'conf',

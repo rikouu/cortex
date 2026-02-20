@@ -153,6 +153,9 @@ export default {
     merged: '已合并',
     replaced: '已替换',
     updateReason: '原因',
+    pinLabel: '锁定记忆',
+    pinDesc: '锁定后的记忆不会被自动智能更新覆盖。',
+    pinned: '已锁定',
   },
   agents: {
     title: '智能体',
@@ -337,6 +340,8 @@ export default {
     nodeEdgeCount: '{{nodes}} 个节点，{{edges}} 条边',
     graphHint: '拖拽节点以重新排列。点击节点查看其连接和相关记忆。',
     lineThickness: '线条粗细 = 置信度分数。',
+    zoomHint: '滚轮缩放，拖拽空白区域平移。',
+    fit: '适应画布',
     entity: '实体：{{name}}',
     connections: '连接（{{count}}）',
     conf: '置信度',

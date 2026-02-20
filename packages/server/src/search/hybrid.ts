@@ -160,7 +160,7 @@ export class HybridSearchEngine {
         // Need to fetch memory from DB
         const db = getDb();
         const memory = db.prepare('SELECT * FROM memories WHERE id = ?').get(r.id) as Memory | undefined;
-        if (memory) {
+        if (memory && !memory.superseded_by) {
           scoreMap.set(r.id, { memory, textScore: 0, vectorScore: normalized });
         }
       }

@@ -31,6 +31,7 @@ export interface Memory {
   expires_at: string | null;
   superseded_by: string | null;
   metadata: string | null;
+  is_pinned: number;
 }
 
 export interface Relation {
@@ -117,6 +118,7 @@ export function listMemories(opts: {
   offset?: number;
   orderBy?: string;
   orderDir?: 'asc' | 'desc';
+  include_superseded?: boolean;
 }): { items: Memory[]; total: number } {
   const db = getDb();
   const conditions: string[] = [];
@@ -125,6 +127,7 @@ export function listMemories(opts: {
   if (opts.layer) { conditions.push('layer = ?'); params.push(opts.layer); }
   if (opts.category) { conditions.push('category = ?'); params.push(opts.category); }
   if (opts.agent_id) { conditions.push('agent_id = ?'); params.push(opts.agent_id); }
+  if (!opts.include_superseded) { conditions.push('superseded_by IS NULL'); }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const orderBy = opts.orderBy || 'created_at';
@@ -140,7 +143,7 @@ export function listMemories(opts: {
   return { items, total };
 }
 
-export function updateMemory(id: string, updates: Partial<Pick<Memory, 'layer' | 'category' | 'content' | 'importance' | 'confidence' | 'decay_score' | 'expires_at' | 'superseded_by' | 'metadata'>>): Memory | null {
+export function updateMemory(id: string, updates: Partial<Pick<Memory, 'layer' | 'category' | 'content' | 'importance' | 'confidence' | 'decay_score' | 'expires_at' | 'superseded_by' | 'metadata' | 'is_pinned'>>): Memory | null {
   const db = getDb();
   const sets: string[] = [];
   const params: any[] = [];
@@ -197,8 +200,10 @@ export function bumpAccessCount(memoryIds: string[], query?: string): void {
  */
 function sanitizeFTSQuery(query: string): string {
   const cleaned = query
-    // Strip FTS5 special characters that cause syntax errors
-    .replace(/["\*\(\)\{\}\[\]\+\~\^\:\;\!\?\<\>\=\&\|\\\/@#\$%`]/g, ' ')
+    // Strip FTS5 special characters that cause syntax errors (ASCII)
+    .replace(/["\*\(\)\{\}\[\]\+\~\^\:\;\!\?\<\>\=\&\|\\\/@#\$%`',._-]/g, ' ')
+    // Strip CJK and fullwidth punctuation (Chinese/Japanese commas, periods, quotes, brackets, etc.)
+    .replace(/[\u3000-\u303F\uFF00-\uFF60\u2000-\u206F\u2E00-\u2E7F\u00A0-\u00BF\u2018-\u201F\u2026\u2014\u2013]/g, ' ')
     // Strip FTS5 boolean keywords (case-insensitive, whole words only)
     .replace(/\b(AND|OR|NOT|NEAR)\b/gi, ' ')
     // Strip leading hyphens from words (FTS5 NOT operator)
