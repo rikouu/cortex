@@ -35,6 +35,23 @@ interface PluginApi {
   registerService(svc: { id: string; start: () => Promise<void>; stop: () => Promise<void> }): void;
 }
 
+// ── Content extraction ──────────────────────────────────
+// OpenClaw messages use multimodal format: content can be string OR
+// [{type: "text", text: "..."}, {type: "image", ...}]
+function extractText(content: any): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b: any) => b.type === 'text' && typeof b.text === 'string')
+      .map((b: any) => b.text)
+      .join('\n');
+  }
+  if (content && typeof content === 'object' && typeof content.text === 'string') {
+    return content.text;
+  }
+  return '';
+}
+
 // ── Cortex HTTP helpers ─────────────────────────────────
 function getCortexUrl(config: Record<string, any>): string {
   return config.cortexUrl || process.env.CORTEX_URL || 'http://localhost:21100';
@@ -126,13 +143,13 @@ export default {
   },
 
   register(api: PluginApi) {
-    const config = api.pluginConfig;
+    const config = api.pluginConfig ?? {};
     const cortexUrl = getCortexUrl(config);
     const agentId = (config.agentId as string) || 'openclaw';
     const debug = isDebug(config);
     const log = api.logger;
 
-    log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${agentId}`);
+    log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${agentId}, config keys: ${Object.keys(config).join(',') || '(empty)'}`);
 
     // ════════════════════════════════════════════════════════
     // TOOLS (primary interface — always work)
@@ -264,7 +281,7 @@ export default {
     // ── Hook: before_agent_start → Recall memories ──────
     api.on('before_agent_start', async (event: any) => {
       try {
-        const query: string = event?.prompt || '';
+        const query = extractText(event?.prompt) || '';
         if (!query) return;
 
         const result = await cortexRecall(cortexUrl, query, agentId);
@@ -278,33 +295,44 @@ export default {
     });
 
     // ── Hook: agent_end → Ingest conversation ───────────
+    // event: { messages: AgentMessage[], success, error?, durationMs? }
+    // AgentMessage.content is multimodal: string | {type,text}[]
     api.on('agent_end', async (event: any) => {
-      // Always log — diagnosing why this hook may not fire
-      log.info(`[cortex-bridge] agent_end fired, event keys: ${Object.keys(event || {}).join(', ')}`);
       try {
-        const messages: { role: string; content: string }[] = event?.messages || [];
-        log.info(`[cortex-bridge] agent_end messages count: ${messages.length}`);
-
+        const messages: any[] = event?.messages || [];
         const reversed = [...messages].reverse();
-        const lastAssistant = reversed.find((m: { role: string }) => m.role === 'assistant');
-        const lastUser = reversed.find((m: { role: string }) => m.role === 'user');
+        const lastAssistant = reversed.find((m: any) => m.role === 'assistant');
+        const lastUser = reversed.find((m: any) => m.role === 'user');
 
-        if (!lastUser || !lastAssistant) {
-          log.warn(`[cortex-bridge] agent_end: missing pair — user=${!!lastUser}, assistant=${!!lastAssistant}`);
+        if (!lastUser || !lastAssistant) return;
+
+        const userText = extractText(lastUser.content);
+        const assistantText = extractText(lastAssistant.content);
+
+        if (!userText || !assistantText) {
+          if (debug) log.warn('[cortex-bridge] agent_end: extracted empty text');
           return;
         }
 
-        const result = await cortexIngest(cortexUrl, lastUser.content, lastAssistant.content, agentId);
-        log.info(`[cortex-bridge] agent_end ingest result: ok=${result.ok}`);
+        const result = await cortexIngest(cortexUrl, userText, assistantText, agentId);
+        if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}`);
       } catch (e) {
-        log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
+        if (debug) log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
       }
     });
 
     // ── Hook: before_compaction → Emergency flush ───────
     api.on('before_compaction', async (event: any) => {
       try {
-        const messages: { role: string; content: string }[] = event?.messages || [];
+        const rawMessages: any[] = event?.messages || [];
+        if (rawMessages.length === 0) return;
+
+        // Normalize multimodal content to plain text for Cortex
+        const messages = rawMessages.map((m: any) => ({
+          role: m.role as string,
+          content: extractText(m.content),
+        })).filter(m => m.content);
+
         if (messages.length === 0) return;
 
         await cortexFlush(cortexUrl, messages, agentId);
