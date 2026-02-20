@@ -24,16 +24,32 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     return getStats(q.agent_id);
   });
 
-  // Get config (safe — masks sensitive fields)
+  // Get config (safe — masks sensitive fields, exposes baseUrl + hasApiKey)
   app.get('/api/v1/config', async () => {
     const config = getConfig();
     return {
       ...config,
       llm: {
-        extraction: { provider: config.llm.extraction.provider, model: config.llm.extraction.model },
-        lifecycle: { provider: config.llm.lifecycle.provider, model: config.llm.lifecycle.model },
+        extraction: {
+          provider: config.llm.extraction.provider,
+          model: config.llm.extraction.model,
+          baseUrl: config.llm.extraction.baseUrl,
+          hasApiKey: !!config.llm.extraction.apiKey,
+        },
+        lifecycle: {
+          provider: config.llm.lifecycle.provider,
+          model: config.llm.lifecycle.model,
+          baseUrl: config.llm.lifecycle.baseUrl,
+          hasApiKey: !!config.llm.lifecycle.apiKey,
+        },
       },
-      embedding: { provider: config.embedding.provider, model: config.embedding.model, dimensions: config.embedding.dimensions },
+      embedding: {
+        provider: config.embedding.provider,
+        model: config.embedding.model,
+        dimensions: config.embedding.dimensions,
+        baseUrl: config.embedding.baseUrl,
+        hasApiKey: !!config.embedding.apiKey,
+      },
     };
   });
 

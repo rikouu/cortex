@@ -76,5 +76,29 @@ export const updateConfig = (data: any) =>
   request('/config', { method: 'PATCH', body: JSON.stringify(data) });
 
 // Export
-export const triggerExport = () =>
-  request('/export', { method: 'POST' });
+export const triggerExport = (format: string = 'json') =>
+  request('/export', { method: 'POST', body: JSON.stringify({ format }) });
+
+// Import
+export const triggerImport = (data: any) =>
+  request('/import', { method: 'POST', body: JSON.stringify(data) });
+
+// Reindex
+export const triggerReindex = () =>
+  request('/reindex', { method: 'POST' });
+
+// Agents
+export const listAgents = () => request('/agents');
+
+export const getAgent = (id: string) => request(`/agents/${id}`);
+
+export const createAgent = (data: { id: string; name: string; description?: string; config_override?: any }) =>
+  request('/agents', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateAgent = (id: string, data: any) =>
+  request(`/agents/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+
+export const deleteAgent = (id: string) =>
+  request(`/agents/${id}`, { method: 'DELETE' });
+
+export const getAgentConfig = (id: string) => request(`/agents/${id}/config`);

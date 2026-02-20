@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { listRelations, createRelation, deleteRelation } from '../api/client.js';
+import { listRelations, createRelation, deleteRelation, search } from '../api/client.js';
 
 interface Relation {
   id: string;
@@ -20,18 +20,36 @@ interface Node {
 
 export default function RelationGraph() {
   const [relations, setRelations] = useState<Relation[]>([]);
+  const [filteredRelations, setFilteredRelations] = useState<Relation[]>([]);
   const [creating, setCreating] = useState(false);
   const [newRel, setNewRel] = useState({ subject: '', predicate: '', object: '', confidence: 0.8 });
+  const [predicateFilter, setPredicateFilter] = useState('');
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [nodeMemories, setNodeMemories] = useState<any[]>([]);
+  const [loadingMemories, setLoadingMemories] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const nodesRef = useRef<Map<string, Node>>(new Map());
   const dragRef = useRef<{ nodeId: string | null; offsetX: number; offsetY: number }>({ nodeId: null, offsetX: 0, offsetY: 0 });
+  const selectedRef = useRef<string | null>(null);
 
   const load = () => {
     listRelations().then(setRelations);
   };
 
   useEffect(() => { load(); }, []);
+
+  // Derive unique predicates
+  const predicates = [...new Set(relations.map(r => r.predicate))];
+
+  // Filter relations
+  useEffect(() => {
+    if (predicateFilter) {
+      setFilteredRelations(relations.filter(r => r.predicate === predicateFilter));
+    } else {
+      setFilteredRelations(relations);
+    }
+  }, [relations, predicateFilter]);
 
   const handleCreate = async () => {
     await createRelation(newRel);
@@ -46,10 +64,22 @@ export default function RelationGraph() {
     load();
   };
 
+  // Load memories for selected node
+  const loadNodeMemories = async (entityName: string) => {
+    setLoadingMemories(true);
+    try {
+      const res = await search({ query: entityName, limit: 10, debug: false });
+      setNodeMemories(res.results || []);
+    } catch {
+      setNodeMemories([]);
+    }
+    setLoadingMemories(false);
+  };
+
   // Force-directed graph simulation
   const simulate = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || relations.length === 0) return;
+    if (!canvas || filteredRelations.length === 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -57,25 +87,17 @@ export default function RelationGraph() {
     const W = canvas.width;
     const H = canvas.height;
     const nodes = nodesRef.current;
+    const sel = selectedRef.current;
 
     // Build nodes from relations
     const nodeIds = new Set<string>();
-    relations.forEach(r => { nodeIds.add(r.subject); nodeIds.add(r.object); });
+    filteredRelations.forEach(r => { nodeIds.add(r.subject); nodeIds.add(r.object); });
 
-    // Initialize new nodes
     for (const id of nodeIds) {
       if (!nodes.has(id)) {
-        nodes.set(id, {
-          id,
-          x: W / 2 + (Math.random() - 0.5) * 300,
-          y: H / 2 + (Math.random() - 0.5) * 200,
-          vx: 0,
-          vy: 0,
-        });
+        nodes.set(id, { id, x: W / 2 + (Math.random() - 0.5) * 300, y: H / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0 });
       }
     }
-
-    // Remove stale nodes
     for (const id of nodes.keys()) {
       if (!nodeIds.has(id)) nodes.delete(id);
     }
@@ -87,15 +109,11 @@ export default function RelationGraph() {
     const CENTER_GRAVITY = 0.01;
     const IDEAL_DIST = 120;
 
-    // Forces
     for (const n of nodeArr) {
       let fx = 0, fy = 0;
-
-      // Center gravity
       fx += (W / 2 - n.x) * CENTER_GRAVITY;
       fy += (H / 2 - n.y) * CENTER_GRAVITY;
 
-      // Repulsion from other nodes
       for (const m of nodeArr) {
         if (m === n) continue;
         const dx = n.x - m.x;
@@ -106,13 +124,11 @@ export default function RelationGraph() {
         fy += (dy / dist) * force;
       }
 
-      // Attraction along edges
-      for (const r of relations) {
+      for (const r of filteredRelations) {
         let other: Node | undefined;
         if (r.subject === n.id) other = nodes.get(r.object);
         else if (r.object === n.id) other = nodes.get(r.subject);
         if (!other) continue;
-
         const dx = other.x - n.x;
         const dy = other.y - n.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -127,8 +143,6 @@ export default function RelationGraph() {
         n.x += n.vx;
         n.y += n.vy;
       }
-
-      // Bounds
       n.x = Math.max(40, Math.min(W - 40, n.x));
       n.y = Math.max(40, Math.min(H - 40, n.y));
     }
@@ -136,17 +150,30 @@ export default function RelationGraph() {
     // Draw
     ctx.clearRect(0, 0, W, H);
 
-    // Edges
-    for (const r of relations) {
+    // Build connected set for selected node
+    const connectedToSel = new Set<string>();
+    if (sel) {
+      connectedToSel.add(sel);
+      filteredRelations.forEach(r => {
+        if (r.subject === sel) connectedToSel.add(r.object);
+        if (r.object === sel) connectedToSel.add(r.subject);
+      });
+    }
+
+    // Edges — line width based on confidence
+    for (const r of filteredRelations) {
       const s = nodes.get(r.subject);
       const o = nodes.get(r.object);
       if (!s || !o) continue;
 
+      const isHighlighted = sel && (r.subject === sel || r.object === sel);
+      const lineWidth = 1 + (r.confidence ?? 0.5) * 3;
+
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
       ctx.lineTo(o.x, o.y);
-      ctx.strokeStyle = 'rgba(100, 100, 140, 0.4)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isHighlighted ? 'rgba(99, 102, 241, 0.7)' : sel ? 'rgba(100, 100, 140, 0.15)' : 'rgba(100, 100, 140, 0.4)';
+      ctx.lineWidth = isHighlighted ? lineWidth + 1 : lineWidth;
       ctx.stroke();
 
       // Arrow
@@ -157,11 +184,11 @@ export default function RelationGraph() {
       ctx.moveTo(midX + 8 * Math.cos(angle), midY + 8 * Math.sin(angle));
       ctx.lineTo(midX - 5 * Math.cos(angle - 0.5), midY - 5 * Math.sin(angle - 0.5));
       ctx.lineTo(midX - 5 * Math.cos(angle + 0.5), midY - 5 * Math.sin(angle + 0.5));
-      ctx.fillStyle = 'rgba(100, 100, 140, 0.6)';
+      ctx.fillStyle = isHighlighted ? 'rgba(99, 102, 241, 0.8)' : sel ? 'rgba(100, 100, 140, 0.2)' : 'rgba(100, 100, 140, 0.6)';
       ctx.fill();
 
       // Label
-      ctx.fillStyle = '#888';
+      ctx.fillStyle = isHighlighted ? '#a5b4fc' : sel ? '#555' : '#888';
       ctx.font = '10px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(r.predicate, midX, midY - 8);
@@ -169,46 +196,64 @@ export default function RelationGraph() {
 
     // Nodes
     for (const n of nodeArr) {
+      const isSel = n.id === sel;
+      const isConnected = connectedToSel.has(n.id);
+      const dimmed = sel && !isConnected;
+
+      // Node degree for size
+      let degree = 0;
+      filteredRelations.forEach(r => { if (r.subject === n.id || r.object === n.id) degree++; });
+      const radius = Math.min(16 + degree * 2, 28);
+
       ctx.beginPath();
-      ctx.arc(n.x, n.y, 20, 0, Math.PI * 2);
-      ctx.fillStyle = dragRef.current.nodeId === n.id ? '#6366f1' : '#4f46e5';
+      ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isSel ? '#818cf8' : dimmed ? '#2a2e3a' : dragRef.current.nodeId === n.id ? '#6366f1' : '#4f46e5';
       ctx.fill();
-      ctx.strokeStyle = '#818cf8';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = isSel ? '#c7d2fe' : dimmed ? '#3a3e4a' : '#818cf8';
+      ctx.lineWidth = isSel ? 3 : 2;
       ctx.stroke();
 
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px system-ui';
+      ctx.fillStyle = dimmed ? '#555' : '#fff';
+      ctx.font = `bold ${radius > 20 ? 12 : 11}px system-ui`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const label = n.id.length > 8 ? n.id.slice(0, 7) + '…' : n.id;
+      const label = n.id.length > 10 ? n.id.slice(0, 9) + '.' : n.id;
       ctx.fillText(label, n.x, n.y);
     }
 
     animRef.current = requestAnimationFrame(simulate);
-  }, [relations]);
+  }, [filteredRelations]);
+
+  // Keep selectedRef in sync
+  useEffect(() => { selectedRef.current = selectedNode; }, [selectedNode]);
 
   useEffect(() => {
-    if (relations.length > 0) {
+    if (filteredRelations.length > 0) {
       animRef.current = requestAnimationFrame(simulate);
     }
     return () => cancelAnimationFrame(animRef.current);
-  }, [relations, simulate]);
+  }, [filteredRelations, simulate]);
 
-  // Mouse interaction for dragging
+  // Mouse interaction
   const getNodeAt = (x: number, y: number): string | null => {
     for (const [id, n] of nodesRef.current) {
       const dx = x - n.x;
       const dy = y - n.y;
-      if (dx * dx + dy * dy < 400) return id;
+      if (dx * dx + dy * dy < 600) return id;
     }
     return null;
   };
 
-  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
+    return {
+      x: (e.clientX - rect.left) * (canvasRef.current!.width / rect.width),
+      y: (e.clientY - rect.top) * (canvasRef.current!.height / rect.height),
+    };
+  };
+
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = getCanvasCoords(e);
     const nodeId = getNodeAt(x, y);
     if (nodeId) {
       const n = nodesRef.current.get(nodeId)!;
@@ -218,54 +263,136 @@ export default function RelationGraph() {
 
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!dragRef.current.nodeId) return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
+    const { x, y } = getCanvasCoords(e);
     const n = nodesRef.current.get(dragRef.current.nodeId);
-    if (n) {
-      n.x = x + dragRef.current.offsetX;
-      n.y = y + dragRef.current.offsetY;
-      n.vx = 0;
-      n.vy = 0;
-    }
+    if (n) { n.x = x + dragRef.current.offsetX; n.y = y + dragRef.current.offsetY; n.vx = 0; n.vy = 0; }
   };
 
-  const onMouseUp = () => {
+  const onMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // If not dragged much, treat as click
+    if (dragRef.current.nodeId) {
+      const { x, y } = getCanvasCoords(e);
+      const n = nodesRef.current.get(dragRef.current.nodeId);
+      if (n) {
+        const dx = n.x - (x + dragRef.current.offsetX);
+        const dy = n.y - (y + dragRef.current.offsetY);
+        if (Math.abs(dx) < 3 && Math.abs(dy) < 3) {
+          // Click — select/deselect
+          const clickedNode = dragRef.current.nodeId;
+          if (selectedNode === clickedNode) {
+            setSelectedNode(null);
+            setNodeMemories([]);
+          } else {
+            setSelectedNode(clickedNode);
+            loadNodeMemories(clickedNode);
+          }
+        }
+      }
+    }
     dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0 };
   };
 
-  // Build node list for stats
+  const onMouseLeave = () => {
+    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0 };
+  };
+
+  // Node stats
   const nodeSet = new Set<string>();
-  relations.forEach(r => { nodeSet.add(r.subject); nodeSet.add(r.object); });
+  filteredRelations.forEach(r => { nodeSet.add(r.subject); nodeSet.add(r.object); });
+
+  // Node connections for selected node
+  const selectedRelations = selectedNode
+    ? filteredRelations.filter(r => r.subject === selectedNode || r.object === selectedNode)
+    : [];
 
   return (
     <div>
-      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
-        <h1 className="page-title" style={{marginBottom: 0}}>Relations</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h1 className="page-title" style={{ marginBottom: 0 }}>Relations</h1>
         <button className="btn primary" onClick={() => setCreating(true)}>+ New Relation</button>
       </div>
 
+      {/* Filters */}
+      {predicates.length > 0 && (
+        <div className="toolbar">
+          <select value={predicateFilter} onChange={e => setPredicateFilter(e.target.value)} style={{ width: 'auto' }}>
+            <option value="">All predicates ({predicates.length})</option>
+            {predicates.map(p => (
+              <option key={p} value={p}>{p} ({relations.filter(r => r.predicate === p).length})</option>
+            ))}
+          </select>
+          {selectedNode && (
+            <button className="btn" onClick={() => { setSelectedNode(null); setNodeMemories([]); }} style={{ fontSize: 12 }}>
+              Deselect: {selectedNode}
+            </button>
+          )}
+          <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 'auto' }}>
+            {nodeSet.size} nodes, {filteredRelations.length} edges
+          </span>
+        </div>
+      )}
+
       {/* Force-directed graph */}
-      {relations.length > 0 && (
-        <div className="card" style={{marginBottom: 16}}>
-          <h3 style={{marginBottom: 12}}>Entity Graph ({nodeSet.size} nodes, {relations.length} edges)</h3>
+      {filteredRelations.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
           <canvas
             ref={canvasRef}
-            width={800}
-            height={450}
-            style={{width: '100%', height: 'auto', background: '#0f0f1a', borderRadius: 8, cursor: dragRef.current.nodeId ? 'grabbing' : 'grab'}}
+            width={900}
+            height={500}
+            style={{ width: '100%', height: 'auto', background: '#0f0f1a', borderRadius: 8, cursor: dragRef.current.nodeId ? 'grabbing' : 'grab' }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
+            onMouseLeave={onMouseLeave}
           />
-          <p style={{fontSize: 12, color: 'var(--text-muted)', marginTop: 6}}>Drag nodes to rearrange</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+            Drag nodes to rearrange. Click a node to see its connections and related memories.
+            {' '}Line thickness = confidence score.
+          </p>
+        </div>
+      )}
+
+      {/* Selected node detail panel */}
+      {selectedNode && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 12 }}>Entity: {selectedNode}</h3>
+
+          {/* Connections */}
+          <div style={{ marginBottom: 16 }}>
+            <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Connections ({selectedRelations.length})</h4>
+            {selectedRelations.map(r => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                <span style={{ fontWeight: 600 }}>{r.subject}</span>
+                <span style={{ color: 'var(--primary)', fontSize: 12 }}>{r.predicate}</span>
+                <span style={{ fontWeight: 600 }}>{r.object}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>conf: {r.confidence?.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Related memories */}
+          <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Related Memories</h4>
+          {loadingMemories ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading...</div>
+          ) : nodeMemories.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No memories found</div>
+          ) : (
+            nodeMemories.map((m: any) => (
+              <div key={m.id} className="memory-card" style={{ padding: 10 }}>
+                <div className="header">
+                  <span className={`badge ${m.layer}`}>{m.layer}</span>
+                  <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>{m.category}</span>
+                </div>
+                <div style={{ fontSize: 13 }}>{m.content?.slice(0, 200)}{m.content?.length > 200 ? '...' : ''}</div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
       {/* Table view */}
-      {relations.length === 0 ? (
-        <div className="empty">No relations yet</div>
+      {filteredRelations.length === 0 ? (
+        <div className="empty">No relations{predicateFilter ? ` with predicate "${predicateFilter}"` : ''}</div>
       ) : (
         <div className="card">
           <table>
@@ -273,14 +400,21 @@ export default function RelationGraph() {
               <tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Created</th><th></th></tr>
             </thead>
             <tbody>
-              {relations.map(r => (
-                <tr key={r.id}>
-                  <td>{r.subject}</td>
+              {filteredRelations.map(r => (
+                <tr key={r.id} style={{ background: selectedNode && (r.subject === selectedNode || r.object === selectedNode) ? 'rgba(99,102,241,0.1)' : undefined }}>
+                  <td style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => { setSelectedNode(r.subject); loadNodeMemories(r.subject); }}>{r.subject}</td>
                   <td>{r.predicate}</td>
-                  <td>{r.object}</td>
-                  <td>{r.confidence?.toFixed(2)}</td>
+                  <td style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => { setSelectedNode(r.object); loadNodeMemories(r.object); }}>{r.object}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2 }}>
+                        <div style={{ width: `${(r.confidence ?? 0) * 100}%`, height: '100%', background: 'var(--primary)', borderRadius: 2 }} />
+                      </div>
+                      {r.confidence?.toFixed(2)}
+                    </div>
+                  </td>
                   <td>{r.created_at?.slice(0, 10)}</td>
-                  <td><button className="btn danger" onClick={() => handleDelete(r.id)}>×</button></td>
+                  <td><button className="btn danger" onClick={() => handleDelete(r.id)}>x</button></td>
                 </tr>
               ))}
             </tbody>
@@ -288,23 +422,29 @@ export default function RelationGraph() {
         </div>
       )}
 
+      {/* Create modal */}
       {creating && (
         <div className="modal-overlay" onClick={() => setCreating(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2>New Relation</h2>
             <div className="form-group">
               <label>Subject</label>
-              <input value={newRel.subject} onChange={e => setNewRel({...newRel, subject: e.target.value})} placeholder="e.g. Harry" />
+              <input value={newRel.subject} onChange={e => setNewRel({ ...newRel, subject: e.target.value })} placeholder="e.g. Harry" />
             </div>
             <div className="form-group">
               <label>Predicate</label>
-              <input value={newRel.predicate} onChange={e => setNewRel({...newRel, predicate: e.target.value})} placeholder="e.g. uses" />
+              <input value={newRel.predicate} onChange={e => setNewRel({ ...newRel, predicate: e.target.value })} placeholder="e.g. uses" />
             </div>
             <div className="form-group">
               <label>Object</label>
-              <input value={newRel.object} onChange={e => setNewRel({...newRel, object: e.target.value})} placeholder="e.g. OpenClaw" />
+              <input value={newRel.object} onChange={e => setNewRel({ ...newRel, object: e.target.value })} placeholder="e.g. OpenClaw" />
             </div>
-            <div style={{display: 'flex', gap: 8, justifyContent: 'flex-end'}}>
+            <div className="form-group">
+              <label>Confidence ({newRel.confidence.toFixed(2)})</label>
+              <input type="range" min="0" max="1" step="0.05" value={newRel.confidence}
+                onChange={e => setNewRel({ ...newRel, confidence: parseFloat(e.target.value) })} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => setCreating(false)}>Cancel</button>
               <button className="btn primary" onClick={handleCreate}
                 disabled={!newRel.subject || !newRel.predicate || !newRel.object}>Create</button>

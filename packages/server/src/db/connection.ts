@@ -163,6 +163,29 @@ const migrations = [
       CREATE INDEX idx_relations_object ON relations(object);
     `,
   },
+  {
+    name: '002_agents_table',
+    sql: `
+      CREATE TABLE agents (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL,
+        description     TEXT,
+        config_override TEXT,
+        created_at      DATETIME NOT NULL DEFAULT (datetime('now')),
+        updated_at      DATETIME NOT NULL DEFAULT (datetime('now'))
+      );
+
+      -- Built-in agents
+      INSERT INTO agents (id, name, description) VALUES
+        ('default', 'Default Agent', 'System default agent using global configuration'),
+        ('mcp', 'MCP Agent', 'Model Context Protocol agent for Claude Desktop / Cursor');
+
+      -- Auto-create agents from existing memories
+      INSERT OR IGNORE INTO agents (id, name, description)
+      SELECT DISTINCT agent_id, agent_id, 'Auto-created from existing memories'
+      FROM memories WHERE agent_id NOT IN ('default', 'mcp');
+    `,
+  },
 ];
 
 export function closeDatabase(): void {
