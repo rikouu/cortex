@@ -1,5 +1,7 @@
 # 🧠 Cortex — Universal AI Agent Memory Service
 
+**English** | [中文](./README.zh-CN.md)
+
 Cortex is a standalone memory service for AI agents. It runs as a sidecar process and provides persistent, searchable, lifecycle-managed memory via REST API, MCP, and framework-specific bridge plugins.
 
 ## Features
