@@ -522,12 +522,15 @@ export class MemorySieve {
 
     if (exchange.messages && exchange.messages.length > 0) {
       // Multi-turn mode: format each message with role labels, total limit 3000 chars
+      // User messages get full space; assistant messages are truncated (context only)
       const parts: string[] = [];
       let totalLen = 0;
       for (const m of exchange.messages) {
-        const label = m.role === 'user' ? '[USER]' : '[ASSISTANT]';
-        const slice = m.content.slice(0, 1500);
-        const line = `${label} ${slice}`;
+        const isUser = m.role === 'user';
+        const label = isUser ? '[USER]' : '[ASSISTANT RESPONSE — for context only, do NOT attribute to user]';
+        const maxLen = isUser ? 1500 : 500;
+        const slice = m.content.slice(0, maxLen);
+        const line = `${label}\n${slice}`;
         if (totalLen + line.length > 3000) break;
         parts.push(line);
         totalLen += line.length;
@@ -536,8 +539,8 @@ export class MemorySieve {
     } else {
       // Single-turn mode (backward compatible)
       const userSlice = exchange.user.slice(0, 1500);
-      const assistantSlice = exchange.assistant.slice(0, 1500);
-      conversationBlock = `[USER] ${userSlice}\n\n[ASSISTANT] ${assistantSlice}`;
+      const assistantSlice = exchange.assistant.slice(0, 500);
+      conversationBlock = `[USER]\n${userSlice}\n\n[ASSISTANT RESPONSE — for context only, do NOT attribute to user]\n${assistantSlice}`;
     }
 
     const prompt = profileContext

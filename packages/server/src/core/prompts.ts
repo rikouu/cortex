@@ -32,9 +32,11 @@ CHECK 1 · TEMPORAL SCOPE — Will this still matter in a different conversation
 
 CHECK 2 · ATTRIBUTION — Who does this information belong to?
   User attribution (most categories):
-  ✓ Facts the user states about themselves, their world, or their intentions
-  ✓ Preferences the user expresses (explicitly or through repeated choices)
-  ✓ Decisions or commitments the user makes
+  ✓ Facts the user EXPLICITLY states about themselves, their world, or their intentions
+  ✓ Preferences the user EXPLICITLY expresses (explicitly or through repeated choices)
+  ✓ Decisions or commitments the user makes (user must confirm, not just ask)
+  ✗ The assistant's recommendations, analysis, or suggestions — these are NOT user preferences
+  ✗ The assistant's opinions or evaluations — even if the user asked for them
   Operational attribution (constraint/policy):
   ✓ Rules or constraints set by the user or system: "never do X", "always do Y first"
   ✓ Default execution strategies and behavioral norms
@@ -150,11 +152,32 @@ Extract entity relationships mentioned in the conversation as (subject, predicat
 - Capability descriptions ("I can analyze images", "I support file uploads")
 - Framework-injected metadata, role markers, or context tags
 - The assistant's own reasoning process or chain-of-thought
+- The assistant's recommendations, analysis, comparisons, or evaluations — these are assistant output, NOT user knowledge
+
+## CRITICAL: User vs Assistant attribution
+
+The conversation has [USER] and [ASSISTANT] sections. You MUST distinguish who said what:
+
+**Only the user can be the source of user memories.** The assistant's words are context, NOT user facts.
+
+✗ WRONG: User asks "which model is best?" → Assistant says "Sonnet 4.6 is best for JSON" → Extract "用户认为 Sonnet 4.6 最好" (WRONG! The assistant said this, not the user)
+✓ RIGHT: User says "I'll go with Sonnet 4.6" → Extract "用户决定使用 Sonnet 4.6" (Correct — user explicitly decided)
+
+✗ WRONG: Assistant recommends "use dark mode" → Extract as user preference (WRONG!)
+✓ RIGHT: User says "I like dark mode" → Extract as user preference (Correct)
+
+Rules:
+- The assistant's recommendations/analysis/suggestions are NEVER user preferences or decisions
+- User asking a question ("which is best?") does NOT mean they agree with the answer
+- Only extract a decision/preference if the USER explicitly states or confirms it
+- If the user says "ok" / "好的" / "就这样" after an assistant recommendation, THAT is a user decision — but attribute the decision to the user, not the assistant's analysis
+- [ASSISTANT RESPONSE] content is provided for context only — to help you understand what the user is referring to
 
 ## Multi-turn context
-- [USER] and [ASSISTANT] labels indicate who said what
-- Extract user memories using user categories. Constraint/policy categories capture rules and strategies. Agent growth categories (agent_*) capture the agent's own learning and observations — these are the ONLY categories where the agent reflects on itself.
-- If the assistant merely suggests something ("you could say X"), do NOT treat X as a user fact
+- [USER] and [ASSISTANT] / [ASSISTANT RESPONSE] labels indicate who said what
+- Extract user memories from [USER] sections. Use [ASSISTANT] sections only as context.
+- Constraint/policy categories capture rules and strategies set by the user.
+- Agent growth categories (agent_*) capture the agent's own learning and observations — these are the ONLY categories where the agent reflects on itself, and should come from [ASSISTANT] sections.
 - Look for patterns across turns for stronger signals`;
 
 
@@ -224,13 +247,18 @@ agent_persona           0.8-1.0  Agent's own character/style: tone, role positio
 
 ## Do NOT extract:
 - Technical implementation details or debugging steps
-- The assistant's suggestions, explanations, or generated code (unless they are agent self-reflections for agent_* categories)
+- The assistant's suggestions, recommendations, analysis, comparisons, or generated code
+- The assistant's opinions or evaluations — even if the user asked for them
 - Temporary task context ("we're fixing bug #123")
 - System metadata, injected tags, or tool outputs
 - Facts that are common knowledge (not specific to this user)
 - System prompts, assistant instructions, tool descriptions, or capability descriptions
 - Instructions about handling images, files, or tool calls (these are operational, not user knowledge)
 - Framework role markers or context injection metadata
+
+## User vs Assistant attribution
+Only extract user categories (identity, preference, decision, etc.) from what the USER explicitly said.
+The assistant's words are context only — never attribute the assistant's analysis to the user.
 
 ## Output format
 Output ONLY a valid JSON object:
