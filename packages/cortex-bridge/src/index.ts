@@ -37,10 +37,11 @@ interface PluginApi {
 
 // ── Content extraction ──────────────────────────────────
 // OpenClaw messages use multimodal format: content can be string OR
-// [{type: "text", text: "..."}, {type: "image", ...}]
+// [{type: "text", text: "..."}, {type: "image", ...}, {type: "tool_use", ...}]
 function extractText(content: any): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
+    // Only keep plain text blocks — skip tool_use, tool_result, image, etc.
     return content
       .filter((b: any) => b.type === 'text' && typeof b.text === 'string')
       .map((b: any) => b.text)
@@ -52,17 +53,61 @@ function extractText(content: any): string {
   return '';
 }
 
-// Strip <cortex_memory> and other injected tags to prevent nested pollution.
-// Without this, previously recalled memories get re-ingested as new content.
-const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
-const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
+// ── Content cleaning for ingestion ──────────────────────
+// Aggressively strip noise from conversation text before sending to Cortex.
+// Goal: only send natural language that's meaningful for memory extraction.
 
-function stripInjectedTags(text: string): string {
+// 1. XML-style injected tags
+const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
+const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call|tool_use|thinking|antThinking)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call|tool_use|thinking|antThinking)>/g;
+
+// 2. Markdown fenced code blocks (```lang ... ```)
+const CODE_BLOCK_RE = /```[\s\S]*?```/g;
+
+// 3. Inline code that looks like JSON/code fragments
+const INLINE_JSON_RE = /`{[^`]*}`/g;
+
+// 4. Standalone JSON objects/arrays (multi-line { ... } or [ ... ] blocks)
+const JSON_BLOCK_RE = /^\s*[\[{][\s\S]*?[\]}]\s*$/gm;
+
+// 5. Lines that look like code/logs (common patterns)
+const CODE_LINE_RE = /^(\s*(import |export |const |let |var |function |class |if |for |while |return |async |await |try |catch |throw |\$ |> |#!|\/\/ ).*)$/gm;
+
+// 6. Tool call metadata patterns
+const TOOL_META_RE = /\b(tool_call_id|message_id|tool_use_id)\s*[:=]\s*["']?[\w-]+["']?/g;
+
+function cleanForIngestion(text: string): string {
   return text
+    // Strip XML tags
     .replace(INJECTED_TAG_RE, '')
     .replace(SYSTEM_TAG_RE, '')
+    // Strip code blocks (most important — removes JSON, code, logs)
+    .replace(CODE_BLOCK_RE, '')
+    // Strip inline JSON in backticks
+    .replace(INLINE_JSON_RE, '')
+    // Strip standalone JSON blocks
+    .replace(JSON_BLOCK_RE, '')
+    // Strip obvious code lines
+    .replace(CODE_LINE_RE, '')
+    // Strip tool metadata
+    .replace(TOOL_META_RE, '')
+    // Clean up markdown artifacts left behind
+    .replace(/\*{2,}([^*]*)\*{2,}/g, '$1')  // **bold** → bold
+    .replace(/_{2,}([^_]*)_{2,}/g, '$1')     // __underline__ → underline
+    // Collapse whitespace
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\s+$/gm, '')
     .trim();
+}
+
+// Quality gate: skip ingestion if cleaned text is too short or fragmented
+const MIN_USEFUL_LENGTH = 20;  // at least 20 chars of actual content
+
+function isUsefulForIngestion(text: string): boolean {
+  if (text.length < MIN_USEFUL_LENGTH) return false;
+  // If text is mostly punctuation/symbols, skip
+  const alphaCount = (text.match(/[\p{L}\p{N}]/gu) || []).length;
+  return alphaCount >= text.length * 0.3;  // at least 30% letters/numbers
 }
 
 // ── Cortex HTTP helpers ─────────────────────────────────
@@ -270,8 +315,8 @@ export default {
         try {
           const result = await cortexIngest(
             cortexUrl,
-            stripInjectedTags(params.user_message),
-            stripInjectedTags(params.assistant_message),
+            cleanForIngestion(params.user_message),
+            cleanForIngestion(params.assistant_message),
             agentId,
           );
           if (result.ok) {
@@ -346,13 +391,12 @@ export default {
 
         if (!lastUser || !lastAssistant) return;
 
-        // Extract text and strip injected <cortex_memory> tags
-        // to prevent previously recalled memories from being re-ingested
-        const userText = stripInjectedTags(extractText(lastUser.content));
-        const assistantText = stripInjectedTags(extractText(lastAssistant.content));
+        // Extract text, strip code blocks/JSON/tags, and quality-check
+        const userText = cleanForIngestion(extractText(lastUser.content));
+        const assistantText = cleanForIngestion(extractText(lastAssistant.content));
 
-        if (!userText || !assistantText) {
-          if (debug) log.warn('[cortex-bridge] agent_end: empty after tag stripping');
+        if (!isUsefulForIngestion(userText) || !isUsefulForIngestion(assistantText)) {
+          if (debug) log.warn('[cortex-bridge] agent_end: content too short or noisy after cleaning, skipping');
           return;
         }
 
@@ -372,7 +416,7 @@ export default {
         // Normalize multimodal content to plain text, strip injected tags
         const messages = rawMessages.map((m: any) => ({
           role: m.role as string,
-          content: stripInjectedTags(extractText(m.content)),
+          content: cleanForIngestion(extractText(m.content)),
         })).filter(m => m.content);
 
         if (messages.length === 0) return;
