@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { listMemories, getMemoryById, insertMemory, updateMemory, deleteMemory } from '../db/index.js';
+import { listMemories, getMemoryById, insertMemory, updateMemory, deleteMemory, ensureAgent } from '../db/index.js';
 import type { CortexApp } from '../app.js';
 
 export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp): void {
@@ -53,6 +53,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
     },
   }, async (req, reply) => {
     const body = req.body as any;
+    if (body.agent_id) ensureAgent(body.agent_id);
     const mem = insertMemory(body);
     reply.code(201);
     return mem;

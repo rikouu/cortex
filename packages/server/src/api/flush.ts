@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { insertExtractionLog } from '../core/extraction-log.js';
+import { ensureAgent } from '../db/index.js';
 
 export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/flush', {
@@ -28,6 +29,7 @@ export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): vo
     },
   }, async (req) => {
     const body = req.body as any;
+    if (body.agent_id) ensureAgent(body.agent_id);
     const result = await cortex.flush.flush({
       messages: body.messages,
       agent_id: body.agent_id,

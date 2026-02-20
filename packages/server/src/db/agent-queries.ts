@@ -20,6 +20,28 @@ const AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$|^[a-z0-9]{2}$/;
 
 const BUILT_IN_AGENTS = ['default', 'mcp'];
 
+// ============ Auto-provision ============
+
+/**
+ * Ensure an agent record exists. If not, auto-create with a sensible name.
+ * This allows plugins (e.g. OpenClaw bridge) to send agent_id without
+ * requiring explicit agent registration first.
+ */
+export function ensureAgent(agentId: string): void {
+  if (!agentId || agentId === 'default') return;
+  const db = getDb();
+  const exists = db.prepare('SELECT 1 FROM agents WHERE id = ?').get(agentId);
+  if (exists) return;
+
+  // Validate ID format — if invalid, silently skip (memory will still store with the raw agent_id)
+  if (!AGENT_ID_RE.test(agentId)) return;
+
+  db.prepare(`
+    INSERT OR IGNORE INTO agents (id, name, description)
+    VALUES (?, ?, ?)
+  `).run(agentId, agentId, `Auto-created from first API request`);
+}
+
 // ============ Agent Queries ============
 
 export function listAgents(): AgentWithCount[] {

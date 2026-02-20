@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { insertExtractionLog } from '../core/extraction-log.js';
+import { ensureAgent } from '../db/index.js';
 
 export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/ingest', {
@@ -18,6 +19,7 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
     },
   }, async (req, reply) => {
     const body = req.body as any;
+    if (body.agent_id) ensureAgent(body.agent_id);
     const result = await cortex.sieve.ingest({
       user_message: body.user_message,
       assistant_message: body.assistant_message,

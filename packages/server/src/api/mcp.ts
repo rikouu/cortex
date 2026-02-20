@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { MCPServer, type MCPServerDeps } from '../mcp/server.js';
-import { insertMemory, deleteMemory, getMemoryById, getStats, type MemoryCategory } from '../db/index.js';
+import { insertMemory, deleteMemory, getMemoryById, getStats, ensureAgent, type MemoryCategory } from '../db/index.js';
 
 const VALID_MCP_CATEGORIES = new Set<string>([
   'identity', 'preference', 'decision', 'fact', 'entity',
@@ -23,6 +23,7 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
 
     remember: async (content, category, importance, agentId) => {
       const validCategory = (category && VALID_MCP_CATEGORIES.has(category) ? category : 'fact') as MemoryCategory;
+      ensureAgent(agentId || 'mcp');
       const mem = insertMemory({
         layer: 'core',
         category: validCategory,
