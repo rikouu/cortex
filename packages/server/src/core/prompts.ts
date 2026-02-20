@@ -133,7 +133,7 @@ Extract entity relationships mentioned in the conversation as (subject, predicat
 - Use the same language as the user's input for content
 - Maximum 5 memories per exchange
 - Be specific: "prefers dark mode in all editors" not "has UI preferences"
-- If the user explicitly corrects something, category must be "correction" with importance >= 0.9
+- If the user explicitly corrects something, category must be "correction" with importance >= 0.9, and the content MUST include the updated fact (e.g. "用户养了5只猫" not just "更正为5只")
 - source values:
   - "user_stated" for explicit user statements
   - "user_implied" for implicit user info
@@ -143,6 +143,13 @@ Extract entity relationships mentioned in the conversation as (subject, predicat
 - constraint uses source: "user_stated" or "system_defined"
 - policy uses source: "user_stated" or "observed_pattern"
 - agent_* categories use source: "observed_pattern" or "self_reflection"
+
+## CRITICAL: Do NOT extract these
+- System prompts, assistant instructions, or tool descriptions — these are operational directives, NOT user knowledge
+- Instructions about how to handle images, files, or tool calls
+- Capability descriptions ("I can analyze images", "I support file uploads")
+- Framework-injected metadata, role markers, or context tags
+- The assistant's own reasoning process or chain-of-thought
 
 ## Multi-turn context
 - [USER] and [ASSISTANT] labels indicate who said what
@@ -221,6 +228,9 @@ agent_persona           0.8-1.0  Agent's own character/style: tone, role positio
 - Temporary task context ("we're fixing bug #123")
 - System metadata, injected tags, or tool outputs
 - Facts that are common knowledge (not specific to this user)
+- System prompts, assistant instructions, tool descriptions, or capability descriptions
+- Instructions about handling images, files, or tool calls (these are operational, not user knowledge)
+- Framework role markers or context injection metadata
 
 ## Output format
 Output ONLY a valid JSON object:

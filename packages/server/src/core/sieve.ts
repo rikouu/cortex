@@ -16,11 +16,14 @@ const LEGACY_DEDUP_THRESHOLD = 0.15;
 
 /** Regex to strip injected <cortex_memory> tags and other system metadata */
 const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
-const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
+const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|tool_use|function_call|function_result|instructions|artifact|thinking|antThinking)[\s\S]*?<\/(?:system|context|memory|tool_result|tool_use|function_call|function_result|instructions|artifact|thinking|antThinking)>/g;
 
 /** Plain-text metadata prefixes injected by some frameworks */
 const PLAIN_META_RE = /^Conversation info \(untrusted metadata\):.*$/gm;
-const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata)|Conversation (?:info|context|metadata)|Memory context|Previous context)[\s(][^\n]*$/gm;
+const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata|prompt|instruction)|Conversation (?:info|context|metadata)|Memory context|Previous context|Tool (?:description|instructions)|Image (?:analysis|description) instructions?)[\s(:\-][^\n]*$/gm;
+
+/** Chat-ML / special role markers */
+const ROLE_MARKER_RE = /^(?:<\|(?:system|im_start|im_end)\|>|\[(?:SYSTEM|INST|\/INST|SYS|\/SYS)\]|Human:|Assistant:|<<SYS>>|<<\/SYS>>)[^\n]*$/gm;
 
 /** Strip all injected system tags from text to prevent nested pollution */
 function stripInjectedContent(text: string): string {
@@ -29,6 +32,7 @@ function stripInjectedContent(text: string): string {
     .replace(SYSTEM_TAG_RE, '')
     .replace(PLAIN_META_RE, '')
     .replace(SYSTEM_PREFIX_RE, '')
+    .replace(ROLE_MARKER_RE, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -723,6 +727,11 @@ export class MemorySieve {
   ): Promise<{ action: 'inserted' | 'skipped' | 'smart_updated'; memory?: Memory }> {
     const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
 
+    // Corrections get a wider similarity window (1.5x) to better find the memory they're correcting
+    const effectiveThreshold = extraction.category === 'correction'
+      ? Math.min(similarityThreshold * 1.5, 0.6)
+      : similarityThreshold;
+
     // Find similar memories
     const similar = await this.findSimilar(extraction.content, agentId);
 
@@ -747,7 +756,7 @@ export class MemorySieve {
         return { action: 'skipped' };
       }
 
-      if (closest.distance < similarityThreshold) {
+      if (closest.distance < effectiveThreshold) {
         // Tier 2: semantic overlap → LLM decides
         const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
 

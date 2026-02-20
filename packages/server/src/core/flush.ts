@@ -383,6 +383,11 @@ export class MemoryFlush {
   ): Promise<{ action: 'inserted' | 'skipped' | 'smart_updated'; memory?: Memory }> {
     const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
 
+    // Corrections get a wider similarity window (1.5x) to better find the memory they're correcting
+    const effectiveThreshold = extraction.category === 'correction'
+      ? Math.min(similarityThreshold * 1.5, 0.6)
+      : similarityThreshold;
+
     const similar = await this.findSimilar(extraction.content, agentId);
 
     if (!smartUpdate) {
@@ -399,7 +404,7 @@ export class MemoryFlush {
         return { action: 'skipped' };
       }
 
-      if (closest.distance < similarityThreshold) {
+      if (closest.distance < effectiveThreshold) {
         const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
         if (decision.action === 'keep') return { action: 'skipped' };
         const newMem = await this.executeSmartUpdate(decision, closest.memory, extraction, agentId, sessionId);

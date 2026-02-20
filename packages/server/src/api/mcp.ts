@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { MCPServer, type MCPServerDeps } from '../mcp/server.js';
-import { insertMemory, deleteMemory, getMemoryById, getStats, ensureAgent, listRelations, type MemoryCategory } from '../db/index.js';
+import { insertMemory, updateMemory, deleteMemory, getMemoryById, getStats, ensureAgent, listRelations, type MemoryCategory } from '../db/index.js';
 
 const VALID_MCP_CATEGORIES = new Set<string>([
   'identity', 'preference', 'decision', 'fact', 'entity',
@@ -24,25 +24,72 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
 
     remember: async (content, category, importance, agentId) => {
       const validCategory = (category && VALID_MCP_CATEGORIES.has(category) ? category : 'fact') as MemoryCategory;
-      ensureAgent(agentId || 'mcp');
+      const aid = agentId || 'mcp';
+      ensureAgent(aid);
+
+      // Dedup: check for similar existing memories before inserting
+      try {
+        const embedding = await cortex.embeddingProvider.embed(content);
+        if (embedding.length > 0) {
+          const similar = await cortex.vectorBackend.search(embedding, 1, { agent_id: aid });
+          if (similar.length > 0) {
+            const existing = getMemoryById(similar[0]!.id);
+            if (existing && !existing.superseded_by && !existing.is_pinned) {
+              const { exactDupThreshold, similarityThreshold } = cortex.config.sieve;
+
+              if (similar[0]!.distance < exactDupThreshold) {
+                // Exact duplicate — bump access count and return existing
+                updateMemory(existing.id, {
+                  importance: Math.max(existing.importance, importance ?? 0.7),
+                  confidence: Math.min(existing.confidence + 0.05, 1.0),
+                });
+                return { id: existing.id, status: 'already_exists', memory: existing };
+              }
+
+              if (similar[0]!.distance < similarityThreshold) {
+                // Similar — supersede old, insert new (explicit user intent = always replace)
+                const mem = insertMemory({
+                  layer: 'core',
+                  category: validCategory,
+                  content,
+                  importance: importance ?? 0.7,
+                  confidence: 0.9,
+                  agent_id: aid,
+                  source: 'mcp:remember',
+                  metadata: JSON.stringify({ supersedes: existing.id, smart_update_type: 'replace' }),
+                });
+                updateMemory(existing.id, { superseded_by: mem.id });
+                await cortex.vectorBackend.upsert(mem.id, embedding);
+                return { id: mem.id, status: 'remembered', memory: mem };
+              }
+            }
+          }
+
+          // No similar memory found — normal insert
+          const mem = insertMemory({
+            layer: 'core',
+            category: validCategory,
+            content,
+            importance: importance ?? 0.7,
+            confidence: 0.9,
+            agent_id: aid,
+            source: 'mcp:remember',
+          });
+          await cortex.vectorBackend.upsert(mem.id, embedding);
+          return { id: mem.id, status: 'remembered', memory: mem };
+        }
+      } catch { /* best effort — fall through to simple insert */ }
+
+      // Fallback: simple insert without dedup (embedding failed)
       const mem = insertMemory({
         layer: 'core',
         category: validCategory,
         content,
         importance: importance ?? 0.7,
         confidence: 0.9,
-        agent_id: agentId || 'mcp',
+        agent_id: aid,
         source: 'mcp:remember',
       });
-
-      // Index vector
-      try {
-        const embedding = await cortex.embeddingProvider.embed(content);
-        if (embedding.length > 0) {
-          await cortex.vectorBackend.upsert(mem.id, embedding);
-        }
-      } catch { /* best effort */ }
-
       return { id: mem.id, status: 'remembered', memory: mem };
     },
 

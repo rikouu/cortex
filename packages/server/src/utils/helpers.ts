@@ -12,7 +12,7 @@ export function generateId(): string {
  * Applies: trim → NFKC unicode normalization → Traditional→Simplified Chinese → collapse whitespace.
  */
 export function normalizeEntity(text: string): string {
-  return t2s(text.trim().normalize('NFKC')).replace(/\s+/g, ' ');
+  return t2s(text.trim().normalize('NFKC')).replace(/\s+/g, ' ').toLowerCase();
 }
 
 /**
