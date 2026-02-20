@@ -3,6 +3,28 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('security');
 
+// ============ Auth Routes ============
+
+export function registerAuthRoutes(app: FastifyInstance, token?: string): void {
+  // Public: check if auth is enabled (no token required)
+  app.get('/api/v1/auth/check', async () => {
+    return { authRequired: !!token };
+  });
+
+  // Public: verify a token
+  app.post('/api/v1/auth/verify', async (req) => {
+    if (!token) {
+      return { valid: true };
+    }
+    const body = req.body as any;
+    const provided = body?.token;
+    if (provided && provided === token) {
+      return { valid: true };
+    }
+    return { valid: false };
+  });
+}
+
 // ============ Auth Middleware ============
 
 export function registerAuthMiddleware(app: FastifyInstance, token?: string): void {
@@ -14,9 +36,10 @@ export function registerAuthMiddleware(app: FastifyInstance, token?: string): vo
   log.info('API Bearer token authentication enabled');
 
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Skip health check
+    // Skip health check and auth routes (public)
     if (req.url === '/api/v1/health') return;
-    // Skip non-API routes (dashboard)
+    if (req.url.startsWith('/api/v1/auth/')) return;
+    // Skip non-API routes (dashboard static files)
     if (!req.url.startsWith('/api/') && !req.url.startsWith('/mcp/')) return;
 
     const authHeader = req.headers.authorization;

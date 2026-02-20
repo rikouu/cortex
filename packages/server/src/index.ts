@@ -9,7 +9,7 @@ import { loadConfig, createLogger } from './utils/index.js';
 import { initDatabase, closeDatabase } from './db/index.js';
 import { CortexApp } from './app.js';
 import { registerAllRoutes } from './api/router.js';
-import { registerAuthMiddleware, registerRateLimiting } from './api/security.js';
+import { registerAuthRoutes, registerAuthMiddleware, registerRateLimiting } from './api/security.js';
 
 const log = createLogger('server');
 
@@ -35,6 +35,9 @@ async function main() {
     origin: config.cors?.origin ?? true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
+
+  // Auth routes (public, must be before auth middleware)
+  registerAuthRoutes(app, config.auth?.token);
 
   // Security middleware
   registerAuthMiddleware(app, config.auth?.token);

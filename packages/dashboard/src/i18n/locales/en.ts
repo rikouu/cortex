@@ -30,6 +30,16 @@ export default {
     running: 'Running...',
     configured: 'configured',
   },
+  login: {
+    subtitle: 'Authentication required to access the dashboard',
+    tokenLabel: 'Access Token',
+    tokenPlaceholder: 'Enter your auth token',
+    invalidToken: 'Invalid token. Please check and try again.',
+    networkError: 'Cannot connect to server. Please check if Cortex is running.',
+    verifying: 'Verifying...',
+    submit: 'Sign In',
+    logout: 'Sign Out',
+  },
   nav: {
     dashboard: 'Dashboard',
     memories: 'Memories',

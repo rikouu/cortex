@@ -41,6 +41,8 @@ COPY --from=builder /app/packages/dashboard/dist packages/dashboard/dist/
 ENV NODE_ENV=production
 ENV CORTEX_HOST=0.0.0.0
 ENV CORTEX_PORT=21100
+# Timezone: override with -e TZ=Asia/Tokyo (or your local timezone)
+ENV TZ=UTC
 
 EXPOSE 21100
 

@@ -30,6 +30,16 @@ export default {
     running: '运行中...',
     configured: '已配置',
   },
+  login: {
+    subtitle: '访问面板需要身份验证',
+    tokenLabel: '访问令牌',
+    tokenPlaceholder: '输入你的 auth token',
+    invalidToken: '令牌无效，请检查后重试。',
+    networkError: '无法连接服务器，请检查 Cortex 是否在运行。',
+    verifying: '验证中...',
+    submit: '登录',
+    logout: '退出登录',
+  },
   nav: {
     dashboard: '仪表盘',
     memories: '记忆',

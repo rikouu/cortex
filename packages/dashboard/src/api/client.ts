@@ -1,10 +1,57 @@
 const BASE = '/api/v1';
+const TOKEN_KEY = 'cortex_auth_token';
+
+// ============ Token Management ============
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setStoredToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearStoredToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+// ============ Auth API (public, no token needed) ============
+
+export async function checkAuth(): Promise<{ authRequired: boolean }> {
+  const res = await fetch(`${BASE}/auth/check`);
+  if (!res.ok) return { authRequired: false };
+  return res.json();
+}
+
+export async function verifyToken(token: string): Promise<{ valid: boolean }> {
+  const res = await fetch(`${BASE}/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) return { valid: false };
+  return res.json();
+}
+
+// ============ Authenticated Request ============
 
 async function request(path: string, opts?: RequestInit) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...opts?.headers },
-  });
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...opts?.headers as Record<string, string>,
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
+  if (res.status === 401 || res.status === 403) {
+    // Token invalid or expired — clear and trigger re-login
+    clearStoredToken();
+    window.dispatchEvent(new CustomEvent('cortex:auth-expired'));
+    throw new Error(`API ${res.status}: Unauthorized`);
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
