@@ -7,16 +7,18 @@ export class AnthropicLLMProvider implements LLMProvider {
   readonly name = 'anthropic';
   private apiKey: string;
   private model: string;
+  private baseUrl: string;
 
-  constructor(opts: { apiKey?: string; model?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
     this.apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY || '';
     this.model = opts.model || 'claude-haiku-4-5';
+    this.baseUrl = (opts.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
     if (!this.apiKey) throw new Error('Anthropic API key not configured');
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

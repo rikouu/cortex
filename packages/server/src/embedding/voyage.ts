@@ -8,11 +8,13 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
   readonly dimensions: number;
   private apiKey: string;
   private model: string;
+  private baseUrl: string;
 
-  constructor(opts: { apiKey?: string; model?: string; dimensions?: number }) {
+  constructor(opts: { apiKey?: string; model?: string; dimensions?: number; baseUrl?: string }) {
     this.apiKey = opts.apiKey || process.env.VOYAGE_API_KEY || '';
     this.model = opts.model || 'voyage-3-lite';
     this.dimensions = opts.dimensions || 1024;
+    this.baseUrl = (opts.baseUrl || 'https://api.voyageai.com/v1').replace(/\/+$/, '');
   }
 
   async embed(text: string): Promise<number[]> {
@@ -23,7 +25,7 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (!this.apiKey) throw new Error('Voyage API key not configured');
 
-    const res = await fetch('https://api.voyageai.com/v1/embeddings', {
+    const res = await fetch(`${this.baseUrl}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

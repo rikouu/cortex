@@ -7,10 +7,12 @@ export class GoogleLLMProvider implements LLMProvider {
   readonly name = 'google';
   private apiKey: string;
   private model: string;
+  private baseUrl: string;
 
-  constructor(opts: { apiKey?: string; model?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
     this.apiKey = opts.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
     this.model = opts.model || 'gemini-2.0-flash';
+    this.baseUrl = (opts.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -21,7 +23,7 @@ export class GoogleLLMProvider implements LLMProvider {
       : undefined;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`,
+      `${this.baseUrl}/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

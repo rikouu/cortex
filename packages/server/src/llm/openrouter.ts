@@ -11,10 +11,12 @@ export class OpenRouterLLMProvider implements LLMProvider {
   readonly name = 'openrouter';
   private apiKey: string;
   private model: string;
+  private baseUrl: string;
 
-  constructor(opts: { apiKey?: string; model?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
     this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || '';
     this.model = opts.model || 'anthropic/claude-haiku-4-5';
+    this.baseUrl = (opts.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -26,7 +28,7 @@ export class OpenRouterLLMProvider implements LLMProvider {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -8,11 +8,13 @@ export class GoogleEmbeddingProvider implements EmbeddingProvider {
   readonly dimensions: number;
   private apiKey: string;
   private model: string;
+  private baseUrl: string;
 
-  constructor(opts: { apiKey?: string; model?: string; dimensions?: number }) {
+  constructor(opts: { apiKey?: string; model?: string; dimensions?: number; baseUrl?: string }) {
     this.apiKey = opts.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
     this.model = opts.model || 'text-embedding-004';
     this.dimensions = opts.dimensions || 768;
+    this.baseUrl = (opts.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
   }
 
   async embed(text: string): Promise<number[]> {
@@ -27,7 +29,7 @@ export class GoogleEmbeddingProvider implements EmbeddingProvider {
     const results: number[][] = [];
     for (const text of texts) {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`,
+        `${this.baseUrl}/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

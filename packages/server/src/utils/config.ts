@@ -114,6 +114,7 @@ const CortexConfigSchema = z.object({
 export type CortexConfig = z.infer<typeof CortexConfigSchema>;
 
 let _config: CortexConfig | null = null;
+let _configFilePath: string | null = null;
 
 export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
   // 1. Try loading from config file
@@ -128,9 +129,15 @@ export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
     if (fs.existsSync(p)) {
       try {
         fileConfig = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        _configFilePath = p;
         break;
       } catch { /* skip invalid */ }
     }
+  }
+
+  // If no config file found, set default path for future persistence
+  if (!_configFilePath) {
+    _configFilePath = configPaths[0]!;
   }
 
   // 2. Env overrides
@@ -175,5 +182,20 @@ function deepMerge(target: any, source: any): any {
 export function updateConfig(partial: Partial<CortexConfig>): CortexConfig {
   const current = getConfig();
   _config = CortexConfigSchema.parse(deepMerge(current, partial));
+  persistConfig(_config);
   return _config;
+}
+
+/** Persist current config to disk (best-effort, non-blocking) */
+function persistConfig(config: CortexConfig): void {
+  if (!_configFilePath) return;
+  try {
+    const dir = path.dirname(_configFilePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(_configFilePath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  } catch {
+    // best-effort: don't crash if write fails
+  }
 }
