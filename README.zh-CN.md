@@ -128,7 +128,7 @@ echo 'export CORTEX_URL=http://localhost:21100' >> ~/.zshrc
 
 然后重启终端或执行 `source ~/.zshrc` 使其生效。
 
-搞定。插件会自动在回复前召回记忆、回复后保存新记忆 — 不需要写任何代码。
+插件会自动在回复前召回记忆。回复后自动保存记忆在 streaming 模式下有一个已知的上游问题 — 详见下方[已知问题](#已知问题)。
 
 ### 方式 F：任意应用（REST API）
 
@@ -277,6 +277,19 @@ cortex/
 使用默认配置（gpt-4o-mini + text-embedding-3-small）：
 - 每天 50 轮对话约 **$0.55/月**
 - 线性增长，3 倍使用量也不到 $2/月
+
+## 已知问题
+
+### OpenClaw：streaming 模式下 `agent_end` hook 不触发
+
+**上游 bug：** [openclaw/openclaw#21863](https://github.com/openclaw/openclaw/issues/21863)
+
+OpenClaw 的 streaming 模式（Telegram 等网关频道使用）下，`agent_end` hook 不会分发给插件。这意味着 Cortex bridge 插件**无法在 streaming 模式下自动保存对话记忆**。记忆召回（`before_agent_start`）工作正常。
+
+**临时解决方案：**
+- 在 Agent 的 system prompt 中添加指令，让 Agent 在有意义的对话后主动调用 `cortex_ingest` 工具
+- 使用 `cortex_remember` 工具让 Agent 在对话中直接保存重要事实
+- 使用非 streaming 频道（该模式下 hook 正常触发）
 
 ## 开源协议
 

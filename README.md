@@ -128,7 +128,7 @@ echo 'export CORTEX_URL=http://localhost:21100' >> ~/.zshrc
 
 Then restart your terminal or run `source ~/.zshrc` to apply.
 
-That's it. The plugin automatically recalls memories before responses and saves new ones after — zero code needed.
+The plugin automatically recalls memories before each response. Auto-saving after responses has a known upstream issue in streaming mode — see [Known Issues](#known-issues) below.
 
 ### Option F: Any App (REST API)
 
@@ -277,6 +277,19 @@ cortex/
 With default settings (gpt-4o-mini + text-embedding-3-small):
 - ~$0.55/month at 50 conversations/day
 - Scales linearly; even 3x usage stays under $2/month
+
+## Known Issues
+
+### OpenClaw: `agent_end` hook not firing in streaming mode
+
+**Upstream bug:** [openclaw/openclaw#21863](https://github.com/openclaw/openclaw/issues/21863)
+
+In OpenClaw's streaming mode (used by Telegram and other gateway channels), the `agent_end` hook is not dispatched to plugins. This means the Cortex bridge plugin **cannot automatically save conversations** in streaming mode. Memory recall (`before_agent_start`) works correctly.
+
+**Workarounds:**
+- Add a system prompt instruction telling the Agent to call `cortex_ingest` after meaningful conversations
+- Use `cortex_remember` tool for the Agent to save specific facts during conversation
+- Use a non-streaming channel where the hook fires correctly
 
 ## License
 
