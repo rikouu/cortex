@@ -363,9 +363,9 @@ export default function Settings() {
           const out: any = {
             provider: d.provider,
             model: d.useCustomModel ? d.customModel : d.model,
+            baseUrl: d.baseUrl || '',
           };
           if (d.apiKey) out.apiKey = d.apiKey;
-          if (d.baseUrl) out.baseUrl = d.baseUrl;
           return out;
         };
 
@@ -378,9 +378,9 @@ export default function Settings() {
           provider: draft.embedding.provider,
           model: draft.embedding.useCustomModel ? draft.embedding.customModel : draft.embedding.model,
           dimensions: Number(draft.embedding.dimensions),
+          baseUrl: draft.embedding.baseUrl || '',
         };
         if (draft.embedding.apiKey) embOut.apiKey = draft.embedding.apiKey;
-        if (draft.embedding.baseUrl) embOut.baseUrl = draft.embedding.baseUrl;
         payload.embedding = embOut;
       } else if (section === 'search') {
         payload.search = {
