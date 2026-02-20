@@ -1917,7 +1917,7 @@ cortex/
 │   │   ├── package.json
 │   │   └── README.md                # Claude Desktop 配置说明
 │   │
-│   ├── bridge-openclaw/             # OpenClaw 薄桥接插件
+│   ├── cortex-bridge/               # OpenClaw 桥接插件
 │   │   ├── src/
 │   │   │   └── index.ts             # ~200 行，纯转发
 │   │   ├── package.json

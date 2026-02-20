@@ -105,7 +105,7 @@ Check your client's documentation for the exact config file location.
 ### Option E: OpenClaw
 
 ```bash
-openclaw plugins install @cortexmem/bridge-openclaw
+openclaw plugins install @cortexmem/cortex-bridge
 ```
 
 Then set the Cortex server address. Pick **one** of the two methods:
@@ -213,7 +213,7 @@ When connected via MCP, the AI automatically gets these tools:
 
 ### OpenClaw Bridge Hooks
 
-The [`@cortexmem/bridge-openclaw`](https://www.npmjs.com/package/@cortexmem/bridge-openclaw) plugin provides three automatic hooks:
+The [`@cortexmem/cortex-bridge`](https://www.npmjs.com/package/@cortexmem/cortex-bridge) plugin provides three automatic hooks:
 
 | Hook | When | What it does |
 |------|------|-------------|
@@ -266,7 +266,7 @@ cortex/
 ├── packages/
 │   ├── server/          # Core service (Fastify + SQLite)
 │   ├── mcp-client/      # MCP stdio adapter (npm: @cortex/mcp-client)
-│   ├── bridge-openclaw/ # OpenClaw plugin (npm: @cortexmem/bridge-openclaw)
+│   ├── cortex-bridge/   # OpenClaw plugin (npm: @cortexmem/cortex-bridge)
 │   └── dashboard/       # React management SPA
 ├── docker-compose.yml
 └── DESIGN.md            # Full technical design document

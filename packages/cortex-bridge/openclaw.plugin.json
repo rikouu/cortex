@@ -10,6 +10,10 @@
         "type": "string",
         "default": "http://localhost:21100"
       },
+      "agentId": {
+        "type": "string",
+        "default": "openclaw"
+      },
       "debug": {
         "type": "boolean",
         "default": false
@@ -18,6 +22,7 @@
   },
   "uiHints": {
     "cortexUrl": { "label": "Cortex Server URL" },
+    "agentId": { "label": "Agent ID" },
     "debug": { "label": "Enable Debug Logging" }
   }
 }

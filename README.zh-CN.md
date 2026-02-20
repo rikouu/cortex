@@ -105,7 +105,7 @@ claude mcp add cortex -- npx cortex-mcp --server-url http://localhost:21100
 ### 方式 E：OpenClaw
 
 ```bash
-openclaw plugins install @cortexmem/bridge-openclaw
+openclaw plugins install @cortexmem/cortex-bridge
 ```
 
 然后设置 Cortex 服务器地址，以下两种方式选**其一**：
@@ -213,7 +213,7 @@ Cortex 使用**混合搜索** — 将 BM25 全文检索（精确关键词匹配�
 
 ### OpenClaw 桥接 Hook
 
-[`@cortexmem/bridge-openclaw`](https://www.npmjs.com/package/@cortexmem/bridge-openclaw) 插件提供三个自动 Hook：
+[`@cortexmem/cortex-bridge`](https://www.npmjs.com/package/@cortexmem/cortex-bridge) 插件提供三个自动 Hook：
 
 | Hook | 触发时机 | 功能 |
 |------|---------|------|
@@ -266,7 +266,7 @@ cortex/
 ├── packages/
 │   ├── server/          # 核心服务（Fastify + SQLite）
 │   ├── mcp-client/      # MCP stdio 适配器（npm: @cortex/mcp-client）
-│   ├── bridge-openclaw/ # OpenClaw 插件（npm: @cortexmem/bridge-openclaw）
+│   ├── cortex-bridge/   # OpenClaw 插件（npm: @cortexmem/cortex-bridge）
 │   └── dashboard/       # React 管理面板
 ├── docker-compose.yml
 └── DESIGN.md            # 完整技术设计文档

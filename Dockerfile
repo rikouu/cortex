@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/dashboard/package.json packages/dashboard/
-COPY packages/bridge-openclaw/package.json packages/bridge-openclaw/
+COPY packages/cortex-bridge/package.json packages/cortex-bridge/
 COPY packages/mcp-client/package.json packages/mcp-client/
 RUN pnpm install --frozen-lockfile || pnpm install
 
@@ -26,7 +26,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json packages/server/
 COPY packages/dashboard/package.json packages/dashboard/
-COPY packages/bridge-openclaw/package.json packages/bridge-openclaw/
+COPY packages/cortex-bridge/package.json packages/cortex-bridge/
 COPY packages/mcp-client/package.json packages/mcp-client/
 RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
 

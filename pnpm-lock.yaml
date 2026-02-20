@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  packages/bridge-openclaw:
+  packages/cortex-bridge:
     devDependencies:
       '@types/node':
         specifier: ^22.19.11

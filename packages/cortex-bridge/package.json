@@ -1,6 +1,6 @@
 {
-  "name": "@cortexmem/bridge-openclaw",
-  "version": "0.1.2",
+  "name": "@cortexmem/cortex-bridge",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

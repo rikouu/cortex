@@ -674,7 +674,7 @@ def ingest(user_msg: str, assistant_msg: str):
           step={1}
           title={t('agentDetail.openclawStep1Title')}
           description={t('agentDetail.openclawStep1Desc')}
-          code="openclaw plugins install @cortexmem/bridge-openclaw"
+          code="openclaw plugins install @cortexmem/cortex-bridge"
         />
         <StepBlock
           step={2}
@@ -703,6 +703,9 @@ def ingest(user_msg: str, assistant_msg: str):
             <li>{t('agentDetail.openclawHookBefore')}</li>
             <li>{t('agentDetail.openclawHookAfter')}</li>
             <li>{t('agentDetail.openclawHookCompaction')}</li>
+            <li>{t('agentDetail.openclawToolRecall')}</li>
+            <li>{t('agentDetail.openclawToolRemember')}</li>
+            <li>{t('agentDetail.openclawCommand')}</li>
           </ul>
         </StepBlock>
         <StepBlock
