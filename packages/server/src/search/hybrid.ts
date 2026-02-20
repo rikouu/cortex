@@ -5,6 +5,7 @@ import { estimateTokens } from '../utils/helpers.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { CortexConfig } from '../utils/config.js';
+import type { Reranker } from './reranker.js';
 
 const log = createLogger('search');
 
@@ -55,11 +56,16 @@ const LAYER_WEIGHTS: Record<string, number> = {
 };
 
 export class HybridSearchEngine {
+  private reranker?: Reranker;
+
   constructor(
     private vectorBackend: VectorBackend,
     private embeddingProvider: EmbeddingProvider,
     private config: CortexConfig['search'],
-  ) {}
+    reranker?: Reranker,
+  ) {
+    this.reranker = reranker;
+  }
 
   async search(opts: SearchOptions): Promise<{ results: SearchResult[]; debug?: SearchDebug }> {
     const startTime = Date.now();
@@ -97,8 +103,13 @@ export class HybridSearchEngine {
     const results = this.fuse(textResults, vectorResults, opts);
     const fusionMs = Date.now() - fusionStart;
 
-    // 4. Slice to limit
-    const finalResults = results.slice(0, limit);
+    // 4. Rerank + slice to limit
+    let finalResults: SearchResult[];
+    if (this.reranker && results.length > 0) {
+      finalResults = await this.reranker.rerank(opts.query, results, limit);
+    } else {
+      finalResults = results.slice(0, limit);
+    }
 
     // 5. Bump access counts
     if (finalResults.length > 0) {
