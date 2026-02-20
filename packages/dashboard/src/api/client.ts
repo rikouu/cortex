@@ -149,3 +149,11 @@ export const deleteAgent = (id: string) =>
   request(`/agents/${id}`, { method: 'DELETE' });
 
 export const getAgentConfig = (id: string) => request(`/agents/${id}/config`);
+
+// Extraction Logs
+export const getExtractionLogs = (agentId: string, opts?: { limit?: number; channel?: string }) => {
+  const params = new URLSearchParams({ agent_id: agentId });
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.channel) params.set('channel', opts.channel);
+  return request(`/extraction-logs?${params}`);
+};
