@@ -182,7 +182,7 @@ export default function AgentDetail() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState<TabKey>('overview');
   const [integrationTab, setIntegrationTab] = useState<IntegrationTabKey>('api');
-  const [mcpClient, setMcpClient] = useState<'claude-desktop' | 'cursor' | 'claude-code'>('claude-desktop');
+  const [mcpClient, setMcpClient] = useState<'claude-desktop' | 'cursor' | 'claude-code' | 'other'>('claude-desktop');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Overview editing
@@ -579,6 +579,18 @@ def ingest(user_msg: str, assistant_msg: str):
         code: `claude mcp add cortex -- npx cortex-mcp --server-url ${cortexUrl}`,
         pasteDesc: t('agentDetail.mcpStep2ClaudeCodeDesc'),
       },
+      'other': {
+        code: JSON.stringify({
+          mcpServers: {
+            cortex: {
+              command: 'npx',
+              args: ['cortex-mcp', '--server-url', cortexUrl],
+              env: { CORTEX_AGENT_ID: agentId },
+            },
+          },
+        }, null, 2),
+        pasteDesc: t('agentDetail.mcpStep2OtherDesc'),
+      },
     };
 
     const currentMcp = mcpConfigs[mcpClient]!;
@@ -595,6 +607,7 @@ def ingest(user_msg: str, assistant_msg: str):
               ['claude-desktop', t('agentDetail.mcpClaudeDesktop')],
               ['cursor', t('agentDetail.mcpCursor')],
               ['claude-code', t('agentDetail.mcpClaudeCode')],
+              ['other', t('agentDetail.mcpOther')],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -667,8 +680,20 @@ def ingest(user_msg: str, assistant_msg: str):
           step={2}
           title={t('agentDetail.openclawStep2Title')}
           description={t('agentDetail.openclawStep2Desc')}
-          code={`CORTEX_URL=${cortexUrl}`}
-        />
+        >
+          {/* Method A: .env */}
+          <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{t('agentDetail.openclawEnvMethod')}</div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawEnvMethodDesc')}</p>
+            <CodeSnippet title=".env" code={`CORTEX_URL=${cortexUrl}`} />
+          </div>
+          {/* Method B: shell */}
+          <div style={{ padding: 14, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{t('agentDetail.openclawShellMethod')}</div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawShellMethodDesc')}</p>
+            <CodeSnippet title="~/.zshrc / ~/.bashrc" code={`echo 'export CORTEX_URL=${cortexUrl}' >> ~/.zshrc`} />
+          </div>
+        </StepBlock>
         <StepBlock
           step={3}
           title={t('agentDetail.openclawStep3Title')}
