@@ -97,7 +97,7 @@ export interface IngestResponse {
   structured_extractions: ExtractedMemory[];
   deduplicated: number;
   smart_updated: number;
-  extraction_log?: ExtractionLogData;
+  extraction_logs: ExtractionLogData[];
 }
 
 export class MemorySieve {
@@ -134,7 +134,7 @@ export class MemorySieve {
     const extracted: Memory[] = [];
     let deduplicated = 0;
     let smartUpdated = 0;
-    let extractionLog: ExtractionLogData | undefined;
+    const extractionLogs: ExtractionLogData[] = [];
 
     // --- Parallel or sequential execution of fast + deep channels ---
     const parallel = this.config.sieve.parallelChannels;
@@ -156,6 +156,7 @@ export class MemorySieve {
         fastExtracted = signalResult.value.extracted;
         fastDedup = signalResult.value.deduplicated;
         fastSmartUpdated = signalResult.value.smart_updated;
+        if (signalResult.value.extractionLog) extractionLogs.push(signalResult.value.extractionLog);
       }
 
       // Collect deep channel results
@@ -168,7 +169,7 @@ export class MemorySieve {
         deepDedup = deepResult.value.deduplicated;
         deepSmartUpdated = deepResult.value.smart_updated;
         structuredExtractions = deepResult.value.structuredExtractions;
-        extractionLog = deepResult.value.extractionLog;
+        extractionLogs.push(deepResult.value.extractionLog);
       }
 
       // Cross-dedup: remove deep channel items that duplicate fast channel items
@@ -193,7 +194,7 @@ export class MemorySieve {
         structured_extractions: structuredExtractions,
         deduplicated,
         smart_updated: smartUpdated,
-        extraction_log: extractionLog,
+        extraction_logs: extractionLogs,
       };
     }
 
@@ -274,7 +275,7 @@ export class MemorySieve {
       }
     }
 
-    extractionLog = {
+    extractionLogs.push({
       channel: 'deep',
       exchange_preview: cleanUser.slice(0, 200),
       raw_output: rawOutput,
@@ -283,7 +284,7 @@ export class MemorySieve {
       memories_deduped: deepDeduped,
       memories_smart_updated: deepSmartUpdated,
       latency_ms: deepLatency,
-    };
+    });
 
     log.info({
       agent_id: agentId,
@@ -300,7 +301,7 @@ export class MemorySieve {
       structured_extractions: structuredExtractions,
       deduplicated,
       smart_updated: smartUpdated,
-      extraction_log: extractionLog,
+      extraction_logs: extractionLogs,
     };
   }
 
@@ -310,7 +311,8 @@ export class MemorySieve {
     exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     agentId: string,
     sessionId?: string,
-  ): Promise<{ signals: DetectedSignal[]; extracted: Memory[]; deduplicated: number; smart_updated: number }> {
+  ): Promise<{ signals: DetectedSignal[]; extracted: Memory[]; deduplicated: number; smart_updated: number; extractionLog?: ExtractionLogData }> {
+    const start = Date.now();
     const signals = detectHighSignals(exchange);
     const extracted: Memory[] = [];
     let deduplicated = 0;
@@ -332,7 +334,19 @@ export class MemorySieve {
       }
     }
 
-    return { signals, extracted, deduplicated, smart_updated };
+    // Generate extraction log for fast channel if signals were detected
+    const extractionLog: ExtractionLogData | undefined = signals.length > 0 ? {
+      channel: 'fast',
+      exchange_preview: exchange.user.slice(0, 200),
+      raw_output: JSON.stringify(signals.map(s => ({ pattern: s.pattern, category: s.category, content: s.content }))),
+      parsed_memories: signals.map(s => ({ content: s.content, category: s.category, importance: s.importance, source: 'user_stated' as const, reasoning: `signal: ${s.pattern}` })),
+      memories_written: extracted.length,
+      memories_deduped: deduplicated,
+      memories_smart_updated: smart_updated,
+      latency_ms: Date.now() - start,
+    } : undefined;
+
+    return { signals, extracted, deduplicated, smart_updated, extractionLog };
   }
 
   // ── Deep channel: LLM structured extraction ──

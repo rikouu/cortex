@@ -39,9 +39,11 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
       session_id: body.session_id,
     });
 
-    // Write extraction log if available and logging enabled
-    if (result.extraction_log && cortex.config.sieve.extractionLogging) {
-      insertExtractionLog(body.agent_id || 'default', body.session_id, result.extraction_log);
+    // Write extraction logs (fast + deep channels)
+    if (cortex.config.sieve.extractionLogging && result.extraction_logs.length > 0) {
+      for (const log of result.extraction_logs) {
+        insertExtractionLog(body.agent_id || 'default', body.session_id, log);
+      }
     }
 
     reply.code(201);
