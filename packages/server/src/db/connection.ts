@@ -365,6 +365,20 @@ const migrations = [
       END;
     `,
   },
+  {
+    name: '006_relation_enhancements',
+    sql: `
+      -- Add agent_id and source columns to relations
+      ALTER TABLE relations ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'default';
+      ALTER TABLE relations ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
+
+      -- Unique constraint to prevent duplicate relations per agent
+      CREATE UNIQUE INDEX idx_relations_unique ON relations(subject, predicate, object, agent_id);
+
+      -- Index for agent filtering
+      CREATE INDEX idx_relations_agent ON relations(agent_id);
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

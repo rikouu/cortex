@@ -5,7 +5,12 @@ import { generateId } from '../utils/helpers.js';
 export function registerRelationsRoutes(app: FastifyInstance): void {
   app.get('/api/v1/relations', async (req) => {
     const q = req.query as any;
-    return listRelations({ subject: q.subject, object: q.object, limit: q.limit ? parseInt(q.limit) : undefined });
+    return listRelations({
+      subject: q.subject,
+      object: q.object,
+      agent_id: q.agent_id,
+      limit: q.limit ? parseInt(q.limit) : undefined,
+    });
   });
 
   app.post('/api/v1/relations', {
@@ -19,6 +24,8 @@ export function registerRelationsRoutes(app: FastifyInstance): void {
           object: { type: 'string' },
           confidence: { type: 'number' },
           source_memory_id: { type: 'string' },
+          agent_id: { type: 'string' },
+          source: { type: 'string' },
         },
       },
     },
@@ -30,6 +37,8 @@ export function registerRelationsRoutes(app: FastifyInstance): void {
       object: body.object,
       confidence: body.confidence ?? 0.8,
       source_memory_id: body.source_memory_id || null,
+      agent_id: body.agent_id || 'default',
+      source: body.source || 'manual',
     });
     reply.code(201);
     return rel;

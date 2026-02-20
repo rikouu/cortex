@@ -1,5 +1,5 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, updateMemory, deleteMemory, type Memory, type MemoryCategory } from '../db/index.js';
+import { insertMemory, getMemoryById, updateMemory, deleteMemory, upsertRelation, type Memory, type MemoryCategory } from '../db/index.js';
 import { detectHighSignals, type DetectedSignal } from '../signals/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
@@ -39,6 +39,19 @@ export interface ExtractedMemory {
   source: 'user_stated' | 'user_implied' | 'observed_pattern';
   reasoning: string;
 }
+
+export interface ExtractedRelation {
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence: number;
+}
+
+export const VALID_PREDICATES = new Set([
+  'uses', 'works_at', 'lives_in', 'knows', 'manages', 'belongs_to',
+  'created', 'prefers', 'studies', 'skilled_in', 'collaborates_with',
+  'reports_to', 'owns', 'interested_in', 'related_to',
+]);
 
 export interface SimilarMemory {
   memory: Memory;
@@ -199,6 +212,7 @@ export class MemorySieve {
 
     // 3. LLM structured extraction
     let structuredExtractions: ExtractedMemory[] = [];
+    let seqExtractedRelations: ExtractedRelation[] = [];
     const deepStart = Date.now();
     let rawOutput = '';
 
@@ -209,6 +223,7 @@ export class MemorySieve {
       const result = await this.extractStructuredRaw(exchange, profileContext);
       rawOutput = result.raw;
       structuredExtractions = result.parsed;
+      seqExtractedRelations = result.relations;
     } catch (e: any) {
       log.warn({ error: e.message }, 'LLM structured extraction failed');
     }
@@ -227,6 +242,26 @@ export class MemorySieve {
         if (result.memory) { extracted.push(result.memory); deepWritten++; }
       } catch (e: any) {
         log.error({ error: e.message, category: mem.category }, 'Failed to write structured extraction');
+      }
+    }
+
+    // Write extracted relations (sequential mode)
+    if (this.config.sieve.relationExtraction && seqExtractedRelations.length > 0) {
+      const firstMemoryId = extracted.length > 0 ? extracted[0]!.id : null;
+      for (const rel of seqExtractedRelations) {
+        try {
+          upsertRelation({
+            subject: rel.subject,
+            predicate: rel.predicate,
+            object: rel.object,
+            confidence: rel.confidence,
+            source_memory_id: firstMemoryId,
+            agent_id: agentId,
+            source: 'extraction',
+          });
+        } catch (e: any) {
+          log.warn({ error: e.message }, 'Failed to upsert relation');
+        }
       }
     }
 
@@ -311,6 +346,8 @@ export class MemorySieve {
     const start = Date.now();
     let rawOutput = '';
 
+    let extractedRelations: ExtractedRelation[] = [];
+
     try {
       const profileContext = this.config.sieve.profileInjection
         ? await this.getProfile(agentId)
@@ -318,6 +355,7 @@ export class MemorySieve {
       const result = await this.extractStructuredRaw(exchange, profileContext);
       rawOutput = result.raw;
       structuredExtractions = result.parsed;
+      extractedRelations = result.relations;
     } catch (e: any) {
       log.warn({ error: e.message }, 'Deep channel: LLM extraction failed');
     }
@@ -331,6 +369,27 @@ export class MemorySieve {
         if (result.memory) { extracted.push(result.memory); written++; }
       } catch (e: any) {
         log.error({ error: e.message }, 'Deep channel: failed to write extraction');
+      }
+    }
+
+    // Write extracted relations
+    if (this.config.sieve.relationExtraction && extractedRelations.length > 0) {
+      const firstMemoryId = extracted.length > 0 ? extracted[0]!.id : null;
+      for (const rel of extractedRelations) {
+        try {
+          const result = upsertRelation({
+            subject: rel.subject,
+            predicate: rel.predicate,
+            object: rel.object,
+            confidence: rel.confidence,
+            source_memory_id: firstMemoryId,
+            agent_id: agentId,
+            source: 'extraction',
+          });
+          log.info({ action: result.action, subject: rel.subject, predicate: rel.predicate, object: rel.object }, 'Relation upserted');
+        } catch (e: any) {
+          log.warn({ error: e.message, subject: rel.subject, predicate: rel.predicate }, 'Failed to upsert relation');
+        }
       }
     }
 
@@ -418,7 +477,7 @@ export class MemorySieve {
   private async extractStructuredRaw(
     exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     profileContext?: string,
-  ): Promise<{ raw: string; parsed: ExtractedMemory[] }> {
+  ): Promise<{ raw: string; parsed: ExtractedMemory[]; relations: ExtractedRelation[] }> {
     let conversationBlock: string;
 
     if (exchange.messages && exchange.messages.length > 0) {
@@ -453,11 +512,11 @@ export class MemorySieve {
       systemPrompt: SIEVE_SYSTEM_PROMPT,
     });
 
-    const parsed = this.parseStructuredOutput(raw);
-    return { raw, parsed };
+    const { memories: parsed, relations } = this.parseStructuredOutput(raw);
+    return { raw, parsed, relations };
   }
 
-  private parseStructuredOutput(raw: string): ExtractedMemory[] {
+  private parseStructuredOutput(raw: string): { memories: ExtractedMemory[]; relations: ExtractedRelation[] } {
     const trimmed = raw.trim();
 
     // Try direct JSON.parse
@@ -472,22 +531,22 @@ export class MemorySieve {
           obj = JSON.parse(jsonMatch[0]);
         } catch {
           log.warn('Failed to parse structured output JSON');
-          return [];
+          return { memories: [], relations: [] };
         }
       } else {
         log.warn('No JSON found in structured output');
-        return [];
+        return { memories: [], relations: [] };
       }
     }
 
     // Handle nothing_extracted
     if (obj.nothing_extracted === true || !obj.memories || !Array.isArray(obj.memories)) {
-      return [];
+      return { memories: [], relations: this.parseRelations(obj) };
     }
 
     const validCategories = new Set<string>(EXTRACTABLE_CATEGORIES);
 
-    return obj.memories
+    const memories = obj.memories
       .filter((m: any) => {
         if (!m.content || typeof m.content !== 'string' || m.content.length < 3) return false;
         if (!m.category || !validCategories.has(m.category)) return false;
@@ -502,6 +561,27 @@ export class MemorySieve {
           ? m.source
           : 'user_implied') as ExtractedMemory['source'],
         reasoning: m.reasoning || '',
+      }));
+
+    return { memories, relations: this.parseRelations(obj) };
+  }
+
+  private parseRelations(obj: any): ExtractedRelation[] {
+    if (!obj?.relations || !Array.isArray(obj.relations)) return [];
+
+    return obj.relations
+      .filter((r: any) => {
+        if (!r.subject || typeof r.subject !== 'string' || r.subject.length < 1) return false;
+        if (!r.object || typeof r.object !== 'string' || r.object.length < 1) return false;
+        if (!r.predicate || !VALID_PREDICATES.has(r.predicate)) return false;
+        if (typeof r.confidence === 'number' && (r.confidence < 0 || r.confidence > 1)) return false;
+        return true;
+      })
+      .map((r: any) => ({
+        subject: r.subject,
+        predicate: r.predicate,
+        object: r.object,
+        confidence: typeof r.confidence === 'number' ? r.confidence : 0.8,
       }));
   }
 

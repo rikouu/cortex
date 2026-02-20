@@ -30,6 +30,7 @@ export interface MCPServerDeps {
   forget: (memoryId: string, reason?: string) => Promise<any>;
   search: (query: string, debug?: boolean) => Promise<any>;
   stats: () => Promise<any>;
+  listRelations: (subject?: string, object?: string, limit?: number) => Promise<any>;
 }
 
 const TOOLS: MCPTool[] = [
@@ -102,6 +103,18 @@ const TOOLS: MCPTool[] = [
       properties: {},
     },
   },
+  {
+    name: 'cortex_relations',
+    description: 'List entity relationships from memory (e.g. who knows whom, who uses what)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', description: 'Filter by subject entity' },
+        object: { type: 'string', description: 'Filter by object entity' },
+        limit: { type: 'number', description: 'Maximum results to return', default: 20 },
+      },
+    },
+  },
 ];
 
 export class MCPServer {
@@ -149,6 +162,15 @@ export class MCPServer {
 
         case 'cortex_stats': {
           const result = await this.deps.stats();
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+
+        case 'cortex_relations': {
+          const result = await this.deps.listRelations(
+            call.arguments.subject,
+            call.arguments.object,
+            call.arguments.limit,
+          );
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
 

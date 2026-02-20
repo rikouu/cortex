@@ -1,12 +1,12 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, updateMemory, type Memory, type MemoryCategory } from '../db/index.js';
+import { insertMemory, getMemoryById, updateMemory, upsertRelation, type Memory, type MemoryCategory } from '../db/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
 import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, SMART_UPDATE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
-import type { ExtractedMemory, ExtractionLogData, SimilarMemory, SmartUpdateDecision } from './sieve.js';
+import { type ExtractedMemory, type ExtractedRelation, type ExtractionLogData, type SimilarMemory, type SmartUpdateDecision, VALID_PREDICATES } from './sieve.js';
 
 const log = createLogger('flush');
 
@@ -131,6 +131,26 @@ export class MemoryFlush {
         if (processResult.action === 'smart_updated') { smartUpdated++; }
         if (processResult.memory) flushed.push(processResult.memory);
       }
+
+      // Write extracted relations
+      if (this.config.sieve.relationExtraction && result.relations.length > 0) {
+        const firstMemoryId = flushed.length > 0 ? flushed[0]!.id : null;
+        for (const rel of result.relations) {
+          try {
+            upsertRelation({
+              subject: rel.subject,
+              predicate: rel.predicate,
+              object: rel.object,
+              confidence: rel.confidence,
+              source_memory_id: firstMemoryId,
+              agent_id: agentId,
+              source: 'flush',
+            });
+          } catch (e: any) {
+            log.warn({ error: e.message }, 'Flush: failed to upsert relation');
+          }
+        }
+      }
     } catch (e: any) {
       log.warn({ error: e.message }, 'Core item extraction failed');
     }
@@ -169,18 +189,18 @@ export class MemoryFlush {
     })).trim();
   }
 
-  private async extractCoreItemsStructured(text: string): Promise<{ raw: string; parsed: ExtractedMemory[] }> {
+  private async extractCoreItemsStructured(text: string): Promise<{ raw: string; parsed: ExtractedMemory[]; relations: ExtractedRelation[] }> {
     const raw = await this.llm.complete(text.slice(0, 3000), {
       maxTokens: this.config.sieve.maxExtractionTokens,
       temperature: 0.1,
       systemPrompt: FLUSH_CORE_ITEMS_SYSTEM_PROMPT,
     });
 
-    const parsed = this.parseStructuredOutput(raw);
-    return { raw, parsed };
+    const { memories: parsed, relations } = this.parseStructuredOutput(raw);
+    return { raw, parsed, relations };
   }
 
-  private parseStructuredOutput(raw: string): ExtractedMemory[] {
+  private parseStructuredOutput(raw: string): { memories: ExtractedMemory[]; relations: ExtractedRelation[] } {
     const trimmed = raw.trim();
 
     let obj: any;
@@ -194,24 +214,45 @@ export class MemoryFlush {
           obj = JSON.parse(jsonMatch[0]);
         } catch {
           // Legacy fallback: try to parse as plain JSON array
-          return this.parseLegacyArray(trimmed);
+          return { memories: this.parseLegacyArray(trimmed), relations: [] };
         }
       } else {
-        return this.parseLegacyArray(trimmed);
+        return { memories: this.parseLegacyArray(trimmed), relations: [] };
       }
     }
 
+    const relations = this.parseRelations(obj);
+
     // Handle new structured format
     if (obj.memories && Array.isArray(obj.memories)) {
-      return this.validateExtractions(obj.memories);
+      return { memories: this.validateExtractions(obj.memories), relations };
     }
 
     // Handle legacy array format
     if (Array.isArray(obj)) {
-      return this.validateExtractions(obj);
+      return { memories: this.validateExtractions(obj), relations };
     }
 
-    return [];
+    return { memories: [], relations };
+  }
+
+  private parseRelations(obj: any): ExtractedRelation[] {
+    if (!obj?.relations || !Array.isArray(obj.relations)) return [];
+
+    return obj.relations
+      .filter((r: any) => {
+        if (!r.subject || typeof r.subject !== 'string' || r.subject.length < 1) return false;
+        if (!r.object || typeof r.object !== 'string' || r.object.length < 1) return false;
+        if (!r.predicate || !VALID_PREDICATES.has(r.predicate)) return false;
+        if (typeof r.confidence === 'number' && (r.confidence < 0 || r.confidence > 1)) return false;
+        return true;
+      })
+      .map((r: any) => ({
+        subject: r.subject,
+        predicate: r.predicate,
+        object: r.object,
+        confidence: typeof r.confidence === 'number' ? r.confidence : 0.8,
+      }));
   }
 
   private parseLegacyArray(raw: string): ExtractedMemory[] {

@@ -340,6 +340,44 @@ export default {
       },
     });
 
+    // ── Tool: cortex_relations ──────────────────────────
+    api.registerTool(
+      {
+        name: 'cortex_relations',
+        description: 'List entity relationships from Cortex memory (e.g. who knows whom, who uses what). Useful for understanding connections between people, tools, and concepts.',
+        parameters: {
+          type: 'object',
+          properties: {
+            subject: { type: 'string', description: 'Filter by subject entity' },
+            object: { type: 'string', description: 'Filter by object entity' },
+            limit: { type: 'number', description: 'Maximum results to return', default: 20 },
+          },
+        },
+        async execute(_id: string, params: { subject?: string; object?: string; limit?: number }) {
+          try {
+            const query = new URLSearchParams();
+            if (params.subject) query.set('subject', params.subject);
+            if (params.object) query.set('object', params.object);
+            if (params.limit) query.set('limit', String(params.limit));
+            query.set('agent_id', agentId);
+            const res = await fetch(`${cortexUrl}/api/v1/relations?${query.toString()}`, {
+              signal: AbortSignal.timeout(RECALL_TIMEOUT),
+            });
+            if (!res.ok) return { content: [{ type: 'text', text: `Failed to fetch relations: HTTP ${res.status}` }] };
+            const data = await res.json() as any[];
+            if (data.length === 0) {
+              return { content: [{ type: 'text', text: 'No relations found.' }] };
+            }
+            const formatted = data.map((r: any) => `${r.subject} → ${r.predicate} → ${r.object} (confidence: ${r.confidence})`).join('\n');
+            return { content: [{ type: 'text', text: formatted }] };
+          } catch (e) {
+            return { content: [{ type: 'text', text: `Error: ${(e as Error).message}` }] };
+          }
+        },
+      },
+      { optional: true },
+    );
+
     // ── Tool: cortex_health ─────────────────────────────
     api.registerTool(
       {

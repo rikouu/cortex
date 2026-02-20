@@ -8,7 +8,10 @@ interface Relation {
   predicate: string;
   object: string;
   confidence: number;
+  source: string;
+  agent_id: string;
   created_at: string;
+  updated_at: string;
 }
 
 interface Node {
@@ -28,6 +31,7 @@ export default function RelationGraph() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [nodeMemories, setNodeMemories] = useState<any[]>([]);
   const [loadingMemories, setLoadingMemories] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const nodesRef = useRef<Map<string, Node>>(new Map());
@@ -40,6 +44,13 @@ export default function RelationGraph() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Auto-refresh every 30s
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
 
   // Derive unique predicates
   const predicates = [...new Set(relations.map(r => r.predicate))];
@@ -76,6 +87,23 @@ export default function RelationGraph() {
       setNodeMemories([]);
     }
     setLoadingMemories(false);
+  };
+
+  // Source badge component
+  const sourceBadge = (source: string) => {
+    const isExtraction = source === 'extraction' || source === 'flush';
+    return (
+      <span style={{
+        fontSize: 10,
+        padding: '1px 6px',
+        borderRadius: 3,
+        background: isExtraction ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.15)',
+        color: isExtraction ? '#22c55e' : '#818cf8',
+        fontWeight: 500,
+      }}>
+        {isExtraction ? t('relations.sourceExtraction') : t('relations.sourceManual')}
+      </span>
+    );
   };
 
   // Force-directed graph simulation
@@ -328,9 +356,15 @@ export default function RelationGraph() {
               {t('relations.deselect', { node: selectedNode })}
             </button>
           )}
-          <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 'auto' }}>
-            {t('relations.nodeEdgeCount', { nodes: nodeSet.size, edges: filteredRelations.length })}
-          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
+              {t('relations.autoRefresh')}
+            </label>
+            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+              {t('relations.nodeEdgeCount', { nodes: nodeSet.size, edges: filteredRelations.length })}
+            </span>
+          </div>
         </div>
       )}
 
@@ -367,6 +401,7 @@ export default function RelationGraph() {
                 <span style={{ fontWeight: 600 }}>{r.subject}</span>
                 <span style={{ color: 'var(--primary)', fontSize: 12 }}>{r.predicate}</span>
                 <span style={{ fontWeight: 600 }}>{r.object}</span>
+                {sourceBadge(r.source)}
                 <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>{t('relations.conf')}: {r.confidence?.toFixed(2)}</span>
               </div>
             ))}
@@ -399,7 +434,7 @@ export default function RelationGraph() {
         <div className="card">
           <table>
             <thead>
-              <tr><th>{t('relations.subject')}</th><th>{t('relations.predicate')}</th><th>{t('relations.object')}</th><th>{t('relations.confidence')}</th><th>{t('relations.created')}</th><th></th></tr>
+              <tr><th>{t('relations.subject')}</th><th>{t('relations.predicate')}</th><th>{t('relations.object')}</th><th>{t('relations.confidence')}</th><th>{t('relations.source')}</th><th>{t('relations.created')}</th><th></th></tr>
             </thead>
             <tbody>
               {filteredRelations.map(r => (
@@ -415,6 +450,7 @@ export default function RelationGraph() {
                       {r.confidence?.toFixed(2)}
                     </div>
                   </td>
+                  <td>{sourceBadge(r.source)}</td>
                   <td>{r.created_at?.slice(0, 10)}</td>
                   <td><button className="btn danger" onClick={() => handleDelete(r.id)}>x</button></td>
                 </tr>

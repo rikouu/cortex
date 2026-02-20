@@ -103,10 +103,27 @@ Output ONLY a valid JSON object:
       "reasoning": "why this is worth remembering (one sentence)"
     }
   ],
+  "relations": [
+    {
+      "subject": "entity name (e.g. Harry)",
+      "predicate": "one of: uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to",
+      "object": "entity name (e.g. Tokyo)",
+      "confidence": 0.0-1.0
+    }
+  ],
   "nothing_extracted": false
 }
 
 If nothing qualifies: { "memories": [], "nothing_extracted": true }
+
+## Relations
+Extract entity relationships mentioned in the conversation as (subject, predicate, object) triples.
+- Only extract when BOTH entities are explicitly mentioned
+- subject/object should be concise entity names (not full sentences)
+- Use the same language as user input for entity names
+- Maximum 3 relations per exchange
+- Standard predicates: uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to
+- If no clear relations exist, omit the relations array or use empty array
 
 ## Rules
 - Use the same language as the user's input for content
@@ -213,10 +230,27 @@ Output ONLY a valid JSON object:
       "reasoning": "why this is worth remembering"
     }
   ],
+  "relations": [
+    {
+      "subject": "entity name",
+      "predicate": "one of: uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to",
+      "object": "entity name",
+      "confidence": 0.0-1.0
+    }
+  ],
   "nothing_extracted": false
 }
 
-If nothing qualifies: { "memories": [], "nothing_extracted": true }`;
+If nothing qualifies: { "memories": [], "nothing_extracted": true }
+
+## Relations
+Extract entity relationships mentioned in the conversation as (subject, predicate, object) triples.
+- Only extract when BOTH entities are explicitly mentioned
+- subject/object should be concise entity names (not full sentences)
+- Use the same language as the conversation for entity names
+- Maximum 5 relations per flush
+- Standard predicates: uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to
+- If no clear relations exist, omit the relations array or use empty array`;
 
 
 // ── Smart Update: dedup decision ─────────────────────────

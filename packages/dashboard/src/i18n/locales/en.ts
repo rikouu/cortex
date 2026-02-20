@@ -354,6 +354,10 @@ export default {
     predicatePlaceholder: 'e.g. uses',
     objectPlaceholder: 'e.g. OpenClaw',
     confirmDelete: 'Delete this relation?',
+    source: 'Source',
+    sourceExtraction: 'Auto-extracted',
+    sourceManual: 'Manual',
+    autoRefresh: 'Auto-refresh',
   },
   lifecycle: {
     title: 'Lifecycle Engine',
@@ -531,5 +535,7 @@ export default {
     similarityThresholdDesc: 'Maximum vector distance to consider memories as semantically related. Memories within this distance trigger LLM-based smart update decisions. Default: 0.35, Range: 0.1-0.8.',
     exactDupThreshold: 'Exact Duplicate Threshold',
     exactDupThresholdDesc: 'Vector distance below which memories are considered exact duplicates and silently skipped. Default: 0.08, Range: 0.01-0.2.',
+    relationExtraction: 'Auto-extract Relations',
+    relationExtractionDesc: 'Automatically extract entity relationships (who uses what, who knows whom) from conversations during memory extraction.',
   },
 } as const;

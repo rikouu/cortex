@@ -85,6 +85,7 @@ const CortexConfigSchema = z.object({
     smartUpdate: z.boolean().default(true),
     similarityThreshold: z.number().min(0.1).max(0.8).default(0.35),
     exactDupThreshold: z.number().min(0.01).max(0.2).default(0.08),
+    relationExtraction: z.boolean().default(true),
   }).default({}),
   lifecycle: z.object({
     schedule: z.string().default('0 3 * * *'),

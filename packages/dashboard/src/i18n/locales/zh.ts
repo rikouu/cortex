@@ -354,6 +354,10 @@ export default {
     predicatePlaceholder: '例如 uses',
     objectPlaceholder: '例如 OpenClaw',
     confirmDelete: '确定删除这个关系？',
+    source: '来源',
+    sourceExtraction: '自动提取',
+    sourceManual: '手动创建',
+    autoRefresh: '自动刷新',
   },
   lifecycle: {
     title: '生命周期引擎',
@@ -531,5 +535,7 @@ export default {
     similarityThresholdDesc: '认为记忆语义相关的最大向量距离。在此距离内的记忆将触发 LLM 智能更新决策。默认 0.35，范围 0.1-0.8。',
     exactDupThreshold: '精确重复阈值',
     exactDupThresholdDesc: '低于此向量距离的记忆被视为精确重复，直接跳过。默认 0.08，范围 0.01-0.2。',
+    relationExtraction: '自动提取关系',
+    relationExtractionDesc: '自动从对话中提取实体关系（谁使用什么、谁认识谁），在记忆提取时同步进行。',
   },
 } as const;

@@ -272,6 +272,7 @@ export default function Settings() {
         smartUpdate: config.sieve?.smartUpdate ?? true,
         similarityThreshold: config.sieve?.similarityThreshold ?? 0.35,
         exactDupThreshold: config.sieve?.exactDupThreshold ?? 0.08,
+        relationExtraction: config.sieve?.relationExtraction ?? true,
       }),
     };
 
@@ -415,6 +416,7 @@ export default function Settings() {
           smartUpdate: draft.smartUpdate,
           similarityThreshold: Number(draft.similarityThreshold),
           exactDupThreshold: Number(draft.exactDupThreshold),
+          relationExtraction: draft.relationExtraction,
         };
       }
 
@@ -1065,6 +1067,7 @@ export default function Settings() {
             {renderToggleField(t('settings.smartUpdate'), t('settings.smartUpdateDesc'), 'smartUpdate')}
             {renderSlider(t('settings.similarityThreshold'), t('settings.similarityThresholdDesc'), 'similarityThreshold', 0.1, 0.8, 0.01)}
             {renderSlider(t('settings.exactDupThreshold'), t('settings.exactDupThresholdDesc'), 'exactDupThreshold', 0.01, 0.2, 0.01)}
+            {renderToggleField(t('settings.relationExtraction'), t('settings.relationExtractionDesc'), 'relationExtraction')}
           </div>
         ) : (
           <table>
@@ -1073,6 +1076,7 @@ export default function Settings() {
               {displayRow(t('settings.smartUpdate'), (config.sieve?.smartUpdate ?? true) ? t('common.on') : t('common.off'), t('settings.smartUpdateDesc'))}
               {displayRow(t('settings.similarityThreshold'), (config.sieve?.similarityThreshold ?? 0.35).toFixed(2), t('settings.similarityThresholdDesc'))}
               {displayRow(t('settings.exactDupThreshold'), (config.sieve?.exactDupThreshold ?? 0.08).toFixed(2), t('settings.exactDupThresholdDesc'))}
+              {displayRow(t('settings.relationExtraction'), (config.sieve?.relationExtraction ?? true) ? t('common.on') : t('common.off'), t('settings.relationExtractionDesc'))}
             </tbody>
           </table>
         )}
