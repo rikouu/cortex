@@ -2,8 +2,10 @@
  * Cortex Bridge Plugin for OpenClaw
  *
  * Conforms to OpenClaw's register(api) plugin interface.
- * Forwards OpenClaw lifecycle hooks to Cortex Sidecar REST API.
- * Key design: NEVER block the Agent. All calls have hard timeouts + graceful fallback.
+ * Provides tools + best-effort hooks for Cortex memory integration.
+ *
+ * Strategy: Tools are the primary interface (reliable), hooks are best-effort
+ * (may not fire for kind:"tool" plugins in current OpenClaw versions).
  */
 
 // ── Timeouts ────────────────────────────────────────────
@@ -66,31 +68,33 @@ async function cortexIngest(
   userMessage: string,
   assistantMessage: string,
   agentId: string,
-  sessionId?: string,
-): Promise<void> {
-  fetch(`${cortexUrl}/api/v1/ingest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      user_message: userMessage,
-      assistant_message: assistantMessage,
-      agent_id: agentId,
-      session_id: sessionId,
-    }),
-    signal: AbortSignal.timeout(INGEST_TIMEOUT),
-  }).catch(() => {});
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${cortexUrl}/api/v1/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_message: userMessage,
+        assistant_message: assistantMessage,
+        agent_id: agentId,
+      }),
+      signal: AbortSignal.timeout(INGEST_TIMEOUT),
+    });
+    return { ok: res.ok, error: res.ok ? undefined : `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }
 
 async function cortexFlush(
   cortexUrl: string,
   messages: { role: string; content: string }[],
   agentId: string,
-  sessionId?: string,
 ): Promise<void> {
   await fetch(`${cortexUrl}/api/v1/flush`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, agent_id: agentId, session_id: sessionId, reason: 'compaction' }),
+    body: JSON.stringify({ messages, agent_id: agentId, reason: 'compaction' }),
     signal: AbortSignal.timeout(FLUSH_TIMEOUT),
   });
 }
@@ -130,122 +134,96 @@ export default {
 
     log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${agentId}`);
 
-    // ── Hook: before_agent_start → Recall memories ──────
-    // event: { prompt: string, messages?: { role: string, content: string }[] }
-    api.on('before_agent_start', async (event: any) => {
-      try {
-        // event.prompt is the current user input
-        const query: string = event?.prompt || '';
-        if (!query) return;
-
-        const result = await cortexRecall(cortexUrl, query, agentId);
-        if (result) {
-          log.info(`[cortex-bridge] Recalled ${result.count} memories`);
-          return { prependContext: result.context };
-        }
-      } catch (e) {
-        if (debug) {
-          log.warn(`[cortex-bridge] Recall failed: ${(e as Error).message}`);
-        }
-      }
-    });
-
-    // ── Hook: agent_end → Ingest conversation ───────────
-    // event: { messages: { role: string, content: string }[], success: boolean, error?: string, durationMs?: number }
-    api.on('agent_end', async (event: any) => {
-      try {
-        const messages: { role: string; content: string }[] = event?.messages || [];
-
-        // Find the last user + assistant pair
-        const reversed = [...messages].reverse();
-        const lastAssistant = reversed.find((m: { role: string }) => m.role === 'assistant');
-        const lastUser = reversed.find((m: { role: string }) => m.role === 'user');
-
-        if (!lastUser || !lastAssistant) return;
-
-        await cortexIngest(
-          cortexUrl,
-          lastUser.content,
-          lastAssistant.content,
-          agentId,
-        );
-
-        if (debug) {
-          log.info('[cortex-bridge] Ingested conversation pair');
-        }
-      } catch (e) {
-        if (debug) {
-          log.warn(`[cortex-bridge] Ingest failed: ${(e as Error).message}`);
-        }
-      }
-    });
-
-    // ── Hook: before_compaction → Emergency flush ───────
-    // event: { messages: { role: string, content: string }[] }
-    api.on('before_compaction', async (event: any) => {
-      try {
-        const messages: { role: string; content: string }[] = event?.messages || [];
-        if (messages.length === 0) return;
-
-        await cortexFlush(cortexUrl, messages, agentId);
-
-        if (debug) {
-          log.info(`[cortex-bridge] Flushed ${messages.length} messages before compaction`);
-        }
-      } catch (e) {
-        if (debug) {
-          log.warn(`[cortex-bridge] Flush failed: ${(e as Error).message}`);
-        }
-      }
-    });
+    // ════════════════════════════════════════════════════════
+    // TOOLS (primary interface — always work)
+    // ════════════════════════════════════════════════════════
 
     // ── Tool: cortex_recall ─────────────────────────────
     api.registerTool({
       name: 'cortex_recall',
-      description: 'Search Cortex for relevant memories about a topic',
+      description: 'Search Cortex long-term memory for relevant past conversations, facts, and preferences. Use this at the start of conversations or when you need context about a topic.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'The search query' },
+          query: { type: 'string', description: 'The search query — describe what you want to recall' },
         },
         required: ['query'],
       },
       async execute(_id: string, params: { query: string }) {
-        const result = await cortexRecall(cortexUrl, params.query, agentId);
-        if (result) {
-          return { content: [{ type: 'text', text: result.context }] };
+        try {
+          const result = await cortexRecall(cortexUrl, params.query, agentId);
+          if (result) {
+            return { content: [{ type: 'text', text: result.context }] };
+          }
+          return { content: [{ type: 'text', text: 'No relevant memories found.' }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: `Recall error: ${(e as Error).message}` }] };
         }
-        return { content: [{ type: 'text', text: 'No relevant memories found.' }] };
       },
     });
 
     // ── Tool: cortex_remember ───────────────────────────
     api.registerTool({
       name: 'cortex_remember',
-      description: 'Store an important fact or piece of information in Cortex memory',
+      description: 'Store an important fact, preference, or decision in Cortex long-term memory. Use this when the user shares something worth remembering for future conversations.',
       parameters: {
         type: 'object',
         properties: {
-          content: { type: 'string', description: 'The information to remember' },
+          content: { type: 'string', description: 'The information to remember — be specific and concise' },
+          category: {
+            type: 'string',
+            description: 'Memory category',
+            enum: ['fact', 'preference', 'skill', 'identity', 'relationship', 'goal', 'procedure', 'other'],
+            default: 'fact',
+          },
         },
         required: ['content'],
       },
-      async execute(_id: string, params: { content: string }) {
+      async execute(_id: string, params: { content: string; category?: string }) {
         try {
           const res = await fetch(`${cortexUrl}/api/v1/memories`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               content: params.content,
+              category: params.category || 'fact',
               agent_id: agentId,
               layer: 'working',
+              importance: 0.7,
+              confidence: 0.9,
             }),
             signal: AbortSignal.timeout(INGEST_TIMEOUT),
           });
           if (res.ok) {
-            return { content: [{ type: 'text', text: 'Memory stored successfully.' }] };
+            return { content: [{ type: 'text', text: `Remembered: "${params.content}"` }] };
           }
-          return { content: [{ type: 'text', text: `Failed to store memory: ${res.status}` }] };
+          const err = await res.text();
+          return { content: [{ type: 'text', text: `Failed to store memory (${res.status}): ${err}` }] };
+        } catch (e) {
+          return { content: [{ type: 'text', text: `Error: ${(e as Error).message}` }] };
+        }
+      },
+    });
+
+    // ── Tool: cortex_ingest ─────────────────────────────
+    api.registerTool({
+      name: 'cortex_ingest',
+      description: 'Send a conversation exchange to Cortex for automatic memory extraction via LLM. The LLM will analyze the conversation and extract any important facts, preferences, or decisions. Use this after meaningful conversations to build long-term memory.',
+      parameters: {
+        type: 'object',
+        properties: {
+          user_message: { type: 'string', description: 'What the user said' },
+          assistant_message: { type: 'string', description: 'What you (the assistant) replied' },
+        },
+        required: ['user_message', 'assistant_message'],
+      },
+      async execute(_id: string, params: { user_message: string; assistant_message: string }) {
+        try {
+          const result = await cortexIngest(cortexUrl, params.user_message, params.assistant_message, agentId);
+          if (result.ok) {
+            return { content: [{ type: 'text', text: 'Conversation ingested — memories will be extracted automatically.' }] };
+          }
+          return { content: [{ type: 'text', text: `Ingest failed: ${result.error}` }] };
         } catch (e) {
           return { content: [{ type: 'text', text: `Error: ${(e as Error).message}` }] };
         }
@@ -279,9 +257,57 @@ export default {
       },
     });
 
-    // ── Service: background health monitor ──────────────
-    let healthInterval: ReturnType<typeof setInterval> | undefined;
+    // ════════════════════════════════════════════════════════
+    // HOOKS (best-effort — may not fire for kind:"tool" plugins)
+    // ════════════════════════════════════════════════════════
 
+    // ── Hook: before_agent_start → Recall memories ──────
+    api.on('before_agent_start', async (event: any) => {
+      try {
+        const query: string = event?.prompt || '';
+        if (!query) return;
+
+        const result = await cortexRecall(cortexUrl, query, agentId);
+        if (result) {
+          log.info(`[cortex-bridge] Hook recalled ${result.count} memories`);
+          return { prependContext: result.context };
+        }
+      } catch (e) {
+        if (debug) log.warn(`[cortex-bridge] Hook recall failed: ${(e as Error).message}`);
+      }
+    });
+
+    // ── Hook: agent_end → Ingest conversation ───────────
+    api.on('agent_end', async (event: any) => {
+      try {
+        const messages: { role: string; content: string }[] = event?.messages || [];
+        const reversed = [...messages].reverse();
+        const lastAssistant = reversed.find((m: { role: string }) => m.role === 'assistant');
+        const lastUser = reversed.find((m: { role: string }) => m.role === 'user');
+
+        if (!lastUser || !lastAssistant) return;
+
+        await cortexIngest(cortexUrl, lastUser.content, lastAssistant.content, agentId);
+        if (debug) log.info('[cortex-bridge] Hook ingested conversation pair');
+      } catch (e) {
+        if (debug) log.warn(`[cortex-bridge] Hook ingest failed: ${(e as Error).message}`);
+      }
+    });
+
+    // ── Hook: before_compaction → Emergency flush ───────
+    api.on('before_compaction', async (event: any) => {
+      try {
+        const messages: { role: string; content: string }[] = event?.messages || [];
+        if (messages.length === 0) return;
+
+        await cortexFlush(cortexUrl, messages, agentId);
+        if (debug) log.info(`[cortex-bridge] Hook flushed ${messages.length} messages`);
+      } catch (e) {
+        if (debug) log.warn(`[cortex-bridge] Hook flush failed: ${(e as Error).message}`);
+      }
+    });
+
+    // ── Service: startup health check ───────────────────
     api.registerService({
       id: 'cortex-bridge',
       start: async () => {
@@ -291,16 +317,8 @@ export default {
         } else {
           log.warn(`[cortex-bridge] Cortex server unreachable: ${status.error}`);
         }
-        // Periodic health check every 60s
-        healthInterval = setInterval(async () => {
-          const s = await cortexHealthCheck(cortexUrl);
-          if (!s.ok && debug) {
-            log.warn(`[cortex-bridge] Health check failed: ${s.error}`);
-          }
-        }, 60_000);
       },
       stop: async () => {
-        if (healthInterval) clearInterval(healthInterval);
         log.info('[cortex-bridge] Service stopped');
       },
     });

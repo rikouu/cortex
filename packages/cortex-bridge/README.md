@@ -20,29 +20,30 @@ Plugin config via OpenClaw settings or environment variables:
 | `agentId` | — | `openclaw` | Agent identifier for memory isolation |
 | `debug` | `CORTEX_DEBUG` | `false` | Enable debug logging |
 
-## What It Does
+## Tools (Primary Interface)
 
-### Automatic Hooks
-
-- **`before_agent_start`** — Recalls relevant memories from Cortex and injects them as context (`prependContext`) before the agent responds.
-- **`agent_end`** — Extracts the last user/assistant pair and sends it to Cortex for memory ingestion (fire-and-forget).
-- **`before_compaction`** — Emergency flush of all session messages to Cortex before context window compression.
-
-### Registered Tools
+These tools are always available and work reliably:
 
 | Tool | Description |
 |------|-------------|
-| `cortex_recall` | Search Cortex for relevant memories about a topic |
-| `cortex_remember` | Store an important fact or piece of information |
+| `cortex_recall` | Search long-term memory for relevant past conversations, facts, and preferences |
+| `cortex_remember` | Store a fact, preference, or decision (supports category: fact, preference, skill, identity, etc.) |
+| `cortex_ingest` | Send a conversation pair for automatic LLM memory extraction |
 | `cortex_health` | Check if the Cortex memory server is reachable (optional) |
 
 ### Slash Command
 
 - `/cortex-status` — Quick check if Cortex server is online
 
-### Background Service
+## Hooks (Best-effort)
 
-The plugin registers a background service that performs periodic health checks (every 60s) and logs warnings if the Cortex server becomes unreachable.
+The plugin also registers lifecycle hooks. These are best-effort and may not fire in all OpenClaw configurations:
+
+- **`before_agent_start`** — Recalls relevant memories and injects as context
+- **`agent_end`** — Ingests the last conversation pair
+- **`before_compaction`** — Emergency flush before context compression
+
+> **Note:** In current OpenClaw versions, lifecycle hooks may not be dispatched to `kind: "tool"` plugins. The tools above provide the same functionality and are the recommended way to use this plugin.
 
 ## License
 
