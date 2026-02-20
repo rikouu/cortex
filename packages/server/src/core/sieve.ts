@@ -795,14 +795,20 @@ export class MemorySieve {
     if (similar.length > 0) {
       const closest = similar[0]!;
 
-      if (closest.distance < exactDupThreshold) {
-        // Tier 1: exact duplicate → skip
+      // Cross-family check: agent_* categories and user categories represent different perspectives
+      // and should be allowed to coexist even when semantically similar
+      const newIsAgent = extraction.category.startsWith('agent_');
+      const existingIsAgent = closest.memory.category.startsWith('agent_');
+      const crossFamily = newIsAgent !== existingIsAgent;
+
+      if (!crossFamily && closest.distance < exactDupThreshold) {
+        // Tier 1: exact duplicate → skip (only within same family)
         log.info({ distance: closest.distance, existing_id: closest.memory.id }, 'Exact duplicate, skipping');
         return { action: 'skipped' };
       }
 
-      if (closest.distance < effectiveThreshold) {
-        // Tier 2: semantic overlap → LLM decides
+      if (!crossFamily && closest.distance < effectiveThreshold) {
+        // Tier 2: semantic overlap → LLM decides (only within same family)
         const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
 
         if (decision.action === 'keep') {

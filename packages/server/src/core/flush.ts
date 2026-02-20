@@ -420,11 +420,17 @@ export class MemoryFlush {
     if (similar.length > 0) {
       const closest = similar[0]!;
 
-      if (closest.distance < exactDupThreshold) {
+      // Cross-family check: agent_* categories and user categories represent different perspectives
+      // and should be allowed to coexist even when semantically similar
+      const newIsAgent = extraction.category.startsWith('agent_');
+      const existingIsAgent = closest.memory.category.startsWith('agent_');
+      const crossFamily = newIsAgent !== existingIsAgent;
+
+      if (!crossFamily && closest.distance < exactDupThreshold) {
         return { action: 'skipped' };
       }
 
-      if (closest.distance < effectiveThreshold) {
+      if (!crossFamily && closest.distance < effectiveThreshold) {
         const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
         if (decision.action === 'keep') return { action: 'skipped' };
         const newMem = await this.executeSmartUpdate(decision, closest.memory, extraction, agentId, sessionId);
