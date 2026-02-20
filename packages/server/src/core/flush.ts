@@ -1,5 +1,5 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, type Memory } from '../db/index.js';
+import { insertMemory, getMemoryById, type Memory } from '../db/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
@@ -7,6 +7,9 @@ import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
 
 const log = createLogger('flush');
+
+/** Vector distance threshold for dedup (lower = more similar) */
+const DEDUP_DISTANCE_THRESHOLD = 0.15;
 
 export interface FlushRequest {
   messages: { role: string; content: string }[];
@@ -82,10 +85,19 @@ export class MemoryFlush {
       log.error({ error: e.message }, 'Failed to write flush memory');
     }
 
-    // 4. Try to extract high-priority items for Core
+    // 4. Try to extract high-priority items for Core (with dedup)
+    let deduplicated = 0;
     try {
       const coreItems = await this.extractCoreItems(conversationText);
       for (const item of coreItems) {
+        // Dedup: check if similar content already exists
+        const isDup = await this.isDuplicate(item.content, agentId);
+        if (isDup) {
+          deduplicated++;
+          log.info({ category: item.category }, 'Core item deduplicated');
+          continue;
+        }
+
         const mem = insertMemory({
           layer: 'core',
           category: item.category as any,
@@ -112,6 +124,7 @@ export class MemoryFlush {
       agent_id: agentId,
       reason: req.reason,
       flushed_count: flushed.length,
+      deduplicated,
       message_count: req.messages.length,
     }, 'Flush completed');
 
@@ -137,11 +150,20 @@ export class MemoryFlush {
 
   private async extractCoreItems(text: string): Promise<{ category: string; content: string; importance: number }[]> {
     const prompt = [
-      'From this conversation, extract ONLY the most important permanent facts.',
+      'From this conversation, extract ONLY permanent facts about the USER as a person.',
       'For each fact, provide a JSON array of objects with: category, content, importance.',
+      '',
       'Categories: identity, preference, decision, fact, todo',
-      'importance: 0.0-1.0 (only include items >= 0.7)',
-      'Output ONLY valid JSON array. If nothing important, output [].',
+      'importance: 0.0-1.0 (only include items >= 0.8)',
+      '',
+      'EXTRACT: user preferences, personal facts, decisions, goals, relationships, names, locations.',
+      'DO NOT EXTRACT:',
+      '- Technical discussions, debugging steps, code details, API usage',
+      '- Information about tools, plugins, libraries, or system configuration',
+      '- The assistant\'s explanations, instructions, or suggestions',
+      '- Temporary task context that won\'t matter in future conversations',
+      '',
+      'Output ONLY valid JSON array. If nothing about the user is worth remembering, output [].',
       '',
       text.slice(0, 3000),
     ].join('\n');
@@ -149,7 +171,7 @@ export class MemoryFlush {
     const result = await this.llm.complete(prompt, {
       maxTokens: 500,
       temperature: 0.1,
-      systemPrompt: 'You are a structured data extraction assistant. Output only valid JSON.',
+      systemPrompt: 'You are a personal memory extraction assistant. You ONLY extract facts about the user — their identity, preferences, decisions, and goals. You never extract technical discussions or implementation details. Output only valid JSON.',
     });
 
     try {
@@ -167,5 +189,26 @@ export class MemoryFlush {
       log.warn('Failed to parse core items JSON');
     }
     return [];
+  }
+
+  /**
+   * Check if similar content already exists via vector similarity.
+   */
+  private async isDuplicate(content: string, agentId: string): Promise<boolean> {
+    try {
+      const embedding = await this.embeddingProvider.embed(content);
+      if (embedding.length === 0) return false;
+
+      const results = await this.vectorBackend.search(embedding, 1, { agent_id: agentId });
+      if (results.length > 0 && results[0]!.distance < DEDUP_DISTANCE_THRESHOLD) {
+        const existing = getMemoryById(results[0]!.id);
+        if (existing && !existing.superseded_by) {
+          return true;
+        }
+      }
+    } catch {
+      // Dedup is best-effort — allow insertion on failure
+    }
+    return false;
   }
 }
