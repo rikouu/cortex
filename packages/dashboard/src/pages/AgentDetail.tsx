@@ -182,6 +182,7 @@ export default function AgentDetail() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState<TabKey>('overview');
   const [integrationTab, setIntegrationTab] = useState<IntegrationTabKey>('api');
+  const [mcpClient, setMcpClient] = useState<'claude-desktop' | 'cursor' | 'claude-code'>('claude-desktop');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Overview editing
@@ -549,41 +550,78 @@ def ingest(user_msg: str, assistant_msg: str):
       </div>
     );
 
+    const mcpConfigs: Record<string, { code: string; pasteDesc: string }> = {
+      'claude-desktop': {
+        code: JSON.stringify({
+          mcpServers: {
+            cortex: {
+              command: 'npx',
+              args: ['cortex-mcp', '--server-url', cortexUrl],
+              env: { CORTEX_AGENT_ID: agentId },
+            },
+          },
+        }, null, 2),
+        pasteDesc: t('agentDetail.mcpStep2ClaudeDesc'),
+      },
+      'cursor': {
+        code: JSON.stringify({
+          mcpServers: {
+            cortex: {
+              command: 'npx',
+              args: ['cortex-mcp'],
+              env: { CORTEX_URL: cortexUrl, CORTEX_AGENT_ID: agentId },
+            },
+          },
+        }, null, 2),
+        pasteDesc: t('agentDetail.mcpStep2CursorDesc'),
+      },
+      'claude-code': {
+        code: `claude mcp add cortex -- npx cortex-mcp --server-url ${cortexUrl}`,
+        pasteDesc: t('agentDetail.mcpStep2ClaudeCodeDesc'),
+      },
+    };
+
+    const currentMcp = mcpConfigs[mcpClient]!;
+
     const renderMcpTab = () => (
       <div>
         <StepBlock
           step={1}
           title={t('agentDetail.mcpStep1Title')}
           description={t('agentDetail.mcpStep1Desc')}
-          code={`npx cortex-mcp --server-url ${cortexUrl}`}
-        />
+        >
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            {([
+              ['claude-desktop', t('agentDetail.mcpClaudeDesktop')],
+              ['cursor', t('agentDetail.mcpCursor')],
+              ['claude-code', t('agentDetail.mcpClaudeCode')],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                className="btn"
+                style={{
+                  padding: '6px 16px', fontSize: 13,
+                  background: mcpClient === key ? 'var(--primary)' : 'var(--bg)',
+                  color: mcpClient === key ? '#fff' : 'var(--text)',
+                  border: mcpClient === key ? '1px solid var(--primary)' : '1px solid var(--border)',
+                }}
+                onClick={() => setMcpClient(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </StepBlock>
         <StepBlock
           step={2}
           title={t('agentDetail.mcpStep2Title')}
-          description={t('agentDetail.mcpStep2Desc')}
-          code={JSON.stringify({
-            mcpServers: {
-              cortex: {
-                command: 'npx',
-                args: ['cortex-mcp', '--server-url', cortexUrl],
-                env: { CORTEX_AGENT_ID: agentId },
-              },
-            },
-          }, null, 2)}
+          description={currentMcp.pasteDesc}
+          code={currentMcp.code}
         />
         <StepBlock
           step={3}
           title={t('agentDetail.mcpStep3Title')}
           description={t('agentDetail.mcpStep3Desc')}
-          code={JSON.stringify({
-            mcpServers: {
-              cortex: {
-                command: 'npx',
-                args: ['cortex-mcp'],
-                env: { CORTEX_URL: cortexUrl, CORTEX_AGENT_ID: agentId },
-              },
-            },
-          }, null, 2)}
         />
         <StepBlock
           step={4}
@@ -629,36 +667,23 @@ def ingest(user_msg: str, assistant_msg: str):
           step={2}
           title={t('agentDetail.openclawStep2Title')}
           description={t('agentDetail.openclawStep2Desc')}
-          code={`CORTEX_URL=${cortexUrl}          # Cortex server URL
-CORTEX_DEBUG=true                  # Optional: enable debug logs`}
+          code={`CORTEX_URL=${cortexUrl}`}
         />
         <StepBlock
           step={3}
           title={t('agentDetail.openclawStep3Title')}
           description={t('agentDetail.openclawStep3Desc')}
-          code={`import cortexBridge from '@cortexmem/bridge-openclaw';
-
-// Register plugin in OpenClaw agent config
-const agent = new Agent({
-  plugins: [cortexBridge],
-  // ... other config
-});`}
         >
-          <ul style={{ fontSize: 13, color: 'var(--text-muted)', margin: '10px 0 0 0', paddingLeft: 20, lineHeight: 1.8 }}>
-            <li><code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>{t('agentDetail.openclawHookBefore')}</code></li>
-            <li><code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>{t('agentDetail.openclawHookAfter')}</code></li>
-            <li><code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>{t('agentDetail.openclawHookCompaction')}</code></li>
+          <ul style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0 0', paddingLeft: 20, lineHeight: 2 }}>
+            <li>{t('agentDetail.openclawHookBefore')}</li>
+            <li>{t('agentDetail.openclawHookAfter')}</li>
+            <li>{t('agentDetail.openclawHookCompaction')}</li>
           </ul>
         </StepBlock>
         <StepBlock
           step={4}
           title={t('agentDetail.openclawStep4Title')}
           description={t('agentDetail.openclawStep4Desc')}
-          code={`import { healthCheck } from '@cortexmem/bridge-openclaw';
-
-const status = await healthCheck();
-console.log(status);
-// { ok: true, latency_ms: 12 }`}
           isLast
         />
       </div>
