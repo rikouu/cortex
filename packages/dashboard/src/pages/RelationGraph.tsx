@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { listRelations, createRelation, deleteRelation, search } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 interface Relation {
   id: string;
@@ -32,6 +33,7 @@ export default function RelationGraph() {
   const nodesRef = useRef<Map<string, Node>>(new Map());
   const dragRef = useRef<{ nodeId: string | null; offsetX: number; offsetY: number }>({ nodeId: null, offsetX: 0, offsetY: 0 });
   const selectedRef = useRef<string | null>(null);
+  const { t } = useI18n();
 
   const load = () => {
     listRelations().then(setRelations);
@@ -59,7 +61,7 @@ export default function RelationGraph() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this relation?')) return;
+    if (!confirm(t('relations.confirmDelete'))) return;
     await deleteRelation(id);
     load();
   };
@@ -308,26 +310,26 @@ export default function RelationGraph() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 className="page-title" style={{ marginBottom: 0 }}>Relations</h1>
-        <button className="btn primary" onClick={() => setCreating(true)}>+ New Relation</button>
+        <h1 className="page-title" style={{ marginBottom: 0 }}>{t('relations.title')}</h1>
+        <button className="btn primary" onClick={() => setCreating(true)}>{t('relations.newRelation')}</button>
       </div>
 
       {/* Filters */}
       {predicates.length > 0 && (
         <div className="toolbar">
           <select value={predicateFilter} onChange={e => setPredicateFilter(e.target.value)} style={{ width: 'auto' }}>
-            <option value="">All predicates ({predicates.length})</option>
+            <option value="">{t('relations.allPredicates', { count: predicates.length })}</option>
             {predicates.map(p => (
               <option key={p} value={p}>{p} ({relations.filter(r => r.predicate === p).length})</option>
             ))}
           </select>
           {selectedNode && (
             <button className="btn" onClick={() => { setSelectedNode(null); setNodeMemories([]); }} style={{ fontSize: 12 }}>
-              Deselect: {selectedNode}
+              {t('relations.deselect', { node: selectedNode })}
             </button>
           )}
           <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 'auto' }}>
-            {nodeSet.size} nodes, {filteredRelations.length} edges
+            {t('relations.nodeEdgeCount', { nodes: nodeSet.size, edges: filteredRelations.length })}
           </span>
         </div>
       )}
@@ -346,8 +348,8 @@ export default function RelationGraph() {
             onMouseLeave={onMouseLeave}
           />
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-            Drag nodes to rearrange. Click a node to see its connections and related memories.
-            {' '}Line thickness = confidence score.
+            {t('relations.graphHint')}
+            {' '}{t('relations.lineThickness')}
           </p>
         </div>
       )}
@@ -355,27 +357,27 @@ export default function RelationGraph() {
       {/* Selected node detail panel */}
       {selectedNode && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Entity: {selectedNode}</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('relations.entity', { name: selectedNode })}</h3>
 
           {/* Connections */}
           <div style={{ marginBottom: 16 }}>
-            <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Connections ({selectedRelations.length})</h4>
+            <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{t('relations.connections', { count: selectedRelations.length })}</h4>
             {selectedRelations.map(r => (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                 <span style={{ fontWeight: 600 }}>{r.subject}</span>
                 <span style={{ color: 'var(--primary)', fontSize: 12 }}>{r.predicate}</span>
                 <span style={{ fontWeight: 600 }}>{r.object}</span>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>conf: {r.confidence?.toFixed(2)}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>{t('relations.conf')}: {r.confidence?.toFixed(2)}</span>
               </div>
             ))}
           </div>
 
           {/* Related memories */}
-          <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Related Memories</h4>
+          <h4 style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{t('relations.relatedMemories')}</h4>
           {loadingMemories ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading...</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('common.loading')}</div>
           ) : nodeMemories.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No memories found</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('relations.noMemories')}</div>
           ) : (
             nodeMemories.map((m: any) => (
               <div key={m.id} className="memory-card" style={{ padding: 10 }}>
@@ -392,12 +394,12 @@ export default function RelationGraph() {
 
       {/* Table view */}
       {filteredRelations.length === 0 ? (
-        <div className="empty">No relations{predicateFilter ? ` with predicate "${predicateFilter}"` : ''}</div>
+        <div className="empty">{predicateFilter ? t('relations.noRelationsFiltered', { predicate: predicateFilter }) : t('relations.noRelations')}</div>
       ) : (
         <div className="card">
           <table>
             <thead>
-              <tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th><th>Created</th><th></th></tr>
+              <tr><th>{t('relations.subject')}</th><th>{t('relations.predicate')}</th><th>{t('relations.object')}</th><th>{t('relations.confidence')}</th><th>{t('relations.created')}</th><th></th></tr>
             </thead>
             <tbody>
               {filteredRelations.map(r => (
@@ -426,28 +428,28 @@ export default function RelationGraph() {
       {creating && (
         <div className="modal-overlay" onClick={() => setCreating(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>New Relation</h2>
+            <h2>{t('relations.newRelationTitle')}</h2>
             <div className="form-group">
-              <label>Subject</label>
-              <input value={newRel.subject} onChange={e => setNewRel({ ...newRel, subject: e.target.value })} placeholder="e.g. Harry" />
+              <label>{t('relations.subject')}</label>
+              <input value={newRel.subject} onChange={e => setNewRel({ ...newRel, subject: e.target.value })} placeholder={t('relations.subjectPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Predicate</label>
-              <input value={newRel.predicate} onChange={e => setNewRel({ ...newRel, predicate: e.target.value })} placeholder="e.g. uses" />
+              <label>{t('relations.predicate')}</label>
+              <input value={newRel.predicate} onChange={e => setNewRel({ ...newRel, predicate: e.target.value })} placeholder={t('relations.predicatePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Object</label>
-              <input value={newRel.object} onChange={e => setNewRel({ ...newRel, object: e.target.value })} placeholder="e.g. OpenClaw" />
+              <label>{t('relations.object')}</label>
+              <input value={newRel.object} onChange={e => setNewRel({ ...newRel, object: e.target.value })} placeholder={t('relations.objectPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Confidence ({newRel.confidence.toFixed(2)})</label>
+              <label>{t('relations.confidence')} ({newRel.confidence.toFixed(2)})</label>
               <input type="range" min="0" max="1" step="0.05" value={newRel.confidence}
                 onChange={e => setNewRel({ ...newRel, confidence: parseFloat(e.target.value) })} />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setCreating(false)}>Cancel</button>
+              <button className="btn" onClick={() => setCreating(false)}>{t('common.cancel')}</button>
               <button className="btn primary" onClick={handleCreate}
-                disabled={!newRel.subject || !newRel.predicate || !newRel.object}>Create</button>
+                disabled={!newRel.subject || !newRel.predicate || !newRel.object}>{t('common.create')}</button>
             </div>
           </div>
         </div>

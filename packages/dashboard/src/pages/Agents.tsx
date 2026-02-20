@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listAgents, createAgent } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 const AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$|^[a-z0-9]{2}$/;
 
@@ -13,6 +14,7 @@ export default function Agents() {
   const [formError, setFormError] = useState('');
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const load = () => {
     setLoading(true);
@@ -26,11 +28,11 @@ export default function Agents() {
 
   const handleCreate = async () => {
     if (!form.id || !form.name) {
-      setFormError('ID and Name are required');
+      setFormError(t('agents.idNameRequired'));
       return;
     }
     if (!AGENT_ID_RE.test(form.id)) {
-      setFormError('ID must be 2-64 chars, lowercase alphanumeric with hyphens/underscores');
+      setFormError(t('agents.idFormatError'));
       return;
     }
     setCreating(true);
@@ -47,14 +49,14 @@ export default function Agents() {
     }
   };
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>Error: {error}</div>;
-  if (loading) return <div className="loading">Loading...</div>;
+  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (loading) return <div className="loading">{t('common.loading')}</div>;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Agents</h1>
-        <button className="btn primary" onClick={() => setShowModal(true)}>+ New Agent</button>
+        <h1 className="page-title" style={{ margin: 0 }}>{t('agents.title')}</h1>
+        <button className="btn primary" onClick={() => setShowModal(true)}>{t('agents.newAgent')}</button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340, 1fr))', gap: 16 }}>
@@ -79,7 +81,7 @@ export default function Agents() {
                 <div style={{ display: 'flex', gap: 6 }}>
                   {hasCustomConfig && (
                     <span className="badge" style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc', fontSize: 10 }}>
-                      Custom Config
+                      {t('agents.customConfig')}
                     </span>
                   )}
                 </div>
@@ -93,7 +95,7 @@ export default function Agents() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa', fontSize: 11 }}>
-                  {a.memory_count} memories
+                  {t('agents.memoriesCount', { count: a.memory_count })}
                 </span>
               </div>
             </div>
@@ -103,7 +105,7 @@ export default function Agents() {
 
       {agents.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-          No agents yet. Create your first agent to get started.
+          {t('agents.noAgents')}
         </div>
       )}
 
@@ -120,10 +122,10 @@ export default function Agents() {
             padding: 24, width: 420, maxWidth: '90vw', zIndex: 101,
             boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
           }}>
-            <h3 style={{ marginTop: 0, marginBottom: 16 }}>Create New Agent</h3>
+            <h3 style={{ marginTop: 0, marginBottom: 16 }}>{t('agents.createTitle')}</h3>
 
             <div className="form-group">
-              <label>Agent ID</label>
+              <label>{t('agents.agentId')}</label>
               <input
                 type="text"
                 value={form.id}
@@ -131,15 +133,15 @@ export default function Agents() {
                 onChange={e => setForm(f => ({ ...f, id: e.target.value.toLowerCase() }))}
               />
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Lowercase letters, numbers, hyphens, underscores. 2-64 characters.
+                {t('agents.agentIdHint')}
               </div>
               {form.id && !AGENT_ID_RE.test(form.id) && (
-                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>Invalid ID format</div>
+                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>{t('agents.invalidId')}</div>
               )}
             </div>
 
             <div className="form-group">
-              <label>Name</label>
+              <label>{t('agents.name')}</label>
               <input
                 type="text"
                 value={form.name}
@@ -149,10 +151,10 @@ export default function Agents() {
             </div>
 
             <div className="form-group">
-              <label>Description <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>optional</span></label>
+              <label>{t('agents.description')} <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('common.optional')}</span></label>
               <textarea
                 value={form.description}
-                placeholder="What does this agent do?"
+                placeholder={t('agents.whatDoes')}
                 rows={3}
                 style={{ width: '100%', resize: 'vertical' }}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -164,9 +166,9 @@ export default function Agents() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="btn" onClick={() => setShowModal(false)}>{t('common.cancel')}</button>
               <button className="btn primary" onClick={handleCreate} disabled={creating}>
-                {creating ? 'Creating...' : 'Create'}
+                {creating ? t('common.creating') : t('common.create')}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { getStats, getHealth, listMemories } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 // ─── Mini Canvas Bar Chart ──────────────────────────────────────────────────
 
@@ -63,8 +64,9 @@ function BarChart({ data, colors, height = 160 }: { data: { label: string; value
 // ─── Horizontal Distribution Bar ────────────────────────────────────────────
 
 function DistributionBar({ segments }: { segments: { label: string; value: number; color: string }[] }) {
+  const { t } = useI18n();
   const total = segments.reduce((s, seg) => s + seg.value, 0);
-  if (total === 0) return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No data</div>;
+  if (total === 0) return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('common.noData')}</div>;
   return (
     <div>
       <div style={{ display: 'flex', height: 28, borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
@@ -160,6 +162,7 @@ export default function Stats() {
   const [health, setHealth] = useState<any>(null);
   const [error, setError] = useState('');
   const [allMemories, setAllMemories] = useState<any[]>([]);
+  const { t } = useI18n();
 
   useEffect(() => {
     Promise.all([getStats(), getHealth()])
@@ -172,16 +175,16 @@ export default function Stats() {
       .catch(() => {});
   }, []);
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>Error: {error}</div>;
-  if (!stats) return <div className="loading">Loading...</div>;
+  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (!stats) return <div className="loading">{t('common.loading')}</div>;
 
   const layers = stats.layers || {};
   const categories = stats.categories || {};
 
   const layerSegments = [
-    { label: 'Core', value: layers.core || 0, color: '#818cf8' },
-    { label: 'Working', value: layers.working || 0, color: '#4ade80' },
-    { label: 'Archive', value: layers.archive || 0, color: '#a1a1aa' },
+    { label: t('stats.core'), value: layers.core || 0, color: '#818cf8' },
+    { label: t('stats.working'), value: layers.working || 0, color: '#4ade80' },
+    { label: t('stats.archive'), value: layers.archive || 0, color: '#a1a1aa' },
   ];
 
   const catData = Object.entries(categories).map(([cat, cnt]) => ({
@@ -205,46 +208,46 @@ export default function Stats() {
 
   return (
     <div>
-      <h1 className="page-title">Dashboard</h1>
+      <h1 className="page-title">{t('stats.title')}</h1>
 
       {/* Stat Cards */}
       <div className="card-grid">
         <div className="stat-card">
-          <div className="label">Total Memories</div>
+          <div className="label">{t('stats.totalMemories')}</div>
           <div className="value">{stats.total_memories}</div>
         </div>
         <div className="stat-card">
-          <div className="label">Core</div>
+          <div className="label">{t('stats.core')}</div>
           <div className="value" style={{ color: '#818cf8' }}>{layers.core || 0}</div>
         </div>
         <div className="stat-card">
-          <div className="label">Working</div>
+          <div className="label">{t('stats.working')}</div>
           <div className="value" style={{ color: '#4ade80' }}>{layers.working || 0}</div>
         </div>
         <div className="stat-card">
-          <div className="label">Archive</div>
+          <div className="label">{t('stats.archive')}</div>
           <div className="value" style={{ color: '#a1a1aa' }}>{layers.archive || 0}</div>
         </div>
         <div className="stat-card">
-          <div className="label">Relations</div>
+          <div className="label">{t('stats.relations')}</div>
           <div className="value">{stats.total_relations}</div>
         </div>
         <div className="stat-card">
-          <div className="label">Access Logs</div>
+          <div className="label">{t('stats.accessLogs')}</div>
           <div className="value">{stats.total_access_logs}</div>
         </div>
       </div>
 
       {/* Layer Distribution */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>Layer Distribution</h3>
+        <h3 style={{ marginBottom: 12 }}>{t('stats.layerDistribution')}</h3>
         <DistributionBar segments={layerSegments} />
       </div>
 
       {/* Category Chart */}
       {catData.length > 0 && (
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Categories</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('stats.categories')}</h3>
           <BarChart data={catData} colors={catColors} height={180} />
         </div>
       )}
@@ -252,16 +255,16 @@ export default function Stats() {
       {/* Score Distributions */}
       {allMemories.length > 0 && (
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Score Distributions</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('stats.scoreDistributions')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
             <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 12 }}>
-              <Histogram values={importanceValues} label="Importance" color="#6366f1" />
+              <Histogram values={importanceValues} label={t('stats.importance')} color="#6366f1" />
             </div>
             <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 12 }}>
-              <Histogram values={decayValues} label="Decay Score" color="#f59e0b" />
+              <Histogram values={decayValues} label={t('stats.decayScore')} color="#f59e0b" />
             </div>
             <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 12 }}>
-              <Histogram values={confidenceValues} label="Confidence" color="#22c55e" />
+              <Histogram values={confidenceValues} label={t('stats.confidence')} color="#22c55e" />
             </div>
           </div>
         </div>
@@ -270,13 +273,13 @@ export default function Stats() {
       {/* System Health */}
       {health && (
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>System Health</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('stats.systemHealth')}</h3>
           <table>
             <tbody>
-              <tr><td>Status</td><td><span style={{ color: health.status === 'ok' ? 'var(--success)' : 'var(--danger)' }}>● {health.status}</span></td></tr>
-              <tr><td>Version</td><td>{health.version}</td></tr>
-              <tr><td>Uptime</td><td>{formatUptime(health.uptime)}</td></tr>
-              <tr><td>Timestamp</td><td>{health.timestamp}</td></tr>
+              <tr><td>{t('stats.status')}</td><td><span style={{ color: health.status === 'ok' ? 'var(--success)' : 'var(--danger)' }}>● {health.status}</span></td></tr>
+              <tr><td>{t('stats.version')}</td><td>{health.version}</td></tr>
+              <tr><td>{t('stats.uptime')}</td><td>{formatUptime(health.uptime)}</td></tr>
+              <tr><td>{t('stats.timestamp')}</td><td>{health.timestamp}</td></tr>
             </tbody>
           </table>
         </div>

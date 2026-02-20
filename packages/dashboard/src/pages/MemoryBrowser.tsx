@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { listMemories, createMemory, updateMemory, deleteMemory, search, triggerImport } from '../api/client.js';
 import MemoryDetail from './MemoryDetail.js';
+import { useI18n } from '../i18n/index.js';
 
 interface Memory {
   id: string;
@@ -43,11 +44,12 @@ export default function MemoryBrowser() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [newMem, setNewMem] = useState({ layer: 'core', category: 'fact', content: '', importance: 0.5 });
   const limit = 20;
+  const { t } = useI18n();
 
   useEffect(() => {
     if (toast) {
-      const t = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
     }
   }, [toast]);
 
@@ -106,7 +108,7 @@ export default function MemoryBrowser() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this memory?')) return;
+    if (!confirm(t('memories.confirmDelete'))) return;
     await deleteMemory(id);
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     load();
@@ -140,12 +142,12 @@ export default function MemoryBrowser() {
         data = { format: 'memory_md', content: importText };
       }
       const result = await triggerImport(data);
-      setToast({ message: `Imported ${result.imported} memories (${result.skipped} skipped)`, type: 'success' });
+      setToast({ message: t('memories.toastImported', { imported: result.imported, skipped: result.skipped }), type: 'success' });
       setImporting(false);
       setImportText('');
       load();
     } catch (e: any) {
-      setToast({ message: `Import failed: ${e.message}`, type: 'error' });
+      setToast({ message: t('memories.toastImportFailed', { message: e.message }), type: 'error' });
     }
   };
 
@@ -171,16 +173,16 @@ export default function MemoryBrowser() {
     const ids = [...selected];
 
     if (bulkAction === 'delete') {
-      if (!confirm(`Delete ${ids.length} memories?`)) return;
+      if (!confirm(t('memories.confirmBulkDelete', { count: ids.length }))) return;
       for (const id of ids) {
         try { await deleteMemory(id); } catch {}
       }
-      setToast({ message: `Deleted ${ids.length} memories`, type: 'success' });
+      setToast({ message: t('memories.toastDeleted', { count: ids.length }), type: 'success' });
     } else if (bulkAction === 'category') {
       for (const id of ids) {
         try { await updateMemory(id, { category: bulkCategory }); } catch {}
       }
-      setToast({ message: `Updated ${ids.length} memories to category "${bulkCategory}"`, type: 'success' });
+      setToast({ message: t('memories.toastCategoryUpdated', { count: ids.length, category: bulkCategory }), type: 'success' });
     }
 
     setSelected(new Set());
@@ -202,6 +204,14 @@ export default function MemoryBrowser() {
     return sortDir === 'desc' ? ' ↓' : ' ↑';
   };
 
+  const sortLabel = (field: SortField) => {
+    if (field === 'created_at') return t('memories.date');
+    if (field === 'access_count') return t('memories.access');
+    if (field === 'importance') return t('memories.importance');
+    if (field === 'decay_score') return t('memories.decayScore');
+    return field;
+  };
+
   return (
     <div>
       {/* Toast */}
@@ -221,37 +231,37 @@ export default function MemoryBrowser() {
       ) : (
       <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 className="page-title" style={{ marginBottom: 0 }}>Memories</h1>
+        <h1 className="page-title" style={{ marginBottom: 0 }}>{t('memories.title')}</h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn" onClick={() => setImporting(true)}>Import</button>
-          <button className="btn primary" onClick={() => setCreating(true)}>+ New Memory</button>
+          <button className="btn" onClick={() => setImporting(true)}>{t('common.import')}</button>
+          <button className="btn primary" onClick={() => setCreating(true)}>{t('memories.newMemory')}</button>
         </div>
       </div>
 
       {/* Search Bar */}
       <div className="search-bar" style={{ marginBottom: 8 }}>
         <input
-          placeholder="Search memories..."
+          placeholder={t('memories.searchPlaceholder')}
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSearch()}
         />
         {isSearchMode && (
-          <button className="btn" onClick={clearSearch}>Clear</button>
+          <button className="btn" onClick={clearSearch}>{t('common.clear')}</button>
         )}
-        <button className="btn primary" onClick={handleSearch}>Search</button>
+        <button className="btn primary" onClick={handleSearch}>{t('common.search')}</button>
       </div>
 
       {/* Filters + Sort */}
       <div className="toolbar">
         <select value={layer} onChange={e => { setLayer(e.target.value); setPage(0); }}>
-          <option value="">All Layers</option>
+          <option value="">{t('memories.allLayers')}</option>
           <option value="core">Core</option>
           <option value="working">Working</option>
           <option value="archive">Archive</option>
         </select>
         <select value={category} onChange={e => { setCategory(e.target.value); setPage(0); }}>
-          <option value="">All Categories</option>
+          <option value="">{t('memories.allCategories')}</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
@@ -266,23 +276,23 @@ export default function MemoryBrowser() {
               }}
               onClick={() => toggleSort(f)}
             >
-              {f === 'created_at' ? 'Date' : f === 'access_count' ? 'Access' : f.replace('_', ' ')}{sortIcon(f)}
+              {sortLabel(f)}{sortIcon(f)}
             </button>
           ))}
         </div>
         <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 'auto' }}>
-          {isSearchMode && 'Search: '}{total} total
+          {isSearchMode && t('memories.searchPrefix')}{t('common.total', { count: total })}
         </span>
       </div>
 
       {/* Bulk Actions */}
       {selected.size > 0 && (
         <div className="card" style={{ padding: '10px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{t('common.selected', { count: selected.size })}</span>
           <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} style={{ width: 'auto' }}>
-            <option value="">Bulk action...</option>
-            <option value="delete">Delete selected</option>
-            <option value="category">Change category</option>
+            <option value="">{t('memories.bulkAction')}</option>
+            <option value="delete">{t('memories.deleteSelected')}</option>
+            <option value="category">{t('memories.changeCategory')}</option>
           </select>
           {bulkAction === 'category' && (
             <select value={bulkCategory} onChange={e => setBulkCategory(e.target.value)} style={{ width: 'auto' }}>
@@ -290,22 +300,22 @@ export default function MemoryBrowser() {
             </select>
           )}
           {bulkAction && (
-            <button className="btn primary" style={{ fontSize: 12, padding: '4px 12px' }} onClick={handleBulkAction}>Apply</button>
+            <button className="btn primary" style={{ fontSize: 12, padding: '4px 12px' }} onClick={handleBulkAction}>{t('common.apply')}</button>
           )}
-          <button className="btn" style={{ fontSize: 12, padding: '4px 12px' }} onClick={() => setSelected(new Set())}>Clear</button>
+          <button className="btn" style={{ fontSize: 12, padding: '4px 12px' }} onClick={() => setSelected(new Set())}>{t('common.clear')}</button>
         </div>
       )}
 
       {/* Memory List */}
       {memories.length === 0 ? (
-        <div className="empty">No memories found</div>
+        <div className="empty">{t('memories.noMemories')}</div>
       ) : (
         <>
           {/* Select all */}
           <div style={{ padding: '4px 0 8px', fontSize: 12 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-muted)' }}>
               <input type="checkbox" checked={selected.size === memories.length && memories.length > 0} onChange={toggleSelectAll} style={{ width: 'auto' }} />
-              Select all on this page
+              {t('memories.selectAll')}
             </label>
           </div>
           {memories.map(m => (
@@ -323,14 +333,14 @@ export default function MemoryBrowser() {
               </div>
               <div className="content">{m.content}</div>
               <div className="meta">
-                <span>Imp: {m.importance?.toFixed(2)}</span>
-                <span>Decay: {m.decay_score?.toFixed(2)}</span>
-                <span>Access: {m.access_count}</span>
-                <span>Agent: {m.agent_id}</span>
+                <span>{t('memories.imp')}: {m.importance?.toFixed(2)}</span>
+                <span>{t('memories.decay')}: {m.decay_score?.toFixed(2)}</span>
+                <span>{t('memories.access')}: {m.access_count}</span>
+                <span>{t('memories.agent')}: {m.agent_id}</span>
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                  <button className="btn" onClick={() => setDetailId(m.id)} style={{ fontSize: 12 }}>View</button>
-                  <button className="btn" onClick={() => setEditing({ ...m })}>Edit</button>
-                  <button className="btn danger" onClick={() => handleDelete(m.id)}>Delete</button>
+                  <button className="btn" onClick={() => setDetailId(m.id)} style={{ fontSize: 12 }}>{t('common.view')}</button>
+                  <button className="btn" onClick={() => setEditing({ ...m })}>{t('common.edit')}</button>
+                  <button className="btn danger" onClick={() => handleDelete(m.id)}>{t('common.delete')}</button>
                 </div>
               </div>
             </div>
@@ -341,9 +351,9 @@ export default function MemoryBrowser() {
       {/* Pagination */}
       {total > limit && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
-          <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>Prev</button>
-          <span style={{ padding: '8px 16px', color: 'var(--text-muted)' }}>Page {page + 1} of {Math.ceil(total / limit)}</span>
-          <button className="btn" disabled={(page + 1) * limit >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>{t('common.prev')}</button>
+          <span style={{ padding: '8px 16px', color: 'var(--text-muted)' }}>{t('common.page', { current: page + 1, total: Math.ceil(total / limit) })}</span>
+          <button className="btn" disabled={(page + 1) * limit >= total} onClick={() => setPage(p => p + 1)}>{t('common.next')}</button>
         </div>
       )}
 
@@ -351,25 +361,25 @@ export default function MemoryBrowser() {
       {editing && (
         <div className="modal-overlay" onClick={() => setEditing(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Edit Memory</h2>
+            <h2>{t('memories.editMemory')}</h2>
             <div className="form-group">
-              <label>Category</label>
+              <label>{t('memories.category')}</label>
               <select value={editing.category} onChange={e => setEditing({ ...editing, category: e.target.value })}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label>Content</label>
+              <label>{t('memories.content')}</label>
               <textarea rows={4} value={editing.content} onChange={e => setEditing({ ...editing, content: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Importance ({editing.importance?.toFixed(2)})</label>
+              <label>{t('memories.importanceLabel')} ({editing.importance?.toFixed(2)})</label>
               <input type="range" min="0" max="1" step="0.05" value={editing.importance}
                 onChange={e => setEditing({ ...editing, importance: parseFloat(e.target.value) })} />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="btn primary" onClick={handleSaveEdit}>Save</button>
+              <button className="btn" onClick={() => setEditing(null)}>{t('common.cancel')}</button>
+              <button className="btn primary" onClick={handleSaveEdit}>{t('common.save')}</button>
             </div>
           </div>
         </div>
@@ -379,32 +389,32 @@ export default function MemoryBrowser() {
       {creating && (
         <div className="modal-overlay" onClick={() => setCreating(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>New Memory</h2>
+            <h2>{t('memories.newMemoryTitle')}</h2>
             <div className="form-group">
-              <label>Layer</label>
+              <label>{t('memories.layer')}</label>
               <select value={newMem.layer} onChange={e => setNewMem({ ...newMem, layer: e.target.value })}>
                 <option value="core">Core</option>
                 <option value="working">Working</option>
               </select>
             </div>
             <div className="form-group">
-              <label>Category</label>
+              <label>{t('memories.category')}</label>
               <select value={newMem.category} onChange={e => setNewMem({ ...newMem, category: e.target.value })}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label>Content</label>
+              <label>{t('memories.content')}</label>
               <textarea rows={4} value={newMem.content} onChange={e => setNewMem({ ...newMem, content: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Importance ({newMem.importance.toFixed(2)})</label>
+              <label>{t('memories.importanceLabel')} ({newMem.importance.toFixed(2)})</label>
               <input type="range" min="0" max="1" step="0.05" value={newMem.importance}
                 onChange={e => setNewMem({ ...newMem, importance: parseFloat(e.target.value) })} />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setCreating(false)}>Cancel</button>
-              <button className="btn primary" onClick={handleCreate} disabled={!newMem.content.trim()}>Create</button>
+              <button className="btn" onClick={() => setCreating(false)}>{t('common.cancel')}</button>
+              <button className="btn primary" onClick={handleCreate} disabled={!newMem.content.trim()}>{t('common.create')}</button>
             </div>
           </div>
         </div>
@@ -414,16 +424,16 @@ export default function MemoryBrowser() {
       {importing && (
         <div className="modal-overlay" onClick={() => setImporting(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Import Memories</h2>
+            <h2>{t('memories.importMemories')}</h2>
             <div className="form-group">
-              <label>Format</label>
+              <label>{t('memories.format')}</label>
               <select value={importFormat} onChange={e => setImportFormat(e.target.value)}>
-                <option value="json">JSON</option>
-                <option value="memory_md">MEMORY.md (Markdown)</option>
+                <option value="json">{t('memories.jsonFormat')}</option>
+                <option value="memory_md">{t('memories.markdownFormat')}</option>
               </select>
             </div>
             <div className="form-group">
-              <label>{importFormat === 'json' ? 'Paste JSON array or object with "memories" key' : 'Paste MEMORY.md content'}</label>
+              <label>{importFormat === 'json' ? t('memories.jsonPlaceholderLabel') : t('memories.mdPlaceholderLabel')}</label>
               <textarea
                 rows={10}
                 value={importText}
@@ -435,8 +445,8 @@ export default function MemoryBrowser() {
               />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => setImporting(false)}>Cancel</button>
-              <button className="btn primary" onClick={handleImport} disabled={!importText.trim()}>Import</button>
+              <button className="btn" onClick={() => setImporting(false)}>{t('common.cancel')}</button>
+              <button className="btn primary" onClick={handleImport} disabled={!importText.trim()}>{t('common.import')}</button>
             </div>
           </div>
         </div>

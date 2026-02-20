@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getConfig, updateConfig, triggerExport, triggerReindex, triggerImport } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 type SectionKey = 'llm' | 'search' | 'lifecycle' | 'layers' | 'gate';
 
@@ -136,6 +137,7 @@ export default function Settings() {
   const [editingSection, setEditingSection] = useState<SectionKey | null>(null);
   const [draft, setDraft] = useState<any>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     getConfig().then(setConfig).catch(e => setError(e.message));
@@ -150,7 +152,7 @@ export default function Settings() {
   const handleExport = async () => {
     try {
       await triggerExport();
-      setToast({ message: 'Markdown export completed!', type: 'success' });
+      setToast({ message: t('settings.toastMarkdownExported'), type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
     }
@@ -301,9 +303,9 @@ export default function Settings() {
       setConfig(refreshed);
       setEditingSection(null);
       setDraft({});
-      setToast({ message: 'Configuration saved successfully', type: 'success' });
+      setToast({ message: t('settings.toastConfigSaved'), type: 'success' });
     } catch (e: any) {
-      setToast({ message: `Save failed: ${e.message}`, type: 'error' });
+      setToast({ message: t('settings.toastSaveFailed', { message: e.message }), type: 'error' });
     }
   };
 
@@ -331,12 +333,12 @@ export default function Settings() {
       <h3>{title}</h3>
       {isEditing(section) ? (
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn" onClick={cancelEdit}>Cancel</button>
-          <button className="btn primary" onClick={() => saveSection(section)}>Save</button>
+          <button className="btn" onClick={cancelEdit}>{t('common.cancel')}</button>
+          <button className="btn primary" onClick={() => saveSection(section)}>{t('common.save')}</button>
         </div>
       ) : (
         <button className="btn" onClick={() => startEdit(section)} disabled={editingSection !== null && editingSection !== section}>
-          Edit
+          {t('common.edit')}
         </button>
       )}
     </div>
@@ -365,7 +367,7 @@ export default function Settings() {
                 left: val ? 20 : 2, transition: 'left 0.2s',
               }} />
             </div>
-            <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{val ? 'On' : 'Off'}</span>
+            <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{val ? t('common.on') : t('common.off')}</span>
           </label>
         </td>
       </tr>
@@ -437,7 +439,7 @@ export default function Settings() {
 
         {/* Provider */}
         <div className="form-group">
-          <label>Provider</label>
+          <label>{t('settings.provider')}</label>
           <select value={provider} onChange={e => handleProviderChange(e.target.value)}>
             {Object.entries(providerMap).map(([key, p]) => (
               <option key={key} value={key}>{p.label}</option>
@@ -449,7 +451,7 @@ export default function Settings() {
           <>
             {/* Model */}
             <div className="form-group">
-              <label>Model</label>
+              <label>{t('settings.model')}</label>
               {models.length > 0 ? (
                 <>
                   <select
@@ -457,13 +459,13 @@ export default function Settings() {
                     onChange={e => handleModelSelectChange(e.target.value)}
                   >
                     {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    <option value={CUSTOM_MODEL}>Custom...</option>
+                    <option value={CUSTOM_MODEL}>{t('settings.customModel')}</option>
                   </select>
                   {isCustomModel && (
                     <input
                       type="text"
                       value={d.customModel ?? ''}
-                      placeholder="Enter custom model name"
+                      placeholder={t('settings.enterCustomModel')}
                       style={{ marginTop: 8 }}
                       onChange={e => updateDraft(`${prefix}.customModel`, e.target.value)}
                     />
@@ -473,7 +475,7 @@ export default function Settings() {
                 <input
                   type="text"
                   value={d.customModel ?? d.model ?? ''}
-                  placeholder="Enter model name"
+                  placeholder={t('settings.enterModel')}
                   onChange={e => {
                     updateDraft(`${prefix}.model`, e.target.value);
                     updateDraft(`${prefix}.customModel`, e.target.value);
@@ -485,7 +487,7 @@ export default function Settings() {
             {/* Dimensions (embedding only) */}
             {d.dimensions !== undefined && (
               <div className="form-group">
-                <label>Dimensions</label>
+                <label>{t('settings.dimensions')}</label>
                 <input
                   type="number"
                   value={d.dimensions ?? ''}
@@ -498,9 +500,9 @@ export default function Settings() {
             {preset?.envKey && (
               <div className="form-group">
                 <label>
-                  API Key
+                  {t('settings.apiKey')}
                   {d.hasApiKey && (
-                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--success)' }}>configured</span>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--success)' }}>{t('common.configured')}</span>
                   )}
                   {!d.hasApiKey && preset.envKey && (
                     <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>env: {preset.envKey}</span>
@@ -509,7 +511,7 @@ export default function Settings() {
                 <input
                   type="password"
                   value={d.apiKey ?? ''}
-                  placeholder={d.hasApiKey ? 'Leave empty to keep current key' : `Enter ${preset.envKey} or leave empty to use env`}
+                  placeholder={d.hasApiKey ? t('settings.keepCurrentKey') : t('settings.enterKeyOrEnv', { envKey: preset.envKey })}
                   onChange={e => updateDraft(`${prefix}.apiKey`, e.target.value)}
                 />
               </div>
@@ -518,8 +520,8 @@ export default function Settings() {
             {/* Base URL */}
             <div className="form-group">
               <label>
-                Base URL
-                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>optional</span>
+                {t('settings.baseUrl')}
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>{t('common.optional')}</span>
               </label>
               <input
                 type="text"
@@ -536,12 +538,12 @@ export default function Settings() {
 
   // ─── Render ────────────────────────────────────────────────────────────
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>Error: {error}</div>;
-  if (!config) return <div className="loading">Loading...</div>;
+  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (!config) return <div className="loading">{t('common.loading')}</div>;
 
   return (
     <div>
-      <h1 className="page-title">Settings</h1>
+      <h1 className="page-title">{t('settings.title')}</h1>
 
       {/* Toast */}
       {toast && (
@@ -559,35 +561,35 @@ export default function Settings() {
       {/* ── Server (read-only) ── */}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3>Server Configuration</h3>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Read-only (requires restart)</span>
+          <h3>{t('settings.serverConfig')}</h3>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.readOnly')}</span>
         </div>
         <table>
           <tbody>
-            <tr><td>Port</td><td>{config.port}</td></tr>
-            <tr><td>Host</td><td>{config.host}</td></tr>
-            <tr><td>DB Path</td><td>{config.storage?.dbPath}</td></tr>
-            <tr><td>WAL Mode</td><td>{config.storage?.walMode ? 'On' : 'Off'}</td></tr>
+            <tr><td>{t('settings.port')}</td><td>{config.port}</td></tr>
+            <tr><td>{t('settings.host')}</td><td>{config.host}</td></tr>
+            <tr><td>{t('settings.dbPath')}</td><td>{config.storage?.dbPath}</td></tr>
+            <tr><td>{t('settings.walMode')}</td><td>{config.storage?.walMode ? t('common.on') : t('common.off')}</td></tr>
           </tbody>
         </table>
       </div>
 
       {/* ── LLM & Embedding ── */}
       <div className="card">
-        {sectionHeader('LLM & Embedding', 'llm')}
+        {sectionHeader(t('settings.llmEmbedding'), 'llm')}
         {isEditing('llm') ? (
           <>
-            {renderProviderBlock('Extraction LLM', 'extraction', LLM_PROVIDERS)}
-            {renderProviderBlock('Lifecycle LLM', 'lifecycle', LLM_PROVIDERS)}
-            {renderProviderBlock('Embedding', 'embedding', EMBEDDING_PROVIDERS)}
+            {renderProviderBlock(t('settings.extractionLlm'), 'extraction', LLM_PROVIDERS)}
+            {renderProviderBlock(t('settings.lifecycleLlm'), 'lifecycle', LLM_PROVIDERS)}
+            {renderProviderBlock(t('settings.embedding'), 'embedding', EMBEDDING_PROVIDERS)}
           </>
         ) : (
           <table>
             <tbody>
-              <tr><td>Extraction LLM</td><td>{config.llm?.extraction?.provider} / {config.llm?.extraction?.model}</td></tr>
-              <tr><td>Lifecycle LLM</td><td>{config.llm?.lifecycle?.provider} / {config.llm?.lifecycle?.model}</td></tr>
-              <tr><td>Embedding</td><td>{config.embedding?.provider} / {config.embedding?.model}</td></tr>
-              <tr><td>Embedding Dimensions</td><td>{config.embedding?.dimensions}</td></tr>
+              <tr><td>{t('settings.extractionLlm')}</td><td>{config.llm?.extraction?.provider} / {config.llm?.extraction?.model}</td></tr>
+              <tr><td>{t('settings.lifecycleLlm')}</td><td>{config.llm?.lifecycle?.provider} / {config.llm?.lifecycle?.model}</td></tr>
+              <tr><td>{t('settings.embedding')}</td><td>{config.embedding?.provider} / {config.embedding?.model}</td></tr>
+              <tr><td>{t('settings.embeddingDimensions')}</td><td>{config.embedding?.dimensions}</td></tr>
             </tbody>
           </table>
         )}
@@ -595,22 +597,22 @@ export default function Settings() {
 
       {/* ── Search ── */}
       <div className="card">
-        {sectionHeader('Search', 'search')}
+        {sectionHeader(t('settings.searchTitle'), 'search')}
         <table>
           <tbody>
             {isEditing('search') ? (
               <>
-                {renderToggle('Hybrid Search', 'hybrid')}
-                {renderInput('Vector Weight', 'vectorWeight', 'number')}
-                {renderInput('Text Weight', 'textWeight', 'number')}
-                {renderInput('Recency Boost Window', 'recencyBoostWindow')}
+                {renderToggle(t('settings.hybridSearch'), 'hybrid')}
+                {renderInput(t('settings.vectorWeight'), 'vectorWeight', 'number')}
+                {renderInput(t('settings.textWeight'), 'textWeight', 'number')}
+                {renderInput(t('settings.recencyBoostWindow'), 'recencyBoostWindow')}
               </>
             ) : (
               <>
-                <tr><td>Hybrid Search</td><td>{config.search?.hybrid ? 'On' : 'Off'}</td></tr>
-                <tr><td>Vector Weight</td><td>{config.search?.vectorWeight}</td></tr>
-                <tr><td>Text Weight</td><td>{config.search?.textWeight}</td></tr>
-                <tr><td>Recency Boost Window</td><td>{config.search?.recencyBoostWindow}</td></tr>
+                <tr><td>{t('settings.hybridSearch')}</td><td>{config.search?.hybrid ? t('common.on') : t('common.off')}</td></tr>
+                <tr><td>{t('settings.vectorWeight')}</td><td>{config.search?.vectorWeight}</td></tr>
+                <tr><td>{t('settings.textWeight')}</td><td>{config.search?.textWeight}</td></tr>
+                <tr><td>{t('settings.recencyBoostWindow')}</td><td>{config.search?.recencyBoostWindow}</td></tr>
               </>
             )}
           </tbody>
@@ -619,22 +621,22 @@ export default function Settings() {
 
       {/* ── Lifecycle ── */}
       <div className="card">
-        {sectionHeader('Lifecycle', 'lifecycle')}
+        {sectionHeader(t('settings.lifecycleTitle'), 'lifecycle')}
         <table>
           <tbody>
             {isEditing('lifecycle') ? (
               <>
-                {renderInput('Schedule', 'schedule')}
-                {renderInput('Promotion Threshold', 'promotionThreshold', 'number')}
-                {renderInput('Archive Threshold', 'archiveThreshold', 'number')}
-                {renderInput('Decay Lambda', 'decayLambda', 'number')}
+                {renderInput(t('settings.scheduleLabel'), 'schedule')}
+                {renderInput(t('settings.promotionThreshold'), 'promotionThreshold', 'number')}
+                {renderInput(t('settings.archiveThreshold'), 'archiveThreshold', 'number')}
+                {renderInput(t('settings.decayLambda'), 'decayLambda', 'number')}
               </>
             ) : (
               <>
-                <tr><td>Schedule</td><td>{config.lifecycle?.schedule}</td></tr>
-                <tr><td>Promotion Threshold</td><td>{config.lifecycle?.promotionThreshold}</td></tr>
-                <tr><td>Archive Threshold</td><td>{config.lifecycle?.archiveThreshold}</td></tr>
-                <tr><td>Decay Lambda</td><td>{config.lifecycle?.decayLambda}</td></tr>
+                <tr><td>{t('settings.scheduleLabel')}</td><td>{config.lifecycle?.schedule}</td></tr>
+                <tr><td>{t('settings.promotionThreshold')}</td><td>{config.lifecycle?.promotionThreshold}</td></tr>
+                <tr><td>{t('settings.archiveThreshold')}</td><td>{config.lifecycle?.archiveThreshold}</td></tr>
+                <tr><td>{t('settings.decayLambda')}</td><td>{config.lifecycle?.decayLambda}</td></tr>
               </>
             )}
           </tbody>
@@ -643,22 +645,22 @@ export default function Settings() {
 
       {/* ── Layers ── */}
       <div className="card">
-        {sectionHeader('Layers', 'layers')}
+        {sectionHeader(t('settings.layersTitle'), 'layers')}
         <table>
           <tbody>
             {isEditing('layers') ? (
               <>
-                {renderInput('Working TTL', 'working.ttl')}
-                {renderInput('Core Max Entries', 'core.maxEntries', 'number')}
-                {renderInput('Archive TTL', 'archive.ttl')}
-                {renderToggle('Archive Compress Back', 'archive.compressBackToCore')}
+                {renderInput(t('settings.workingTtl'), 'working.ttl')}
+                {renderInput(t('settings.coreMaxEntries'), 'core.maxEntries', 'number')}
+                {renderInput(t('settings.archiveTtl'), 'archive.ttl')}
+                {renderToggle(t('settings.archiveCompressBack'), 'archive.compressBackToCore')}
               </>
             ) : (
               <>
-                <tr><td>Working TTL</td><td>{config.layers?.working?.ttl}</td></tr>
-                <tr><td>Core Max Entries</td><td>{config.layers?.core?.maxEntries}</td></tr>
-                <tr><td>Archive TTL</td><td>{config.layers?.archive?.ttl}</td></tr>
-                <tr><td>Archive Compress Back</td><td>{config.layers?.archive?.compressBackToCore ? 'On' : 'Off'}</td></tr>
+                <tr><td>{t('settings.workingTtl')}</td><td>{config.layers?.working?.ttl}</td></tr>
+                <tr><td>{t('settings.coreMaxEntries')}</td><td>{config.layers?.core?.maxEntries}</td></tr>
+                <tr><td>{t('settings.archiveTtl')}</td><td>{config.layers?.archive?.ttl}</td></tr>
+                <tr><td>{t('settings.archiveCompressBack')}</td><td>{config.layers?.archive?.compressBackToCore ? t('common.on') : t('common.off')}</td></tr>
               </>
             )}
           </tbody>
@@ -667,18 +669,18 @@ export default function Settings() {
 
       {/* ── Gate ── */}
       <div className="card">
-        {sectionHeader('Gate', 'gate')}
+        {sectionHeader(t('settings.gateTitle'), 'gate')}
         <table>
           <tbody>
             {isEditing('gate') ? (
               <>
-                {renderInput('Max Injection Tokens', 'maxInjectionTokens', 'number')}
-                {renderToggle('Skip Small Talk', 'skipSmallTalk')}
+                {renderInput(t('settings.maxInjectionTokens'), 'maxInjectionTokens', 'number')}
+                {renderToggle(t('settings.skipSmallTalk'), 'skipSmallTalk')}
               </>
             ) : (
               <>
-                <tr><td>Max Injection Tokens</td><td>{config.gate?.maxInjectionTokens}</td></tr>
-                <tr><td>Skip Small Talk</td><td>{config.gate?.skipSmallTalk ? 'On' : 'Off'}</td></tr>
+                <tr><td>{t('settings.maxInjectionTokens')}</td><td>{config.gate?.maxInjectionTokens}</td></tr>
+                <tr><td>{t('settings.skipSmallTalk')}</td><td>{config.gate?.skipSmallTalk ? t('common.on') : t('common.off')}</td></tr>
               </>
             )}
           </tbody>
@@ -687,11 +689,11 @@ export default function Settings() {
 
       {/* ── Data Management ── */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>Data Management</h3>
+        <h3 style={{ marginBottom: 12 }}>{t('settings.dataManagement')}</h3>
 
         {/* Export */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Export</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.exportLabel')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" onClick={async () => {
               try {
@@ -700,38 +702,38 @@ export default function Settings() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a'); a.href = url; a.download = `cortex-export-${new Date().toISOString().slice(0, 10)}.json`; a.click();
                 URL.revokeObjectURL(url);
-                setToast({ message: 'JSON exported', type: 'success' });
+                setToast({ message: t('settings.toastJsonExported'), type: 'success' });
               } catch (e: any) { setToast({ message: e.message, type: 'error' }); }
-            }}>Export JSON</button>
+            }}>{t('settings.exportJson')}</button>
             <button className="btn" onClick={async () => {
               try {
                 await triggerExport('markdown');
-                setToast({ message: 'Markdown export completed', type: 'success' });
+                setToast({ message: t('settings.toastMarkdownExported'), type: 'success' });
               } catch (e: any) { setToast({ message: e.message, type: 'error' }); }
-            }}>Export Markdown</button>
+            }}>{t('settings.exportMarkdown')}</button>
           </div>
         </div>
 
         {/* Reindex */}
         <div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Maintenance</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.maintenance')}</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button className="btn" onClick={async () => {
-              if (!confirm('Rebuild all vector embeddings? This may take a while for large databases.')) return;
+              if (!confirm(t('settings.confirmReindex'))) return;
               try {
-                setToast({ message: 'Reindex started...', type: 'success' });
+                setToast({ message: t('settings.toastReindexStarted'), type: 'success' });
                 const result = await triggerReindex();
-                setToast({ message: `Reindex complete: ${result.indexed}/${result.total} indexed (${result.errors} errors)`, type: result.errors > 0 ? 'error' : 'success' });
-              } catch (e: any) { setToast({ message: `Reindex failed: ${e.message}`, type: 'error' }); }
-            }}>Rebuild Vector Index</button>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Rebuilds all embedding vectors. Use after changing embedding model.</span>
+                setToast({ message: t('settings.toastReindexComplete', { indexed: result.indexed, total: result.total, errors: result.errors }), type: result.errors > 0 ? 'error' : 'success' });
+              } catch (e: any) { setToast({ message: t('settings.toastReindexFailed', { message: e.message }), type: 'error' }); }
+            }}>{t('settings.rebuildIndex')}</button>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.rebuildHint')}</span>
           </div>
         </div>
       </div>
 
       {/* ── Full Config JSON ── */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>Full Config (JSON)</h3>
+        <h3 style={{ marginBottom: 12 }}>{t('settings.fullConfig')}</h3>
         <pre className="json-debug">{JSON.stringify(config, null, 2)}</pre>
       </div>
     </div>

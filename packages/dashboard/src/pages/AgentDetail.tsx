@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAgent, updateAgent, deleteAgent, getAgentConfig } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 // ─── Provider & Model Presets (shared with Settings) ─────────────────────────
 
@@ -81,6 +82,7 @@ type TabKey = 'overview' | 'config' | 'integration';
 
 function CodeSnippet({ title, code }: { title: string; code: string }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -93,7 +95,7 @@ function CodeSnippet({ title, code }: { title: string; code: string }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
         <button className="btn" style={{ fontSize: 11, padding: '3px 10px' }} onClick={handleCopy}>
-          {copied ? 'Copied!' : 'Copy'}
+          {copied ? t('common.copied') : t('common.copy')}
         </button>
       </div>
       <pre className="json-debug" style={{ margin: 0 }}>{code}</pre>
@@ -101,17 +103,85 @@ function CodeSnippet({ title, code }: { title: string; code: string }) {
   );
 }
 
+// ─── StepBlock ───────────────────────────────────────────────────────────────
+
+function StepBlock({ step, title, description, code, children, isLast }: {
+  step: number;
+  title: string;
+  description?: string;
+  code?: string;
+  children?: React.ReactNode;
+  isLast?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
+
+  const handleCopy = () => {
+    if (!code) return;
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 16, marginBottom: isLast ? 0 : 24, position: 'relative' }}>
+      {/* Left: step number + vertical line */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', background: 'var(--primary)',
+          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13, fontWeight: 600, flexShrink: 0,
+        }}>
+          {step}
+        </div>
+        {!isLast && (
+          <div style={{ width: 2, flex: 1, background: 'var(--border)', marginTop: 4 }} />
+        )}
+      </div>
+
+      {/* Right: content */}
+      <div style={{ flex: 1, paddingBottom: isLast ? 0 : 4 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: description || code || children ? 8 : 0 }}>
+          {title}
+        </div>
+        {description && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+            {description}
+          </p>
+        )}
+        {code && (
+          <div style={{ position: 'relative' }}>
+            <button
+              className="btn"
+              style={{ position: 'absolute', top: 8, right: 8, fontSize: 11, padding: '3px 10px', zIndex: 1 }}
+              onClick={handleCopy}
+            >
+              {copied ? t('common.copied') : t('common.copy')}
+            </button>
+            <pre className="json-debug" style={{ margin: 0 }}>{code}</pre>
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+type IntegrationTabKey = 'api' | 'mcp' | 'openclaw';
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [agent, setAgent] = useState<any>(null);
   const [mergedConfig, setMergedConfig] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<TabKey>('overview');
+  const [integrationTab, setIntegrationTab] = useState<IntegrationTabKey>('api');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Overview editing
@@ -156,14 +226,14 @@ export default function AgentDetail() {
       const updated = await updateAgent(id!, { name: infoDraft.name, description: infoDraft.description || null });
       setAgent((prev: any) => ({ ...prev, ...updated }));
       setEditingInfo(false);
-      setToast({ message: 'Agent updated', type: 'success' });
+      setToast({ message: t('agentDetail.toastUpdated'), type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Delete agent "${agent.name}"? This cannot be undone. Memories created by this agent will become orphaned.`)) return;
+    if (!confirm(t('agentDetail.confirmDelete', { name: agent.name }))) return;
     try {
       await deleteAgent(id!);
       navigate('/agents');
@@ -241,21 +311,21 @@ export default function AgentDetail() {
       const configData = await getAgentConfig(id!);
       setMergedConfig(configData);
       setEditingConfig(false);
-      setToast({ message: 'Configuration saved', type: 'success' });
+      setToast({ message: t('agentDetail.toastConfigSaved'), type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
     }
   };
 
   const resetConfig = async () => {
-    if (!confirm('Reset to global configuration? This will remove all config overrides for this agent.')) return;
+    if (!confirm(t('agentDetail.confirmReset'))) return;
     try {
       const updated = await updateAgent(id!, { config_override: null });
       setAgent((prev: any) => ({ ...prev, ...updated }));
       const configData = await getAgentConfig(id!);
       setMergedConfig(configData);
       setEditingConfig(false);
-      setToast({ message: 'Configuration reset to global', type: 'success' });
+      setToast({ message: t('agentDetail.toastConfigReset'), type: 'success' });
     } catch (e: any) {
       setToast({ message: e.message, type: 'error' });
     }
@@ -301,7 +371,7 @@ export default function AgentDetail() {
         </div>
 
         <div className="form-group">
-          <label>Provider</label>
+          <label>{t('agentDetail.provider')}</label>
           <select value={provider} onChange={e => handleProviderChange(e.target.value)}>
             {Object.entries(providerMap).map(([key, p]) => (
               <option key={key} value={key}>{p.label}</option>
@@ -312,7 +382,7 @@ export default function AgentDetail() {
         {!isDisabled && (
           <>
             <div className="form-group">
-              <label>Model</label>
+              <label>{t('agentDetail.model')}</label>
               {models.length > 0 ? (
                 <>
                   <select
@@ -320,13 +390,13 @@ export default function AgentDetail() {
                     onChange={e => handleModelSelectChange(e.target.value)}
                   >
                     {models.map((m: string) => <option key={m} value={m}>{m}</option>)}
-                    <option value={CUSTOM_MODEL}>Custom...</option>
+                    <option value={CUSTOM_MODEL}>{t('agentDetail.customModel')}</option>
                   </select>
                   {isCustomModel && (
                     <input
                       type="text"
                       value={d.customModel ?? ''}
-                      placeholder="Enter custom model name"
+                      placeholder={t('agentDetail.enterCustomModel')}
                       style={{ marginTop: 8 }}
                       onChange={e => updateDraft(`${prefix}.customModel`, e.target.value)}
                     />
@@ -336,7 +406,7 @@ export default function AgentDetail() {
                 <input
                   type="text"
                   value={d.customModel ?? d.model ?? ''}
-                  placeholder="Enter model name"
+                  placeholder={t('agentDetail.enterModel')}
                   onChange={e => {
                     updateDraft(`${prefix}.model`, e.target.value);
                     updateDraft(`${prefix}.customModel`, e.target.value);
@@ -347,7 +417,7 @@ export default function AgentDetail() {
 
             {d.dimensions !== undefined && (
               <div className="form-group">
-                <label>Dimensions</label>
+                <label>{t('agentDetail.dimensions')}</label>
                 <input
                   type="number"
                   value={d.dimensions ?? ''}
@@ -359,14 +429,14 @@ export default function AgentDetail() {
             {preset?.envKey && (
               <div className="form-group">
                 <label>
-                  API Key
-                  {d.hasApiKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--success)' }}>configured</span>}
+                  {t('agentDetail.apiKey')}
+                  {d.hasApiKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--success)' }}>{t('common.configured')}</span>}
                   {!d.hasApiKey && preset.envKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>env: {preset.envKey}</span>}
                 </label>
                 <input
                   type="password"
                   value={d.apiKey ?? ''}
-                  placeholder={d.hasApiKey ? 'Leave empty to keep current key' : `Enter ${preset.envKey} or leave empty to use env`}
+                  placeholder={d.hasApiKey ? t('agentDetail.keepCurrentKey') : t('agentDetail.enterKeyOrEnv', { envKey: preset.envKey })}
                   onChange={e => updateDraft(`${prefix}.apiKey`, e.target.value)}
                 />
               </div>
@@ -374,8 +444,8 @@ export default function AgentDetail() {
 
             <div className="form-group">
               <label>
-                Base URL
-                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>optional</span>
+                {t('agentDetail.baseUrl')}
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>{t('common.optional')}</span>
               </label>
               <input
                 type="text"
@@ -390,36 +460,54 @@ export default function AgentDetail() {
     );
   };
 
-  // ─── Integration code snippets ─────────────────────────────────────────────
+  // ─── Integration sub-tabs ──────────────────────────────────────────────────
 
   const renderIntegration = () => {
     const cortexUrl = window.location.origin;
     const agentId = id!;
 
-    return (
-      <div>
-        <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: 13 }}>
-          Use the code snippets below to integrate this agent with your applications.
-          Variables <code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>CORTEX_URL</code> and
-          <code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4, marginLeft: 4 }}>AGENT_ID</code> are pre-filled for this agent.
-        </p>
+    const subTabs: { key: IntegrationTabKey; label: string }[] = [
+      { key: 'api', label: t('agentDetail.integrationApi') },
+      { key: 'mcp', label: t('agentDetail.integrationMcp') },
+      { key: 'openclaw', label: t('agentDetail.integrationOpenclaw') },
+    ];
 
-        <CodeSnippet
-          title="cURL — Ingest (Store Memory)"
+    const renderApiTab = () => (
+      <div>
+        <StepBlock
+          step={1}
+          title={t('agentDetail.apiStep1Title')}
+          description={t('agentDetail.apiStep1Desc')}
+          code={`curl ${cortexUrl}/api/v1/health`}
+        />
+        <StepBlock
+          step={2}
+          title={t('agentDetail.apiStep2Title')}
+          description={t('agentDetail.apiStep2Desc')}
           code={`curl -X POST ${cortexUrl}/api/v1/ingest \\
   -H "Content-Type: application/json" \\
   -d '{"user_message":"...","assistant_message":"...","agent_id":"${agentId}"}'`}
         />
-
-        <CodeSnippet
-          title="cURL — Recall (Retrieve Memory)"
+        <StepBlock
+          step={3}
+          title={t('agentDetail.apiStep3Title')}
+          description={t('agentDetail.apiStep3Desc')}
           code={`curl -X POST ${cortexUrl}/api/v1/recall \\
   -H "Content-Type: application/json" \\
   -d '{"query":"What are the user preferences?","agent_id":"${agentId}"}'`}
         />
-
-        <CodeSnippet
-          title="JavaScript / TypeScript"
+        <StepBlock
+          step={4}
+          title={t('agentDetail.apiStep4Title')}
+          description={t('agentDetail.apiStep4Desc')}
+          code={`curl -X POST ${cortexUrl}/api/v1/memories \\
+  -H "Content-Type: application/json" \\
+  -d '{"layer":"core","category":"fact","content":"...","agent_id":"${agentId}","importance":0.8}'`}
+        />
+        <StepBlock
+          step={5}
+          title={t('agentDetail.apiStep5Title')}
+          description={t('agentDetail.apiStep5Desc')}
           code={`const CORTEX_URL = '${cortexUrl}';
 const AGENT_ID = '${agentId}';
 
@@ -441,9 +529,10 @@ async function ingest(userMessage: string, assistantMessage: string) {
   return res.json();
 }`}
         />
-
-        <CodeSnippet
-          title="Python"
+        <StepBlock
+          step={6}
+          title={t('agentDetail.apiStep6Title')}
+          description={t('agentDetail.apiStep6Desc')}
           code={`import requests
 CORTEX_URL = "${cortexUrl}"
 AGENT_ID = "${agentId}"
@@ -455,39 +544,154 @@ def recall(query: str):
 def ingest(user_msg: str, assistant_msg: str):
     return requests.post(f"{CORTEX_URL}/api/v1/ingest",
         json={"user_message": user_msg, "assistant_message": assistant_msg, "agent_id": AGENT_ID}).json()`}
+          isLast
         />
+      </div>
+    );
 
-        <CodeSnippet
-          title="MCP Configuration (Claude Desktop / Cursor)"
+    const renderMcpTab = () => (
+      <div>
+        <StepBlock
+          step={1}
+          title={t('agentDetail.mcpStep1Title')}
+          description={t('agentDetail.mcpStep1Desc')}
+          code={`npx cortex-mcp --server-url ${cortexUrl}`}
+        />
+        <StepBlock
+          step={2}
+          title={t('agentDetail.mcpStep2Title')}
+          description={t('agentDetail.mcpStep2Desc')}
+          code={JSON.stringify({
+            mcpServers: {
+              cortex: {
+                command: 'npx',
+                args: ['cortex-mcp', '--server-url', cortexUrl],
+                env: { CORTEX_AGENT_ID: agentId },
+              },
+            },
+          }, null, 2)}
+        />
+        <StepBlock
+          step={3}
+          title={t('agentDetail.mcpStep3Title')}
+          description={t('agentDetail.mcpStep3Desc')}
           code={JSON.stringify({
             mcpServers: {
               cortex: {
                 command: 'npx',
                 args: ['cortex-mcp'],
-                env: {
-                  CORTEX_URL: cortexUrl,
-                  CORTEX_AGENT_ID: agentId,
-                },
+                env: { CORTEX_URL: cortexUrl, CORTEX_AGENT_ID: agentId },
               },
             },
           }, null, 2)}
         />
+        <StepBlock
+          step={4}
+          title={t('agentDetail.mcpStep4Title')}
+          description={t('agentDetail.mcpStep4Desc')}
+          isLast
+        >
+          <table style={{ width: '100%', fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>Tool</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['cortex_recall', t('agentDetail.mcpToolRecall')],
+                ['cortex_remember', t('agentDetail.mcpToolRemember')],
+                ['cortex_forget', t('agentDetail.mcpToolForget')],
+                ['cortex_search_debug', t('agentDetail.mcpToolSearchDebug')],
+                ['cortex_stats', t('agentDetail.mcpToolStats')],
+              ] as const).map(([tool, desc]) => (
+                <tr key={tool}>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{tool}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </StepBlock>
+      </div>
+    );
 
-        <CodeSnippet
-          title="Direct Storage (REST API)"
-          code={`curl -X POST ${cortexUrl}/api/v1/memories \\
-  -H "Content-Type: application/json" \\
-  -d '{"layer":"core","category":"fact","content":"...","agent_id":"${agentId}","importance":0.8}'`}
+    const renderOpenclawTab = () => (
+      <div>
+        <StepBlock
+          step={1}
+          title={t('agentDetail.openclawStep1Title')}
+          description={t('agentDetail.openclawStep1Desc')}
+          code="openclaw plugins install @cortexmem/bridge-openclaw"
         />
+        <StepBlock
+          step={2}
+          title={t('agentDetail.openclawStep2Title')}
+          description={t('agentDetail.openclawStep2Desc')}
+          code={`CORTEX_URL=${cortexUrl}          # Cortex server URL
+CORTEX_DEBUG=true                  # Optional: enable debug logs`}
+        />
+        <StepBlock
+          step={3}
+          title={t('agentDetail.openclawStep3Title')}
+          description={t('agentDetail.openclawStep3Desc')}
+          code={`import cortexBridge from '@cortexmem/bridge-openclaw';
+
+// Register plugin in OpenClaw agent config
+const agent = new Agent({
+  plugins: [cortexBridge],
+  // ... other config
+});`}
+        >
+          <ul style={{ fontSize: 13, color: 'var(--text-muted)', margin: '10px 0 0 0', paddingLeft: 20, lineHeight: 1.8 }}>
+            <li><code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>{t('agentDetail.openclawHookBefore')}</code></li>
+            <li><code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>{t('agentDetail.openclawHookAfter')}</code></li>
+            <li><code style={{ background: 'var(--bg)', padding: '2px 6px', borderRadius: 4 }}>{t('agentDetail.openclawHookCompaction')}</code></li>
+          </ul>
+        </StepBlock>
+        <StepBlock
+          step={4}
+          title={t('agentDetail.openclawStep4Title')}
+          description={t('agentDetail.openclawStep4Desc')}
+          code={`import { healthCheck } from '@cortexmem/bridge-openclaw';
+
+const status = await healthCheck();
+console.log(status);
+// { ok: true, latency_ms: 12 }`}
+          isLast
+        />
+      </div>
+    );
+
+    return (
+      <div>
+        {/* Sub-tabs */}
+        <div className="tabs" style={{ marginBottom: 20 }}>
+          {subTabs.map(st => (
+            <button
+              key={st.key}
+              className={`tab${integrationTab === st.key ? ' active' : ''}`}
+              onClick={() => setIntegrationTab(st.key)}
+            >
+              {st.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        {integrationTab === 'api' && renderApiTab()}
+        {integrationTab === 'mcp' && renderMcpTab()}
+        {integrationTab === 'openclaw' && renderOpenclawTab()}
       </div>
     );
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>Error: {error}</div>;
-  if (loading) return <div className="loading">Loading...</div>;
-  if (!agent) return <div className="card" style={{ color: 'var(--danger)' }}>Agent not found</div>;
+  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (loading) return <div className="loading">{t('common.loading')}</div>;
+  if (!agent) return <div className="card" style={{ color: 'var(--danger)' }}>{t('agentDetail.notFound')}</div>;
 
   const isBuiltIn = agent.id === 'default' || agent.id === 'mcp';
   const stats = agent.stats || { layers: {}, total: 0 };
@@ -511,7 +715,7 @@ def ingest(user_msg: str, assistant_msg: str):
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <button className="btn" onClick={() => navigate('/agents')} style={{ padding: '4px 10px', fontSize: 13 }}>
-          &larr; Agents
+          &larr; {t('agentDetail.backToAgents')}
         </button>
         <h1 className="page-title" style={{ margin: 0 }}>{agent.name}</h1>
         <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--text-muted)' }}>{agent.id}</span>
@@ -519,18 +723,18 @@ def ingest(user_msg: str, assistant_msg: str):
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
-        {(['overview', 'config', 'integration'] as TabKey[]).map(t => (
+        {(['overview', 'config', 'integration'] as TabKey[]).map(tb => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb}
+            onClick={() => setTab(tb)}
             style={{
               padding: '10px 20px', fontSize: 14, cursor: 'pointer',
-              background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--primary)' : '2px solid transparent',
-              color: tab === t ? 'var(--primary)' : 'var(--text-muted)',
-              fontWeight: tab === t ? 600 : 400,
+              background: 'none', border: 'none', borderBottom: tab === tb ? '2px solid var(--primary)' : '2px solid transparent',
+              color: tab === tb ? 'var(--primary)' : 'var(--text-muted)',
+              fontWeight: tab === tb ? 600 : 400,
             }}
           >
-            {t === 'overview' ? 'Overview' : t === 'config' ? 'Configuration' : 'Integration'}
+            {tb === 'overview' ? t('agentDetail.overview') : tb === 'config' ? t('agentDetail.configuration') : t('agentDetail.integration')}
           </button>
         ))}
       </div>
@@ -540,25 +744,25 @@ def ingest(user_msg: str, assistant_msg: str):
         <div>
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>Basic Info</h3>
+              <h3 style={{ margin: 0 }}>{t('agentDetail.basicInfo')}</h3>
               {editingInfo ? (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn" onClick={() => setEditingInfo(false)}>Cancel</button>
-                  <button className="btn primary" onClick={saveInfo}>Save</button>
+                  <button className="btn" onClick={() => setEditingInfo(false)}>{t('common.cancel')}</button>
+                  <button className="btn primary" onClick={saveInfo}>{t('common.save')}</button>
                 </div>
               ) : (
-                <button className="btn" onClick={startEditInfo}>Edit</button>
+                <button className="btn" onClick={startEditInfo}>{t('common.edit')}</button>
               )}
             </div>
 
             {editingInfo ? (
               <>
                 <div className="form-group">
-                  <label>Name</label>
+                  <label>{t('agentDetail.name')}</label>
                   <input type="text" value={infoDraft.name} onChange={e => setInfoDraft(d => ({ ...d, name: e.target.value }))} />
                 </div>
                 <div className="form-group">
-                  <label>Description</label>
+                  <label>{t('agentDetail.description')}</label>
                   <textarea
                     value={infoDraft.description}
                     rows={3}
@@ -570,10 +774,10 @@ def ingest(user_msg: str, assistant_msg: str):
             ) : (
               <table>
                 <tbody>
-                  <tr><td style={{ width: '30%' }}>Name</td><td>{agent.name}</td></tr>
-                  <tr><td>Description</td><td>{agent.description || <span style={{ color: 'var(--text-muted)' }}>No description</span>}</td></tr>
-                  <tr><td>Created</td><td>{new Date(agent.created_at).toLocaleString()}</td></tr>
-                  <tr><td>Updated</td><td>{new Date(agent.updated_at).toLocaleString()}</td></tr>
+                  <tr><td style={{ width: '30%' }}>{t('agentDetail.name')}</td><td>{agent.name}</td></tr>
+                  <tr><td>{t('agentDetail.description')}</td><td>{agent.description || <span style={{ color: 'var(--text-muted)' }}>{t('agentDetail.noDescription')}</span>}</td></tr>
+                  <tr><td>{t('agentDetail.created')}</td><td>{new Date(agent.created_at).toLocaleString()}</td></tr>
+                  <tr><td>{t('agentDetail.updated')}</td><td>{new Date(agent.updated_at).toLocaleString()}</td></tr>
                 </tbody>
               </table>
             )}
@@ -581,9 +785,9 @@ def ingest(user_msg: str, assistant_msg: str):
 
           {/* Memory Stats */}
           <div className="card">
-            <h3 style={{ marginBottom: 12 }}>Memory Statistics</h3>
+            <h3 style={{ marginBottom: 12 }}>{t('agentDetail.memoryStats')}</h3>
             <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
-              {stats.total} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>total memories</span>
+              {stats.total} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>{t('agentDetail.totalMemories')}</span>
             </div>
 
             {stats.total > 0 && (
@@ -622,17 +826,17 @@ def ingest(user_msg: str, assistant_msg: str):
           {/* Config summary */}
           {mc && (
             <div className="card">
-              <h3 style={{ marginBottom: 12 }}>Active Configuration</h3>
+              <h3 style={{ marginBottom: 12 }}>{t('agentDetail.activeConfig')}</h3>
               {mergedConfig?.has_override && (
                 <div style={{ marginBottom: 12 }}>
-                  <span className="badge" style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc' }}>Custom Config Active</span>
+                  <span className="badge" style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc' }}>{t('agentDetail.customConfigActive')}</span>
                 </div>
               )}
               <table>
                 <tbody>
-                  <tr><td style={{ width: '30%' }}>Extraction LLM</td><td>{mc.llm?.extraction?.provider} / {mc.llm?.extraction?.model}</td></tr>
-                  <tr><td>Lifecycle LLM</td><td>{mc.llm?.lifecycle?.provider} / {mc.llm?.lifecycle?.model}</td></tr>
-                  <tr><td>Embedding</td><td>{mc.embedding?.provider} / {mc.embedding?.model}</td></tr>
+                  <tr><td style={{ width: '30%' }}>{t('agentDetail.extractionLlm')}</td><td>{mc.llm?.extraction?.provider} / {mc.llm?.extraction?.model}</td></tr>
+                  <tr><td>{t('agentDetail.lifecycleLlm')}</td><td>{mc.llm?.lifecycle?.provider} / {mc.llm?.lifecycle?.model}</td></tr>
+                  <tr><td>{t('agentDetail.embedding')}</td><td>{mc.embedding?.provider} / {mc.embedding?.model}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -641,12 +845,12 @@ def ingest(user_msg: str, assistant_msg: str):
           {/* Delete */}
           {!isBuiltIn && (
             <div className="card" style={{ borderColor: 'var(--danger)' }}>
-              <h3 style={{ marginBottom: 8, color: 'var(--danger)' }}>Danger Zone</h3>
+              <h3 style={{ marginBottom: 8, color: 'var(--danger)' }}>{t('agentDetail.dangerZone')}</h3>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Deleting this agent will remove its configuration. Memories created by this agent will not be deleted but will become orphaned.
+                {t('agentDetail.deleteWarning')}
               </p>
               <button className="btn" style={{ background: 'var(--danger)', color: '#fff', border: 'none' }} onClick={handleDelete}>
-                Delete Agent
+                {t('agentDetail.deleteAgent')}
               </button>
             </div>
           )}
@@ -658,27 +862,27 @@ def ingest(user_msg: str, assistant_msg: str):
         <div>
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>Configuration Override</h3>
+              <h3 style={{ margin: 0 }}>{t('agentDetail.configOverride')}</h3>
               {editingConfig ? (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn" onClick={resetConfig}>Reset to Global</button>
-                  <button className="btn" onClick={() => setEditingConfig(false)}>Cancel</button>
-                  <button className="btn primary" onClick={saveConfig}>Save</button>
+                  <button className="btn" onClick={resetConfig}>{t('agentDetail.resetToGlobal')}</button>
+                  <button className="btn" onClick={() => setEditingConfig(false)}>{t('common.cancel')}</button>
+                  <button className="btn primary" onClick={saveConfig}>{t('common.save')}</button>
                 </div>
               ) : (
-                <button className="btn" onClick={startEditConfig}>Edit</button>
+                <button className="btn" onClick={startEditConfig}>{t('common.edit')}</button>
               )}
             </div>
 
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-              Override global configuration for this agent. Fields not set will fall back to global settings.
+              {t('agentDetail.configOverrideDesc')}
             </p>
 
             {editingConfig ? (
               <>
-                {renderProviderBlock('Extraction LLM', 'extraction', LLM_PROVIDERS)}
-                {renderProviderBlock('Lifecycle LLM', 'lifecycle', LLM_PROVIDERS)}
-                {renderProviderBlock('Embedding', 'embedding', EMBEDDING_PROVIDERS)}
+                {renderProviderBlock(t('agentDetail.extractionLlm'), 'extraction', LLM_PROVIDERS)}
+                {renderProviderBlock(t('agentDetail.lifecycleLlm'), 'lifecycle', LLM_PROVIDERS)}
+                {renderProviderBlock(t('agentDetail.embedding'), 'embedding', EMBEDDING_PROVIDERS)}
               </>
             ) : (
               <>
@@ -686,37 +890,37 @@ def ingest(user_msg: str, assistant_msg: str):
                   <table>
                     <tbody>
                       <tr>
-                        <td style={{ width: '30%' }}>Extraction LLM</td>
+                        <td style={{ width: '30%' }}>{t('agentDetail.extractionLlm')}</td>
                         <td>
                           {mc.llm?.extraction?.provider} / {mc.llm?.extraction?.model}
                           {mergedConfig?.has_override && agent.config_override?.llm?.extraction && (
-                            <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>overridden</span>
+                            <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>{t('agentDetail.overridden')}</span>
                           )}
                         </td>
                       </tr>
                       <tr>
-                        <td>Lifecycle LLM</td>
+                        <td>{t('agentDetail.lifecycleLlm')}</td>
                         <td>
                           {mc.llm?.lifecycle?.provider} / {mc.llm?.lifecycle?.model}
                           {mergedConfig?.has_override && agent.config_override?.llm?.lifecycle && (
-                            <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>overridden</span>
+                            <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>{t('agentDetail.overridden')}</span>
                           )}
                         </td>
                       </tr>
                       <tr>
-                        <td>Embedding</td>
+                        <td>{t('agentDetail.embedding')}</td>
                         <td>
                           {mc.embedding?.provider} / {mc.embedding?.model}
                           {mergedConfig?.has_override && agent.config_override?.embedding && (
-                            <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>overridden</span>
+                            <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>{t('agentDetail.overridden')}</span>
                           )}
                         </td>
                       </tr>
-                      <tr><td>Embedding Dimensions</td><td>{mc.embedding?.dimensions}</td></tr>
+                      <tr><td>{t('agentDetail.embeddingDimensions')}</td><td>{mc.embedding?.dimensions}</td></tr>
                     </tbody>
                   </table>
                 ) : (
-                  <div style={{ color: 'var(--text-muted)' }}>Loading configuration...</div>
+                  <div style={{ color: 'var(--text-muted)' }}>{t('agentDetail.loadingConfig')}</div>
                 )}
               </>
             )}
@@ -727,7 +931,7 @@ def ingest(user_msg: str, assistant_msg: str):
       {/* Tab: Integration */}
       {tab === 'integration' && (
         <div className="card">
-          <h3 style={{ marginBottom: 16 }}>Integration Guide</h3>
+          <h3 style={{ marginBottom: 16 }}>{t('agentDetail.integrationGuide')}</h3>
           {renderIntegration()}
         </div>
       )}

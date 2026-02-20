@@ -81,7 +81,10 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "cortex": {
       "command": "npx",
-      "args": ["tsx", "/path/to/cortex/packages/mcp-client/src/index.ts"]
+      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
+      "env": {
+        "CORTEX_AGENT_ID": "default"
+      }
     }
   }
 }
@@ -91,7 +94,13 @@ Available tools: `cortex_recall`, `cortex_remember`, `cortex_forget`, `cortex_se
 
 ## OpenClaw Bridge Plugin
 
-The bridge plugin (~130 lines) transparently integrates Cortex with OpenClaw:
+Install via OpenClaw CLI:
+
+```bash
+openclaw plugins install @cortexmem/bridge-openclaw
+```
+
+The bridge plugin transparently integrates Cortex with OpenClaw:
 
 - **Before response**: Searches relevant memories, injects as context
 - **After response**: Fire-and-forget ingestion for memory extraction

@@ -81,7 +81,10 @@ OPENAI_API_KEY=sk-xxx docker compose up -d
   "mcpServers": {
     "cortex": {
       "command": "npx",
-      "args": ["tsx", "/path/to/cortex/packages/mcp-client/src/index.ts"]
+      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
+      "env": {
+        "CORTEX_AGENT_ID": "default"
+      }
     }
   }
 }
@@ -91,7 +94,13 @@ OPENAI_API_KEY=sk-xxx docker compose up -d
 
 ## OpenClaw 桥接插件
 
-桥接插件（约130行）透明集成 Cortex 与 OpenClaw：
+通过 OpenClaw CLI 安装：
+
+```bash
+openclaw plugins install @cortexmem/bridge-openclaw
+```
+
+桥接插件透明集成 Cortex 与 OpenClaw：
 
 - **响应前**：搜索相关记忆，注入为上下文
 - **响应后**：异步摄入对话，提取记忆（不阻塞）

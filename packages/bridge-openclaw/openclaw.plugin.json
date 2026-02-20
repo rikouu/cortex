@@ -1,0 +1,23 @@
+{
+  "id": "cortex-bridge",
+  "name": "Cortex Memory Bridge",
+  "kind": "memory",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cortexUrl": {
+        "type": "string",
+        "default": "http://localhost:21100"
+      },
+      "debug": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "uiHints": {
+    "cortexUrl": { "label": "Cortex Server URL" },
+    "debug": { "label": "Enable Debug Logging" }
+  }
+}

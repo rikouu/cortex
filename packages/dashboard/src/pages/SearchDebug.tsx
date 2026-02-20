@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { search, getConfig, updateConfig } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 interface SearchResult {
   id: string;
@@ -45,6 +46,8 @@ export default function SearchDebug() {
   const [textWeight, setTextWeight] = useState(0.3);
   const [weightsDirty, setWeightsDirty] = useState(false);
 
+  const { t } = useI18n();
+
   const loadWeights = async () => {
     try {
       const cfg = await getConfig();
@@ -59,7 +62,7 @@ export default function SearchDebug() {
       await updateConfig({ search: { vectorWeight, textWeight } });
       setWeightsDirty(false);
     } catch (e: any) {
-      alert(`Failed to save: ${e.message}`);
+      alert(t('searchDebug.saveFailed', { message: e.message }));
     }
   };
 
@@ -69,7 +72,7 @@ export default function SearchDebug() {
     try {
       const res = await search({ query, debug: true, limit: 20 });
       const run: SearchRun = {
-        label: label || `Run ${runs.length + 1}`,
+        label: label || `${t('searchDebug.run')} ${runs.length + 1}`,
         query,
         results: res.results || [],
         debug: res.debug || null,
@@ -101,7 +104,7 @@ export default function SearchDebug() {
         <span className={`badge ${r.layer}`}>{r.layer}</span>
         <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>{r.category}</span>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
-          Score: {r.finalScore?.toFixed(4)}
+          {t('searchDebug.score')}: {r.finalScore?.toFixed(4)}
         </span>
       </div>
       <div className="content">{r.content}</div>
@@ -109,14 +112,14 @@ export default function SearchDebug() {
         <table style={{ fontSize: 12 }}>
           <tbody>
             <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Text Score</td>
+              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.textScore')}</td>
               <td>
                 <div className="score-bar">
                   <div className="bar"><div className="fill" style={{ width: `${r.textScore * 100}%` }} /></div>
                   <span>{r.textScore?.toFixed(3)}</span>
                 </div>
               </td>
-              <td style={{ color: 'var(--text-muted)' }}>Vector Score</td>
+              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.vectorScore')}</td>
               <td>
                 <div className="score-bar">
                   <div className="bar"><div className="fill" style={{ width: `${r.vectorScore * 100}%`, background: 'var(--success)' }} /></div>
@@ -125,12 +128,12 @@ export default function SearchDebug() {
               </td>
             </tr>
             <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Layer Weight</td><td>{r.layerWeight?.toFixed(2)}</td>
-              <td style={{ color: 'var(--text-muted)' }}>Recency Boost</td><td>{r.recencyBoost?.toFixed(3)}</td>
+              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.layerWeight')}</td><td>{r.layerWeight?.toFixed(2)}</td>
+              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.recencyBoost')}</td><td>{r.recencyBoost?.toFixed(3)}</td>
             </tr>
             <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Access Boost</td><td>{r.accessBoost?.toFixed(2)}</td>
-              <td style={{ color: 'var(--text-muted)' }}>Decay Score</td><td>{r.decay_score?.toFixed(3)}</td>
+              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.accessBoost')}</td><td>{r.accessBoost?.toFixed(2)}</td>
+              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.decayScore')}</td><td>{r.decay_score?.toFixed(3)}</td>
             </tr>
           </tbody>
         </table>
@@ -142,26 +145,26 @@ export default function SearchDebug() {
     if (!debug) return null;
     return (
       <div style={{ display: 'flex', gap: 24, fontSize: 13, padding: '8px 0', flexWrap: 'wrap' }}>
-        <span>Text: {debug.textResultCount}</span>
-        <span>Vector: {debug.vectorResultCount}</span>
-        <span>Fused: {debug.fusedCount}</span>
+        <span>{t('searchDebug.text')}: {debug.textResultCount}</span>
+        <span>{t('searchDebug.vector')}: {debug.vectorResultCount}</span>
+        <span>{t('searchDebug.fused')}: {debug.fusedCount}</span>
         <span style={{ color: 'var(--text-muted)' }}>|</span>
-        <span>Text: {debug.timings?.textMs}ms</span>
-        <span>Vector: {debug.timings?.vectorMs}ms</span>
+        <span>{t('searchDebug.text')}: {debug.timings?.textMs}ms</span>
+        <span>{t('searchDebug.vector')}: {debug.timings?.vectorMs}ms</span>
         <span>Fusion: {debug.timings?.fusionMs}ms</span>
-        <span style={{ fontWeight: 600 }}>Total: {debug.timings?.totalMs}ms</span>
+        <span style={{ fontWeight: 600 }}>{t('searchDebug.totalTime')}: {debug.timings?.totalMs}ms</span>
       </div>
     );
   };
 
   return (
     <div>
-      <h1 className="page-title">Search Debug</h1>
+      <h1 className="page-title">{t('searchDebug.title')}</h1>
 
       {/* Search bar */}
       <div className="search-bar" style={{ marginBottom: 8 }}>
         <input
-          placeholder="Search memories..."
+          placeholder={t('searchDebug.searchPlaceholder')}
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -171,7 +174,7 @@ export default function SearchDebug() {
           {searchHistory.map((q, i) => <option key={i} value={q} />)}
         </datalist>
         <button className="btn primary" onClick={() => handleSearch()} disabled={loading}>
-          {loading ? '...' : 'Search'}
+          {loading ? '...' : t('common.search')}
         </button>
       </div>
 
@@ -179,16 +182,16 @@ export default function SearchDebug() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={compareMode} onChange={e => setCompareMode(e.target.checked)} style={{ width: 'auto' }} />
-          Compare mode
+          {t('searchDebug.compareMode')}
         </label>
         {compareMode && runs.length > 0 && (
-          <button className="btn" onClick={clearRuns} style={{ fontSize: 12 }}>Clear comparisons</button>
+          <button className="btn" onClick={clearRuns} style={{ fontSize: 12 }}>{t('searchDebug.clearComparisons')}</button>
         )}
         <button className="btn" onClick={() => { setShowTuner(!showTuner); if (!showTuner) loadWeights(); }} style={{ fontSize: 12 }}>
-          {showTuner ? 'Hide' : 'Weight Tuner'}
+          {showTuner ? t('searchDebug.hide') : t('searchDebug.weightTuner')}
         </button>
         <button className="btn" onClick={() => setShowHelp(!showHelp)} style={{ fontSize: 12 }}>
-          {showHelp ? 'Hide Help' : 'Query Help'}
+          {showHelp ? t('searchDebug.hideHelp') : t('searchDebug.queryHelp')}
         </button>
 
         {/* Search history chips */}
@@ -211,16 +214,16 @@ export default function SearchDebug() {
       {/* Query Help */}
       {showHelp && (
         <div className="card" style={{ marginBottom: 16, fontSize: 13 }}>
-          <h3 style={{ marginBottom: 8 }}>Query Syntax</h3>
+          <h3 style={{ marginBottom: 8 }}>{t('searchDebug.querySyntax')}</h3>
           <table style={{ fontSize: 12 }}>
             <tbody>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Natural language</td><td>Just type what you're looking for, e.g. <code>"user preferences for food"</code></td></tr>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Exact match</td><td>BM25 text search handles exact keyword matching automatically</td></tr>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Semantic</td><td>Vector search finds conceptually similar results even without keyword overlap</td></tr>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Hybrid fusion</td><td>Results are fused using RRF (Reciprocal Rank Fusion) of text + vector scores</td></tr>
+              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.naturalLanguage')}</td><td>{t('searchDebug.naturalLanguageDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.exactMatch')}</td><td>{t('searchDebug.exactMatchDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.semantic')}</td><td>{t('searchDebug.semanticDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.hybridFusion')}</td><td>{t('searchDebug.hybridFusionDesc')}</td></tr>
             </tbody>
           </table>
-          <h4 style={{ marginTop: 12, marginBottom: 4 }}>Score Formula</h4>
+          <h4 style={{ marginTop: 12, marginBottom: 4 }}>{t('searchDebug.scoreFormula')}</h4>
           <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             final = fused * layerWeight * decayScore * (1 + recencyBoost) * (1 + accessBoost)
           </code>
@@ -230,26 +233,26 @@ export default function SearchDebug() {
       {/* Weight Tuner */}
       {showTuner && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Search Weight Tuner</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('searchDebug.searchWeightTuner')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>Vector Weight ({vectorWeight.toFixed(2)})</label>
+              <label>{t('searchDebug.vectorWeight')} ({vectorWeight.toFixed(2)})</label>
               <input type="range" min="0" max="1" step="0.05" value={vectorWeight}
                 onChange={e => { setVectorWeight(parseFloat(e.target.value)); setWeightsDirty(true); }} />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>Text Weight ({textWeight.toFixed(2)})</label>
+              <label>{t('searchDebug.textWeight')} ({textWeight.toFixed(2)})</label>
               <input type="range" min="0" max="1" step="0.05" value={textWeight}
                 onChange={e => { setTextWeight(parseFloat(e.target.value)); setWeightsDirty(true); }} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
             <button className="btn primary" onClick={saveWeights} disabled={!weightsDirty} style={{ fontSize: 12 }}>
-              Save Weights
+              {t('searchDebug.saveWeights')}
             </button>
-            {weightsDirty && <span style={{ fontSize: 12, color: 'var(--warning)' }}>Unsaved changes — save then re-search to see effect</span>}
+            {weightsDirty && <span style={{ fontSize: 12, color: 'var(--warning)' }}>{t('searchDebug.unsavedChanges')}</span>}
             <button className="btn" onClick={() => { setVectorWeight(0.7); setTextWeight(0.3); setWeightsDirty(true); }} style={{ fontSize: 12 }}>
-              Reset to Default
+              {t('searchDebug.resetToDefault')}
             </button>
           </div>
         </div>
@@ -259,13 +262,13 @@ export default function SearchDebug() {
       {compareMode && runs.length > 1 ? (
         <div>
           <div className="card" style={{ marginBottom: 16 }}>
-            <h3 style={{ marginBottom: 8 }}>Comparison Summary</h3>
+            <h3 style={{ marginBottom: 8 }}>{t('searchDebug.comparisonSummary')}</h3>
             <table style={{ fontSize: 13, width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Run</th><th>Query</th>
-                  <th>Text</th><th>Vector</th><th>Fused</th>
-                  <th>Total Time</th><th>Top Score</th>
+                  <th>{t('searchDebug.run')}</th><th>{t('searchDebug.query')}</th>
+                  <th>{t('searchDebug.text')}</th><th>{t('searchDebug.vector')}</th><th>{t('searchDebug.fused')}</th>
+                  <th>{t('searchDebug.totalTime')}</th><th>{t('searchDebug.topScore')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -287,7 +290,7 @@ export default function SearchDebug() {
           {/* Overlap analysis */}
           {runs.length === 2 && (
             <div className="card" style={{ marginBottom: 16 }}>
-              <h3 style={{ marginBottom: 8 }}>Result Overlap</h3>
+              <h3 style={{ marginBottom: 8 }}>{t('searchDebug.resultOverlap')}</h3>
               {(() => {
                 const ids0 = new Set(runs[0]!.results.map(r => r.id));
                 const ids1 = new Set(runs[1]!.results.map(r => r.id));
@@ -302,15 +305,15 @@ export default function SearchDebug() {
                 return (
                   <div>
                     <div style={{ fontSize: 13, marginBottom: 12 }}>
-                      <span style={{ color: 'var(--success)' }}>Common: {common.length}</span>
+                      <span style={{ color: 'var(--success)' }}>{t('searchDebug.common')}: {common.length}</span>
                       {' / '}
-                      <span style={{ color: '#f59e0b' }}>Only in {runs[0]!.label}: {only0.length}</span>
+                      <span style={{ color: '#f59e0b' }}>{t('searchDebug.onlyIn', { label: runs[0]!.label })}: {only0.length}</span>
                       {' / '}
-                      <span style={{ color: '#ef4444' }}>Only in {runs[1]!.label}: {only1.length}</span>
+                      <span style={{ color: '#ef4444' }}>{t('searchDebug.onlyIn', { label: runs[1]!.label })}: {only1.length}</span>
                     </div>
                     {common.length > 0 && (
                       <table style={{ fontSize: 12 }}>
-                        <thead><tr><th>Memory</th><th>Rank in {runs[0]!.label}</th><th>Rank in {runs[1]!.label}</th><th>Change</th></tr></thead>
+                        <thead><tr><th>{t('searchDebug.memory')}</th><th>{t('searchDebug.rankIn', { label: runs[0]!.label })}</th><th>{t('searchDebug.rankIn', { label: runs[1]!.label })}</th><th>{t('searchDebug.change')}</th></tr></thead>
                         <tbody>
                           {common.map(id => {
                             const r0 = rank0.get(id)!;
@@ -351,13 +354,13 @@ export default function SearchDebug() {
         <>
           {runs[0]?.debug && (
             <div className="card" style={{ marginBottom: 16 }}>
-              <h3 style={{ marginBottom: 8 }}>Debug Info</h3>
+              <h3 style={{ marginBottom: 8 }}>{t('searchDebug.debugInfo')}</h3>
               {renderDebug(runs[0].debug)}
             </div>
           )}
 
           {runs[0]?.results.length === 0 && !loading && query && (
-            <div className="empty">No results found</div>
+            <div className="empty">{t('searchDebug.noResults')}</div>
           )}
 
           {runs[0]?.results.map((r, i) => renderResultCard(r, i))}

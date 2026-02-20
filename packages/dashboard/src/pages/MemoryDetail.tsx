@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getMemory, updateMemory, search } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 interface Memory {
   id: string;
@@ -28,11 +29,12 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<{ content: string; category: string; importance: number }>({ content: '', category: '', importance: 0 });
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (toast) {
-      const t = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
     }
   }, [toast]);
 
@@ -79,14 +81,14 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
       const updated = await getMemory(memory.id);
       setMemory(updated);
       setEditing(false);
-      setToast({ message: 'Memory updated', type: 'success' });
+      setToast({ message: t('memoryDetail.toastUpdated'), type: 'success' });
     } catch (e: any) {
-      setToast({ message: `Save failed: ${e.message}`, type: 'error' });
+      setToast({ message: t('memoryDetail.toastSaveFailed', { message: e.message }), type: 'error' });
     }
   };
 
-  if (loading) return <div className="empty">Loading...</div>;
-  if (!memory) return <div className="empty">Memory not found</div>;
+  if (loading) return <div className="empty">{t('common.loading')}</div>;
+  if (!memory) return <div className="empty">{t('memoryDetail.notFound')}</div>;
 
   // Decay visualization — simulate decay curve
   const decayCurve: { day: number; score: number }[] = [];
@@ -110,10 +112,10 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <button className="btn" onClick={onBack}>Back</button>
-        {!editing && <button className="btn primary" onClick={() => setEditing(true)}>Edit</button>}
+        <button className="btn" onClick={onBack}>{t('common.back')}</button>
+        {!editing && <button className="btn primary" onClick={() => setEditing(true)}>{t('common.edit')}</button>}
       </div>
-      <h1 className="page-title">Memory Detail</h1>
+      <h1 className="page-title">{t('memoryDetail.title')}</h1>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -124,28 +126,28 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
         {editing ? (
           <>
             <div className="form-group">
-              <label>Category</label>
+              <label>{t('memoryDetail.category')}</label>
               <select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label>Content</label>
+              <label>{t('memoryDetail.content')}</label>
               <textarea rows={5} value={draft.content} onChange={e => setDraft({ ...draft, content: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Importance ({draft.importance.toFixed(2)})</label>
+              <label>{t('memoryDetail.importance')} ({draft.importance.toFixed(2)})</label>
               <input type="range" min="0" max="1" step="0.05" value={draft.importance}
                 onChange={e => setDraft({ ...draft, importance: parseFloat(e.target.value) })} />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => { setEditing(false); setDraft({ content: memory.content, category: memory.category, importance: memory.importance }); }}>Cancel</button>
-              <button className="btn primary" onClick={handleSave}>Save</button>
+              <button className="btn" onClick={() => { setEditing(false); setDraft({ content: memory.content, category: memory.category, importance: memory.importance }); }}>{t('common.cancel')}</button>
+              <button className="btn primary" onClick={handleSave}>{t('common.save')}</button>
             </div>
           </>
         ) : (
           <div style={{ marginBottom: 12 }}>
-            <strong>Content:</strong>
+            <strong>{t('memoryDetail.contentLabel')}</strong>
             <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 8, marginTop: 4, whiteSpace: 'pre-wrap' }}>
               {memory.content}
             </div>
@@ -154,8 +156,8 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
 
         <table style={{ fontSize: 13 }}>
           <tbody>
-            <tr><td style={{ color: 'var(--text-muted)', paddingRight: 16 }}>ID</td><td style={{ fontFamily: 'monospace', fontSize: 11 }}>{memory.id}</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Importance</td><td>
+            <tr><td style={{ color: 'var(--text-muted)', paddingRight: 16 }}>{t('memoryDetail.id')}</td><td style={{ fontFamily: 'monospace', fontSize: 11 }}>{memory.id}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.importance')}</td><td>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {memory.importance?.toFixed(2)}
                 <div style={{ flex: 1, maxWidth: 120, height: 6, background: 'var(--border)', borderRadius: 3 }}>
@@ -163,7 +165,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                 </div>
               </div>
             </td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Confidence</td><td>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.confidence')}</td><td>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {memory.confidence?.toFixed(2)}
                 <div style={{ flex: 1, maxWidth: 120, height: 6, background: 'var(--border)', borderRadius: 3 }}>
@@ -171,7 +173,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                 </div>
               </div>
             </td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Decay Score</td><td>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.decayScore')}</td><td>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {memory.decay_score?.toFixed(3)}
                 <div style={{ flex: 1, maxWidth: 120, height: 6, background: 'var(--border)', borderRadius: 3 }}>
@@ -179,13 +181,13 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                 </div>
               </div>
             </td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Access Count</td><td>{memory.access_count}</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Created</td><td>{memory.created_at}</td></tr>
-            <tr><td style={{ color: 'var(--text-muted)' }}>Updated</td><td>{memory.updated_at}</td></tr>
-            {memory.agent_id && <tr><td style={{ color: 'var(--text-muted)' }}>Agent</td><td>{memory.agent_id}</td></tr>}
-            {memory.source && <tr><td style={{ color: 'var(--text-muted)' }}>Source</td><td>{memory.source}</td></tr>}
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.accessCount')}</td><td>{memory.access_count}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.created')}</td><td>{memory.created_at}</td></tr>
+            <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.updated')}</td><td>{memory.updated_at}</td></tr>
+            {memory.agent_id && <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.agent')}</td><td>{memory.agent_id}</td></tr>}
+            {memory.source && <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.source')}</td><td>{memory.source}</td></tr>}
             {memory.metadata && (
-              <tr><td style={{ color: 'var(--text-muted)' }}>Metadata</td><td><pre style={{ fontSize: 11, margin: 0 }}>{JSON.stringify(JSON.parse(memory.metadata), null, 2)}</pre></td></tr>
+              <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.metadata')}</td><td><pre style={{ fontSize: 11, margin: 0 }}>{JSON.stringify(JSON.parse(memory.metadata), null, 2)}</pre></td></tr>
             )}
           </tbody>
         </table>
@@ -193,7 +195,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
 
       {/* Decay Curve */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginBottom: 12 }}>Decay Curve (projected)</h3>
+        <h3 style={{ marginBottom: 12 }}>{t('memoryDetail.decayCurve')}</h3>
         <div style={{ position: 'relative', height: 120, background: 'var(--bg)', borderRadius: 'var(--radius)', padding: '10px 10px 24px 36px' }}>
           {/* Y axis labels */}
           <div style={{ position: 'absolute', left: 4, top: 8, fontSize: 10, color: 'var(--text-muted)' }}>1.0</div>
@@ -224,14 +226,14 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
           <div style={{ position: 'absolute', right: 10, bottom: 4, fontSize: 10, color: 'var(--text-muted)' }}>60d</div>
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-          Current decay: {memory.decay_score?.toFixed(3)} (estimated ~{memory.decay_score > 0 ? Math.round(-Math.log(memory.decay_score) / lambda) : '60+'}d old without access boost)
+          {t('memoryDetail.currentDecay', { score: memory.decay_score?.toFixed(3), days: memory.decay_score > 0 ? Math.round(-Math.log(memory.decay_score) / lambda) : '60+' })}
         </p>
       </div>
 
       {/* Similar Memories */}
       {similar.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Related Memories</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('memoryDetail.relatedMemories')}</h3>
           {similar.map((s: any) => (
             <div
               key={s.id}
@@ -244,7 +246,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                 <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>{s.category}</span>
                 {s.finalScore && (
                   <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
-                    similarity: {(s.finalScore * 100).toFixed(1)}%
+                    {t('memoryDetail.similarity')}: {(s.finalScore * 100).toFixed(1)}%
                   </span>
                 )}
               </div>
@@ -257,7 +259,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
       {/* Revision Chain */}
       {chain.length > 1 && (
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>Revision Chain ({chain.length} versions)</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('memoryDetail.revisionChain', { count: chain.length })}</h3>
           <div style={{ position: 'relative' }}>
             {chain.map((m, i) => (
               <div key={m.id} style={{ display: 'flex', marginBottom: 16 }}>
@@ -276,8 +278,8 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                 }}>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12 }}>
                     <span className={`badge ${m.layer}`}>{m.layer}</span>
-                    {i === 0 && <span style={{ color: 'var(--primary)', fontWeight: 600 }}>Current</span>}
-                    {i > 0 && <span style={{ color: 'var(--text-muted)' }}>Superseded</span>}
+                    {i === 0 && <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{t('memoryDetail.current')}</span>}
+                    {i > 0 && <span style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.superseded')}</span>}
                     <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{m.created_at?.slice(0, 19)}</span>
                   </div>
                   <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.content}</div>

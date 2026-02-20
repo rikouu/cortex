@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getLifecycleLogs, runLifecycle, previewLifecycle, getConfig, listMemories } from '../api/client.js';
+import { useI18n } from '../i18n/index.js';
 
 interface PreviewDetail {
   promoted: number;
@@ -18,6 +19,7 @@ export default function LifecycleMonitor() {
   const [layerStats, setLayerStats] = useState<{ working: number; core: number; archive: number }>({ working: 0, core: 0, archive: 0 });
   const [affectedMemories, setAffectedMemories] = useState<any[]>([]);
   const [showAffected, setShowAffected] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     getLifecycleLogs(30).then(setLogs);
@@ -44,7 +46,7 @@ export default function LifecycleMonitor() {
   };
 
   const handleRun = async () => {
-    if (!confirm('Run lifecycle engine now? This will promote, merge, archive, and compress memories.')) return;
+    if (!confirm(t('lifecycle.confirmRun'))) return;
     setRunning(true);
     try {
       const result = await runLifecycle(false);
@@ -66,7 +68,7 @@ export default function LifecycleMonitor() {
 
   // Parse cron for human-readable schedule
   const parseCron = (cron: string) => {
-    if (!cron) return 'Not configured';
+    if (!cron) return t('lifecycle.cronNotConfigured');
     const parts = cron.split(' ');
     if (parts.length !== 5) return cron;
     const [min, hour, dom, mon, dow] = parts;
@@ -74,12 +76,12 @@ export default function LifecycleMonitor() {
 
     let desc = '';
     if (min === '0' && hour !== '*' && dom === '*' && mon === '*' && dow === '*') {
-      desc = `Daily at ${hour!.padStart(2, '0')}:00`;
+      desc = t('lifecycle.cronDailyAt', { time: `${hour!.padStart(2, '0')}:00` });
     } else if (min !== '*' && hour !== '*' && dom === '*' && mon === '*' && dow !== '*') {
       const days = dow!.split(',').map(d => dayMap[d] || d).join(', ');
       desc = `${days} at ${hour!.padStart(2, '0')}:${min!.padStart(2, '0')}`;
     } else if (min === '*' && hour === '*') {
-      desc = 'Every minute';
+      desc = t('lifecycle.cronEveryMinute');
     } else {
       desc = cron;
     }
@@ -99,32 +101,32 @@ export default function LifecycleMonitor() {
 
   return (
     <div>
-      <h1 className="page-title">Lifecycle Engine</h1>
+      <h1 className="page-title">{t('lifecycle.title')}</h1>
 
       {/* Schedule & Config Info */}
       {config && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Schedule & Configuration</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('lifecycle.scheduleConfig')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>SCHEDULE</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.schedule')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{parseCron(config.lifecycle?.schedule)}</div>
               <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>{config.lifecycle?.schedule}</code>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>PROMOTION THRESHOLD</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.promotionThreshold')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{config.lifecycle?.promotionThreshold}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>importance score to promote working to core</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('lifecycle.promotionDesc')}</div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>ARCHIVE THRESHOLD</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.archiveThreshold')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{config.lifecycle?.archiveThreshold}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>decay score to archive core memories</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('lifecycle.archiveDesc')}</div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>DECAY LAMBDA</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.decayLambda')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{config.lifecycle?.decayLambda}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>exponential decay rate</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('lifecycle.decayDesc')}</div>
             </div>
           </div>
         </div>
@@ -132,12 +134,12 @@ export default function LifecycleMonitor() {
 
       {/* Layer Distribution (before/after) */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginBottom: 12 }}>Current Layer Distribution</h3>
+        <h3 style={{ marginBottom: 12 }}>{t('lifecycle.currentDistribution')}</h3>
         <div style={{ display: 'flex', height: 32, borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
           {[
-            { label: 'Working', value: layerStats.working, color: '#4ade80' },
-            { label: 'Core', value: layerStats.core, color: '#818cf8' },
-            { label: 'Archive', value: layerStats.archive, color: '#a1a1aa' },
+            { label: t('lifecycle.working'), value: layerStats.working, color: '#4ade80' },
+            { label: t('lifecycle.core'), value: layerStats.core, color: '#818cf8' },
+            { label: t('lifecycle.archive'), value: layerStats.archive, color: '#a1a1aa' },
           ].map((seg, i) => {
             const total = layerStats.working + layerStats.core + layerStats.archive;
             return (
@@ -155,35 +157,35 @@ export default function LifecycleMonitor() {
 
       {/* Actions */}
       <div className="toolbar">
-        <button className="btn" onClick={handlePreview}>Preview (dry-run)</button>
+        <button className="btn" onClick={handlePreview}>{t('lifecycle.preview')}</button>
         <button className="btn primary" onClick={handleRun} disabled={running}>
-          {running ? 'Running...' : 'Run Now'}
+          {running ? t('common.running') : t('lifecycle.runNow')}
         </button>
       </div>
 
       {/* Preview result */}
       {preview && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Preview (Dry Run) — {totalOps} operations pending</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('lifecycle.previewTitle', { count: totalOps })}</h3>
           <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
             <div className="stat-card">
-              <div className="label">Would Promote</div>
+              <div className="label">{t('lifecycle.wouldPromote')}</div>
               <div className="value" style={{ color: 'var(--success)' }}>{preview.promoted}</div>
             </div>
             <div className="stat-card">
-              <div className="label">Would Merge</div>
+              <div className="label">{t('lifecycle.wouldMerge')}</div>
               <div className="value" style={{ color: 'var(--info)' }}>{preview.merged}</div>
             </div>
             <div className="stat-card">
-              <div className="label">Would Archive</div>
+              <div className="label">{t('lifecycle.wouldArchive')}</div>
               <div className="value" style={{ color: 'var(--warning)' }}>{preview.archived}</div>
             </div>
             <div className="stat-card">
-              <div className="label">Would Compress</div>
+              <div className="label">{t('lifecycle.wouldCompress')}</div>
               <div className="value" style={{ color: 'var(--danger)' }}>{preview.compressedToCore}</div>
             </div>
             <div className="stat-card">
-              <div className="label">Expired Working</div>
+              <div className="label">{t('lifecycle.expiredWorking')}</div>
               <div className="value">{preview.expiredWorking}</div>
             </div>
           </div>
@@ -192,22 +194,22 @@ export default function LifecycleMonitor() {
           {affectedMemories.length > 0 && (
             <div style={{ marginTop: 12 }}>
               <button className="btn" onClick={() => setShowAffected(!showAffected)} style={{ fontSize: 12 }}>
-                {showAffected ? 'Hide' : 'Show'} Working Memories ({affectedMemories.length})
+                {showAffected ? t('lifecycle.hideWorking', { count: affectedMemories.length }) : t('lifecycle.showWorking', { count: affectedMemories.length })}
               </button>
               {showAffected && (
                 <div style={{ marginTop: 12 }}>
                   <table style={{ fontSize: 12 }}>
                     <thead>
-                      <tr><th>Content</th><th>Importance</th><th>Decay</th><th>Age</th><th>Likely Action</th></tr>
+                      <tr><th>{t('lifecycle.contentCol')}</th><th>{t('lifecycle.importanceCol')}</th><th>{t('lifecycle.decayCol')}</th><th>{t('lifecycle.ageCol')}</th><th>{t('lifecycle.likelyAction')}</th></tr>
                     </thead>
                     <tbody>
                       {affectedMemories.map((m: any) => {
                         const importance = m.importance ?? 0;
                         const decay = m.decay_score ?? 1;
-                        let action = 'Keep';
-                        if (importance >= (config?.lifecycle?.promotionThreshold ?? 0.6)) action = 'Promote';
-                        else if (decay < (config?.lifecycle?.archiveThreshold ?? 0.2)) action = 'Expire';
-                        const actionColor = action === 'Promote' ? 'var(--success)' : action === 'Expire' ? 'var(--danger)' : 'var(--text-muted)';
+                        let action = t('lifecycle.keep');
+                        if (importance >= (config?.lifecycle?.promotionThreshold ?? 0.6)) action = t('lifecycle.promote');
+                        else if (decay < (config?.lifecycle?.archiveThreshold ?? 0.2)) action = t('lifecycle.expire');
+                        const actionColor = action === t('lifecycle.promote') ? 'var(--success)' : action === t('lifecycle.expire') ? 'var(--danger)' : 'var(--text-muted)';
                         return (
                           <tr key={m.id}>
                             <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.content}</td>
@@ -230,17 +232,17 @@ export default function LifecycleMonitor() {
       {/* Run result */}
       {runResult && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--success)' }}>
-          <h3 style={{ marginBottom: 12 }}>Last Run Result</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('lifecycle.lastRunResult')}</h3>
           <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
-            <div className="stat-card"><div className="label">Promoted</div><div className="value">{runResult.promoted}</div></div>
-            <div className="stat-card"><div className="label">Merged</div><div className="value">{runResult.merged}</div></div>
-            <div className="stat-card"><div className="label">Archived</div><div className="value">{runResult.archived}</div></div>
-            <div className="stat-card"><div className="label">Compressed</div><div className="value">{runResult.compressedToCore}</div></div>
-            <div className="stat-card"><div className="label">Duration</div><div className="value">{runResult.durationMs}ms</div></div>
+            <div className="stat-card"><div className="label">{t('lifecycle.promoted')}</div><div className="value">{runResult.promoted}</div></div>
+            <div className="stat-card"><div className="label">{t('lifecycle.merged')}</div><div className="value">{runResult.merged}</div></div>
+            <div className="stat-card"><div className="label">{t('lifecycle.archived')}</div><div className="value">{runResult.archived}</div></div>
+            <div className="stat-card"><div className="label">{t('lifecycle.compressed')}</div><div className="value">{runResult.compressedToCore}</div></div>
+            <div className="stat-card"><div className="label">{t('lifecycle.duration')}</div><div className="value">{runResult.durationMs}ms</div></div>
           </div>
           {runResult.errors?.length > 0 && (
             <div style={{ marginTop: 12, color: 'var(--danger)' }}>
-              Errors: {runResult.errors.join(', ')}
+              {t('lifecycle.errors')}: {runResult.errors.join(', ')}
             </div>
           )}
         </div>
@@ -249,7 +251,7 @@ export default function LifecycleMonitor() {
       {/* History action summary */}
       {Object.keys(actionCounts).length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>Action Summary (last {logs.length} events)</h3>
+          <h3 style={{ marginBottom: 12 }}>{t('lifecycle.actionSummary', { count: logs.length })}</h3>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {Object.entries(actionCounts).map(([action, count]) => (
               <div key={action} className="stat-card" style={{ padding: 12, minWidth: 100 }}>
@@ -263,20 +265,20 @@ export default function LifecycleMonitor() {
 
       {/* History */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>Lifecycle History</h3>
+        <h3 style={{ marginBottom: 12 }}>{t('lifecycle.historyTitle')}</h3>
         {logs.length === 0 ? (
-          <div className="empty">No lifecycle events yet</div>
+          <div className="empty">{t('lifecycle.noEvents')}</div>
         ) : (
           <table>
             <thead>
-              <tr><th>Action</th><th>Memory IDs</th><th>Details</th><th>Time</th></tr>
+              <tr><th>{t('lifecycle.action')}</th><th>{t('lifecycle.memoryIds')}</th><th>{t('lifecycle.details')}</th><th>{t('lifecycle.time')}</th></tr>
             </thead>
             <tbody>
               {logs.map((log: any) => (
                 <tr key={log.id}>
                   <td><span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: '#818cf8' }}>{log.action}</span></td>
                   <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.memory_ids}</td>
-                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.details || '—'}</td>
+                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.details || '\u2014'}</td>
                   <td>{log.executed_at?.slice(0, 19)}</td>
                 </tr>
               ))}
