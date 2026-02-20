@@ -9,6 +9,7 @@ import { registerRelationsRoutes } from './relations.js';
 import { registerLifecycleRoutes } from './lifecycle.js';
 import { registerSystemRoutes } from './system.js';
 import { registerMCPRoutes } from './mcp.js';
+import { registerImportExportRoutes } from './import-export.js';
 
 export function registerAllRoutes(app: FastifyInstance, cortex: CortexApp): void {
   registerRecallRoutes(app, cortex);
@@ -20,4 +21,5 @@ export function registerAllRoutes(app: FastifyInstance, cortex: CortexApp): void
   registerLifecycleRoutes(app, cortex);
   registerSystemRoutes(app, cortex);
   registerMCPRoutes(app, cortex);
+  registerImportExportRoutes(app, cortex);
 }

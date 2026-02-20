@@ -39,10 +39,4 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     const updated = updateConfig(body);
     return { ok: true, config: updated };
   });
-
-  // Export
-  app.post('/api/v1/export', async (req) => {
-    await cortex.exporter.exportAll();
-    return { ok: true, message: 'Markdown export completed' };
-  });
 }
