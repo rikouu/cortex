@@ -545,6 +545,8 @@ export default {
     exactDupThresholdDesc: 'Vector distance below which memories are considered exact duplicates and silently skipped. Default: 0.08, Range: 0.01-0.2.',
     relationExtraction: 'Auto-extract Relations',
     relationExtractionDesc: 'Automatically extract entity relationships (who uses what, who knows whom) from conversations during memory extraction.',
+    dimensionRecommended: 'Recommended: {{value}}',
+    dimensionMismatch: 'Current dimension does not match {{model}} recommended value ({{recommended}}). Dimension was auto-updated when you selected this model — if you changed it manually, make sure it is correct.',
     dimensionWarning: 'Embedding dimensions are locked once data is stored. Changing to a different dimension model requires a full vector reindex (all existing vectors will be regenerated).',
   },
 } as const;

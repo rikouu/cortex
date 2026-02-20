@@ -124,6 +124,26 @@ const EMBEDDING_PROVIDERS: Record<string, ProviderPreset> = {
   },
 };
 
+/** Recommended embedding dimensions per model */
+const EMBEDDING_DIMENSIONS: Record<string, number> = {
+  // OpenAI
+  'text-embedding-3-small': 1536,
+  'text-embedding-3-large': 3072,
+  'text-embedding-ada-002': 1536,
+  // Google
+  'gemini-embedding-001': 768,
+  'text-embedding-004': 768,
+  // Voyage
+  'voyage-3': 1024,
+  'voyage-3-lite': 512,
+  'voyage-code-3': 1024,
+  // Ollama
+  'bge-m3': 1024,
+  'nomic-embed-text': 768,
+  'mxbai-embed-large': 1024,
+  'all-minilm': 384,
+};
+
 const CUSTOM_MODEL = '__custom__';
 
 // ─── Schedule Presets ────────────────────────────────────────────────────────
@@ -715,6 +735,10 @@ export default function Settings() {
       updateDraft(`${prefix}.useCustomModel`, false);
       updateDraft(`${prefix}.customModel`, '');
       updateDraft(`${prefix}.baseUrl`, '');
+      // Auto-update dimensions for embedding models
+      if (d.dimensions !== undefined && firstModel && EMBEDDING_DIMENSIONS[firstModel]) {
+        updateDraft(`${prefix}.dimensions`, EMBEDDING_DIMENSIONS[firstModel]);
+      }
     };
 
     const handleModelSelectChange = (val: string) => {
@@ -724,6 +748,10 @@ export default function Settings() {
       } else {
         updateDraft(`${prefix}.useCustomModel`, false);
         updateDraft(`${prefix}.model`, val);
+        // Auto-update dimensions for embedding models
+        if (d.dimensions !== undefined && EMBEDDING_DIMENSIONS[val]) {
+          updateDraft(`${prefix}.dimensions`, EMBEDDING_DIMENSIONS[val]);
+        }
       }
     };
 
@@ -781,23 +809,45 @@ export default function Settings() {
             </div>
 
             {/* Dimensions (embedding only) */}
-            {d.dimensions !== undefined && (
-              <div className="form-group">
-                <label>{t('settings.dimensions')}</label>
-                <input
-                  type="number"
-                  value={d.dimensions ?? ''}
-                  onChange={e => updateDraft(`${prefix}.dimensions`, e.target.value)}
-                />
-                <div style={{
-                  marginTop: 8, padding: '8px 12px',
-                  background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)',
-                  borderRadius: 4, fontSize: 12, color: '#b8860b', lineHeight: 1.5
-                }}>
-                  {t('settings.dimensionWarning')}
+            {d.dimensions !== undefined && (() => {
+              const currentModel = isCustomModel ? (d.customModel ?? '') : (d.model ?? '');
+              const recommended = EMBEDDING_DIMENSIONS[currentModel];
+              const currentDim = Number(d.dimensions);
+              const mismatch = recommended && currentDim !== recommended;
+              return (
+                <div className="form-group">
+                  <label>
+                    {t('settings.dimensions')}
+                    {recommended && (
+                      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>
+                        {t('settings.dimensionRecommended', { value: recommended })}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    value={d.dimensions ?? ''}
+                    onChange={e => updateDraft(`${prefix}.dimensions`, e.target.value)}
+                  />
+                  {mismatch && (
+                    <div style={{
+                      marginTop: 8, padding: '8px 12px',
+                      background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)',
+                      borderRadius: 4, fontSize: 12, color: '#b8860b', lineHeight: 1.5
+                    }}>
+                      {t('settings.dimensionMismatch', { model: currentModel, recommended })}
+                    </div>
+                  )}
+                  <div style={{
+                    marginTop: 8, padding: '8px 12px',
+                    background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)',
+                    borderRadius: 4, fontSize: 12, color: '#b8860b', lineHeight: 1.5
+                  }}>
+                    {t('settings.dimensionWarning')}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* API Key */}
             {preset?.envKey && (
