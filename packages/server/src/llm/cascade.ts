@@ -2,6 +2,8 @@ import type { LLMProvider, LLMCompletionOpts } from './interface.js';
 import { OpenAILLMProvider } from './openai.js';
 import { AnthropicLLMProvider } from './anthropic.js';
 import { OllamaLLMProvider } from './ollama.js';
+import { GoogleLLMProvider } from './google.js';
+import { OpenRouterLLMProvider } from './openrouter.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('llm-cascade');
@@ -44,6 +46,11 @@ export function createLLMProvider(config: { provider: string; model?: string; ap
       return new OpenAILLMProvider(config);
     case 'anthropic':
       return new AnthropicLLMProvider(config);
+    case 'google':
+    case 'gemini':
+      return new GoogleLLMProvider(config);
+    case 'openrouter':
+      return new OpenRouterLLMProvider(config);
     case 'ollama':
       return new OllamaLLMProvider(config);
     case 'none':

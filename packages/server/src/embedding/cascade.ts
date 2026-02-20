@@ -1,6 +1,8 @@
 import type { EmbeddingProvider } from './interface.js';
 import { OpenAIEmbeddingProvider } from './openai.js';
 import { OllamaEmbeddingProvider } from './ollama.js';
+import { GoogleEmbeddingProvider } from './google.js';
+import { VoyageEmbeddingProvider } from './voyage.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('embed-cascade');
@@ -58,6 +60,11 @@ export function createEmbeddingProvider(config: {
   switch (config.provider) {
     case 'openai':
       return new OpenAIEmbeddingProvider(config);
+    case 'google':
+    case 'gemini':
+      return new GoogleEmbeddingProvider(config);
+    case 'voyage':
+      return new VoyageEmbeddingProvider(config);
     case 'ollama':
       return new OllamaEmbeddingProvider(config);
     case 'none':

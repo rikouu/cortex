@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const LLMProviderSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'google', 'openrouter', 'ollama', 'none']),
+  provider: z.enum(['openai', 'anthropic', 'google', 'gemini', 'openrouter', 'ollama', 'none']),
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
@@ -12,7 +12,7 @@ const LLMProviderSchema = z.object({
 });
 
 const EmbeddingProviderSchema = z.object({
-  provider: z.enum(['openai', 'ollama', 'none']),
+  provider: z.enum(['openai', 'google', 'gemini', 'voyage', 'ollama', 'none']),
   model: z.string().optional(),
   dimensions: z.number().optional(),
   apiKey: z.string().optional(),
