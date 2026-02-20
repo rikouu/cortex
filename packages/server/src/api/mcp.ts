@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { MCPServer, type MCPServerDeps } from '../mcp/server.js';
 import { insertMemory, updateMemory, deleteMemory, getMemoryById, getStats, ensureAgent, listRelations, type MemoryCategory } from '../db/index.js';
+import { insertExtractionLog } from '../core/extraction-log.js';
 
 const VALID_MCP_CATEGORIES = new Set<string>([
   'identity', 'preference', 'decision', 'fact', 'entity',
@@ -23,9 +24,14 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
     },
 
     remember: async (content, category, importance, agentId) => {
+      const start = Date.now();
       const validCategory = (category && VALID_MCP_CATEGORIES.has(category) ? category : 'fact') as MemoryCategory;
       const aid = agentId || 'mcp';
       ensureAgent(aid);
+
+      let resultStatus = 'remembered';
+      let deduped = 0;
+      let resultMem: any;
 
       // Dedup: check for similar existing memories before inserting
       try {
@@ -43,10 +49,10 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
                   importance: Math.max(existing.importance, importance ?? 0.7),
                   confidence: Math.min(existing.confidence + 0.05, 1.0),
                 });
-                return { id: existing.id, status: 'already_exists', memory: existing };
-              }
-
-              if (similar[0]!.distance < similarityThreshold) {
+                deduped = 1;
+                resultStatus = 'already_exists';
+                resultMem = { id: existing.id, status: 'already_exists', memory: existing };
+              } else if (similar[0]!.distance < similarityThreshold) {
                 // Similar — supersede old, insert new (explicit user intent = always replace)
                 const mem = insertMemory({
                   layer: 'core',
@@ -60,37 +66,58 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
                 });
                 updateMemory(existing.id, { superseded_by: mem.id });
                 await cortex.vectorBackend.upsert(mem.id, embedding);
-                return { id: mem.id, status: 'remembered', memory: mem };
+                resultStatus = 'replaced';
+                resultMem = { id: mem.id, status: 'remembered', memory: mem };
               }
             }
           }
 
-          // No similar memory found — normal insert
-          const mem = insertMemory({
-            layer: 'core',
-            category: validCategory,
-            content,
-            importance: importance ?? 0.7,
-            confidence: 0.9,
-            agent_id: aid,
-            source: 'mcp:remember',
-          });
-          await cortex.vectorBackend.upsert(mem.id, embedding);
-          return { id: mem.id, status: 'remembered', memory: mem };
+          if (!resultMem) {
+            // No similar memory found — normal insert
+            const mem = insertMemory({
+              layer: 'core',
+              category: validCategory,
+              content,
+              importance: importance ?? 0.7,
+              confidence: 0.9,
+              agent_id: aid,
+              source: 'mcp:remember',
+            });
+            await cortex.vectorBackend.upsert(mem.id, embedding);
+            resultMem = { id: mem.id, status: 'remembered', memory: mem };
+          }
         }
       } catch { /* best effort — fall through to simple insert */ }
 
-      // Fallback: simple insert without dedup (embedding failed)
-      const mem = insertMemory({
-        layer: 'core',
-        category: validCategory,
-        content,
-        importance: importance ?? 0.7,
-        confidence: 0.9,
-        agent_id: aid,
-        source: 'mcp:remember',
-      });
-      return { id: mem.id, status: 'remembered', memory: mem };
+      if (!resultMem) {
+        // Fallback: simple insert without dedup (embedding failed)
+        const mem = insertMemory({
+          layer: 'core',
+          category: validCategory,
+          content,
+          importance: importance ?? 0.7,
+          confidence: 0.9,
+          agent_id: aid,
+          source: 'mcp:remember',
+        });
+        resultMem = { id: mem.id, status: 'remembered', memory: mem };
+      }
+
+      // Write extraction log for MCP remember
+      if (cortex.config.sieve.extractionLogging) {
+        insertExtractionLog(aid, undefined, {
+          channel: 'mcp',
+          exchange_preview: content.slice(0, 200),
+          raw_output: JSON.stringify({ content, category: validCategory, importance: importance ?? 0.7, status: resultStatus }),
+          parsed_memories: [{ content, category: validCategory, importance: importance ?? 0.7, source: 'user_stated' as const, reasoning: 'mcp:remember' }],
+          memories_written: deduped > 0 ? 0 : 1,
+          memories_deduped: deduped,
+          memories_smart_updated: resultStatus === 'replaced' ? 1 : 0,
+          latency_ms: Date.now() - start,
+        });
+      }
+
+      return resultMem;
     },
 
     forget: async (memoryId, reason) => {

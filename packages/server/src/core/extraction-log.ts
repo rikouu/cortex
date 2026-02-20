@@ -47,7 +47,7 @@ export function insertExtractionLog(
 
 export function getExtractionLogs(
   agentId: string,
-  opts?: { limit?: number; channel?: 'fast' | 'deep' | 'flush' },
+  opts?: { limit?: number; channel?: 'fast' | 'deep' | 'flush' | 'mcp' },
 ): ExtractionLogEntry[] {
   const db = getDb();
   const conditions = ['agent_id = ?'];

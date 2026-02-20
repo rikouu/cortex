@@ -219,20 +219,27 @@ const HIGH_SIGNAL_PATTERNS: {
 
 /** Regex to strip injected system tags before pattern matching */
 const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
-const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
+const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|tool_use|function_call|function_result|instructions|artifact|thinking|antThinking)[\s\S]*?<\/(?:system|context|memory|tool_result|tool_use|function_call|function_result|instructions|artifact|thinking|antThinking)>/g;
 
 /**
  * Detect high-signal information from user/assistant exchange.
  * Uses regex patterns only — no LLM call needed.
+ *
+ * User-category patterns only run against user messages to prevent
+ * assistant responses from being misidentified as user facts.
+ * Agent-category patterns (agent_*) run against assistant messages.
  */
 export function detectHighSignals(exchange: { user: string; assistant: string }): DetectedSignal[] {
   const signals: DetectedSignal[] = [];
   // Strip injected tags to avoid matching content from previous memory injections
   const cleanUser = exchange.user.replace(INJECTED_TAG_RE, '').replace(SYSTEM_TAG_RE, '');
   const cleanAssistant = exchange.assistant.replace(INJECTED_TAG_RE, '').replace(SYSTEM_TAG_RE, '');
-  const text = `${cleanUser}\n${cleanAssistant}`;
 
   for (const rule of HIGH_SIGNAL_PATTERNS) {
+    // Agent categories match assistant text; all other categories match user text only
+    const text = rule.category.startsWith('agent_') ? cleanAssistant : cleanUser;
+    if (!text || text.length < 3) continue;
+
     for (const pattern of rule.patterns) {
       const match = text.match(pattern);
       if (match) {

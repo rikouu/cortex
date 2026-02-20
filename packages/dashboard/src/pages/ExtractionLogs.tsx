@@ -15,7 +15,7 @@ interface LogEntry {
   agent_id: string;
   session_id?: string;
   exchange_preview: string;
-  channel: 'fast' | 'deep' | 'flush';
+  channel: 'fast' | 'deep' | 'flush' | 'mcp';
   raw_output: string;
   parsed_memories: ExtractedMemory[];
   memories_written: number;
@@ -28,6 +28,7 @@ const CHANNEL_COLORS: Record<string, { bg: string; color: string }> = {
   fast: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
   deep: { bg: 'rgba(59,130,246,0.15)', color: '#3b82f6' },
   flush: { bg: 'rgba(139,92,246,0.15)', color: '#8b5cf6' },
+  mcp: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
 };
 
 export default function ExtractionLogs() {
@@ -70,7 +71,7 @@ export default function ExtractionLogs() {
   const totalWritten = logs.reduce((s, l) => s + l.memories_written, 0);
   const totalDeduped = logs.reduce((s, l) => s + l.memories_deduped, 0);
   const avgLatency = logs.length > 0 ? Math.round(logs.reduce((s, l) => s + l.latency_ms, 0) / logs.length) : 0;
-  const channelCounts = { fast: 0, deep: 0, flush: 0 };
+  const channelCounts: Record<string, number> = { fast: 0, deep: 0, flush: 0, mcp: 0 };
   for (const l of logs) channelCounts[l.channel] = (channelCounts[l.channel] || 0) + 1;
 
   return (
@@ -92,6 +93,7 @@ export default function ExtractionLogs() {
             <option value="fast">Fast</option>
             <option value="deep">Deep</option>
             <option value="flush">Flush</option>
+            <option value="mcp">MCP</option>
           </select>
         </div>
       </div>
@@ -114,7 +116,7 @@ export default function ExtractionLogs() {
           <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>{avgLatency}ms</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('extractionLogs.avgLatency')}</div>
         </div>
-        {(['fast', 'deep', 'flush'] as const).map(ch => (
+        {(['fast', 'deep', 'flush', 'mcp'] as const).map(ch => (
           <div key={ch} className="card" style={{ padding: 12, textAlign: 'center' }}>
             <div style={{ fontSize: 24, fontWeight: 700, color: CHANNEL_COLORS[ch].color }}>{channelCounts[ch]}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ch}</div>

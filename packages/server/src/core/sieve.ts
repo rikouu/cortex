@@ -25,6 +25,20 @@ const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata|prompt|instruction
 /** Chat-ML / special role markers */
 const ROLE_MARKER_RE = /^(?:<\|(?:system|im_start|im_end)\|>|\[(?:SYSTEM|INST|\/INST|SYS|\/SYS)\]|Human:|Assistant:|<<SYS>>|<<\/SYS>>)[^\n]*$/gm;
 
+/** Tool/capability instructions injected by frameworks (OpenClaw, etc.) */
+const TOOL_INSTRUCTION_RE = /^(?:To (?:send|upload|share|create|use|handle|process|generate|render|display|format|attach|include)\b[^\n]*\b(?:tool|function|method|API|endpoint|format|command|provider|message)\b[^\n]*|(?:Prefer|Use|Always use|When possible,? use)\b[^\n]*\b(?:tool|function|method|format)\b[^\n]*|(?:Note|Important|Warning|Tip):\s*(?:When|If|To|For)\s[^\n]*\b(?:tool|API|function|MCP|message|provider)\b[^\n]*)$/gmi;
+
+/** Capability description lines (e.g. "I can analyze images", "This tool supports...") */
+const CAPABILITY_RE = /^(?:(?:I|This (?:tool|assistant|model|system)) (?:can|support|am able to|will|allow)\b[^\n]{10,}|(?:Supported|Available|Enabled) (?:features|capabilities|tools|formats|options)[:\s][^\n]*)$/gmi;
+
+/** Strip markdown code fences (```json ... ```) from LLM output */
+function stripCodeFences(text: string): string {
+  const trimmed = text.trim();
+  // Match ```json or ``` at start and ``` at end
+  const match = trimmed.match(/^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```$/);
+  return match ? match[1]!.trim() : trimmed;
+}
+
 /** Strip all injected system tags from text to prevent nested pollution */
 function stripInjectedContent(text: string): string {
   return text
@@ -33,6 +47,8 @@ function stripInjectedContent(text: string): string {
     .replace(PLAIN_META_RE, '')
     .replace(SYSTEM_PREFIX_RE, '')
     .replace(ROLE_MARKER_RE, '')
+    .replace(TOOL_INSTRUCTION_RE, '')
+    .replace(CAPABILITY_RE, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -73,7 +89,7 @@ export interface SmartUpdateDecision {
 }
 
 export interface ExtractionLogData {
-  channel: 'fast' | 'deep' | 'flush';
+  channel: 'fast' | 'deep' | 'flush' | 'mcp';
   exchange_preview: string;
   raw_output: string;
   parsed_memories: ExtractedMemory[];
@@ -127,7 +143,7 @@ export class MemorySieve {
     // Skip if nothing left after stripping
     if (!cleanUser || cleanUser.length < 3) {
       log.info({ agent_id: agentId }, 'Ingest skipped: empty after tag stripping');
-      return { extracted: [], high_signals: [], structured_extractions: [], deduplicated: 0, smart_updated: 0 };
+      return { extracted: [], high_signals: [], structured_extractions: [], deduplicated: 0, smart_updated: 0, extraction_logs: [] };
     }
 
     const exchange = { user: cleanUser, assistant: cleanAssistant, messages: cleanMessages };
@@ -541,14 +557,15 @@ export class MemorySieve {
   }
 
   private parseStructuredOutput(raw: string): { memories: ExtractedMemory[]; relations: ExtractedRelation[] } {
-    const trimmed = raw.trim();
+    // Strip markdown code fences first (LLMs often wrap JSON in ```json ... ```)
+    const trimmed = stripCodeFences(raw);
 
     // Try direct JSON.parse
     let obj: any;
     try {
       obj = JSON.parse(trimmed);
     } catch {
-      // Fallback: extract JSON from markdown code block or embedded JSON
+      // Fallback: extract JSON from embedded text
       const jsonMatch = trimmed.match(/\{[\s\S]*"memories"[\s\S]*\}/);
       if (jsonMatch) {
         try {
@@ -646,7 +663,7 @@ export class MemorySieve {
         systemPrompt: SMART_UPDATE_SYSTEM_PROMPT,
       });
 
-      const trimmed = raw.trim();
+      const trimmed = stripCodeFences(raw);
       let obj: any;
       try {
         obj = JSON.parse(trimmed);
