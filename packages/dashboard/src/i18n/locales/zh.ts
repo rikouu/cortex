@@ -505,5 +505,13 @@ export default {
     confirmImportConfig: '从文件导入配置？这将覆盖当前设置（服务器地址、认证和存储路径除外）。',
     toastConfigImported: '配置导入成功',
     toastConfigImportFailed: '导入失败：{{message}}',
+    // 测试连接
+    testConnection: '测试',
+    testing: '测试中...',
+    testSuccess: '正常 ({{latency}}ms)',
+    testFailed: '失败：{{message}}',
+    // Sieve 设置
+    contextMessages: '提取上下文消息数',
+    contextMessagesDesc: '发送给记忆提取的最近对话消息条数。更多消息提供更丰富的上下文，但增加 LLM 开销。默认 4 条，范围 2-20。',
   },
 } as const;

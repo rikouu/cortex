@@ -81,6 +81,7 @@ const CortexConfigSchema = z.object({
     profileInjection: z.boolean().default(true),
     extractionLogging: z.boolean().default(true),
     maxExtractionTokens: z.number().default(800),
+    contextMessages: z.number().min(2).max(20).default(4),
   }).default({}),
   lifecycle: z.object({
     schedule: z.string().default('0 3 * * *'),

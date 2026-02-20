@@ -57,7 +57,40 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
   app.patch('/api/v1/config', async (req) => {
     const body = req.body as any;
     const updated = updateConfig(body);
-    return { ok: true, config: updated };
+    const reloaded = cortex.reloadProviders(updated);
+    return { ok: true, config: updated, reloaded_providers: reloaded };
+  });
+
+  // Test LLM connection
+  app.post('/api/v1/test-llm', async (req) => {
+    const body = req.body as any;
+    const target: 'extraction' | 'lifecycle' = body?.target === 'lifecycle' ? 'lifecycle' : 'extraction';
+    const provider = target === 'extraction' ? cortex.llmExtraction : cortex.llmLifecycle;
+    const providerName = cortex.config.llm[target].provider;
+    const start = Date.now();
+    try {
+      await provider.complete('Reply with exactly: OK', { maxTokens: 10, temperature: 0 });
+      return { ok: true, provider: providerName, latency_ms: Date.now() - start };
+    } catch (e: any) {
+      return { ok: false, provider: providerName, latency_ms: Date.now() - start, error: e.message };
+    }
+  });
+
+  // Test Embedding connection
+  app.post('/api/v1/test-embedding', async () => {
+    const providerName = cortex.config.embedding.provider;
+    const start = Date.now();
+    try {
+      const result = await cortex.embeddingProvider.embed('test connection');
+      return {
+        ok: result.length > 0,
+        provider: providerName,
+        dimensions: result.length,
+        latency_ms: Date.now() - start,
+      };
+    } catch (e: any) {
+      return { ok: false, provider: providerName, dimensions: 0, latency_ms: Date.now() - start, error: e.message };
+    }
   });
 
   // Full reindex — rebuilds all vector embeddings

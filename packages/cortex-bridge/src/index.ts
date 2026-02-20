@@ -143,16 +143,21 @@ async function cortexIngest(
   userMessage: string,
   assistantMessage: string,
   agentId: string,
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): Promise<{ ok: boolean; extracted?: number; deduplicated?: number; error?: string }> {
   try {
+    const payload: any = {
+      user_message: userMessage,
+      assistant_message: assistantMessage,
+      agent_id: agentId,
+    };
+    if (messages && messages.length > 0) {
+      payload.messages = messages;
+    }
     const res = await fetch(`${cortexUrl}/api/v1/ingest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_message: userMessage,
-        assistant_message: assistantMessage,
-        agent_id: agentId,
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(INGEST_TIMEOUT),
     });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -212,6 +217,7 @@ export default {
       cortexUrl: { type: 'string', default: 'http://localhost:21100' },
       agentId: { type: 'string', default: 'openclaw' },
       debug: { type: 'boolean', default: false },
+      contextMessages: { type: 'number', default: 4, minimum: 2, maximum: 20 },
     },
   },
 
@@ -386,26 +392,48 @@ export default {
     // ── Hook: agent_end → Ingest conversation ───────────
     // event: { messages: AgentMessage[], success, error?, durationMs? }
     // AgentMessage.content is multimodal: string | {type,text}[]
+    const contextMessageCount = Number(config.contextMessages) || 4;
+
     api.on('agent_end', async (event: any) => {
       try {
-        const messages: any[] = event?.messages || [];
-        const reversed = [...messages].reverse();
-        const lastAssistant = reversed.find((m: any) => m.role === 'assistant');
-        const lastUser = reversed.find((m: any) => m.role === 'user');
+        const allMessages: any[] = event?.messages || [];
 
-        if (!lastUser || !lastAssistant) return;
+        // Filter to user/assistant messages only
+        const conversationMsgs = allMessages.filter(
+          (m: any) => m.role === 'user' || m.role === 'assistant',
+        );
 
-        // Extract text, strip code blocks/JSON/tags, and quality-check
-        const userText = cleanForIngestion(extractText(lastUser.content));
-        const assistantText = cleanForIngestion(extractText(lastAssistant.content));
+        // Take the last N messages
+        const recentMsgs = conversationMsgs.slice(-contextMessageCount);
+        if (recentMsgs.length === 0) return;
 
-        if (!isUsefulForIngestion(userText) || !isUsefulForIngestion(assistantText)) {
-          if (debug) log.warn('[cortex-bridge] agent_end: content too short or noisy after cleaning, skipping');
+        // Clean each message
+        const cleanedMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+        for (const m of recentMsgs) {
+          const cleaned = cleanForIngestion(extractText(m.content));
+          if (isUsefulForIngestion(cleaned)) {
+            cleanedMessages.push({ role: m.role as 'user' | 'assistant', content: cleaned });
+          }
+        }
+
+        if (cleanedMessages.length === 0) {
+          if (debug) log.warn('[cortex-bridge] agent_end: no useful messages after cleaning, skipping');
           return;
         }
 
-        const result = await cortexIngest(cortexUrl, userText, assistantText, agentId);
-        if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}`);
+        // For backward compat, also derive user_message/assistant_message from last pair
+        const lastUser = [...cleanedMessages].reverse().find(m => m.role === 'user');
+        const lastAssistant = [...cleanedMessages].reverse().find(m => m.role === 'assistant');
+        const userText = lastUser?.content || '';
+        const assistantText = lastAssistant?.content || '';
+
+        if (!userText || !assistantText) {
+          if (debug) log.warn('[cortex-bridge] agent_end: missing user or assistant in last pair, skipping');
+          return;
+        }
+
+        const result = await cortexIngest(cortexUrl, userText, assistantText, agentId, cleanedMessages);
+        if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}, messages=${cleanedMessages.length}`);
       } catch (e) {
         if (debug) log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
       }

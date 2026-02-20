@@ -505,5 +505,13 @@ export default {
     confirmImportConfig: 'Import configuration from file? This will overwrite current settings (except server, auth, and storage).',
     toastConfigImported: 'Configuration imported successfully',
     toastConfigImportFailed: 'Import failed: {{message}}',
+    // Test connection
+    testConnection: 'Test',
+    testing: 'Testing...',
+    testSuccess: 'OK ({{latency}}ms)',
+    testFailed: 'Failed: {{message}}',
+    // Sieve settings
+    contextMessages: 'Context Messages for Extraction',
+    contextMessagesDesc: 'Number of recent conversation messages sent for memory extraction. More messages provide richer context but increase LLM cost. Default: 4, Range: 2-20.',
   },
 } as const;

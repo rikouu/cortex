@@ -12,6 +12,17 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
         properties: {
           user_message: { type: 'string' },
           assistant_message: { type: 'string' },
+          messages: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['role', 'content'],
+              properties: {
+                role: { type: 'string', enum: ['user', 'assistant'] },
+                content: { type: 'string' },
+              },
+            },
+          },
           agent_id: { type: 'string' },
           session_id: { type: 'string' },
         },
@@ -23,6 +34,7 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
     const result = await cortex.sieve.ingest({
       user_message: body.user_message,
       assistant_message: body.assistant_message,
+      messages: body.messages,
       agent_id: body.agent_id,
       session_id: body.session_id,
     });

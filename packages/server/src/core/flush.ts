@@ -17,11 +17,17 @@ const DEDUP_DISTANCE_THRESHOLD = 0.15;
 const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
 const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
 
+/** Plain-text metadata prefixes injected by some frameworks */
+const PLAIN_META_RE = /^Conversation info \(untrusted metadata\):.*$/gm;
+const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata)|Conversation (?:info|context|metadata)|Memory context|Previous context)[\s(][^\n]*$/gm;
+
 /** Strip all injected system tags from text to prevent nested pollution */
 function stripInjectedContent(text: string): string {
   return text
     .replace(INJECTED_TAG_RE, '')
     .replace(SYSTEM_TAG_RE, '')
+    .replace(PLAIN_META_RE, '')
+    .replace(SYSTEM_PREFIX_RE, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

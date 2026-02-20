@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { getConfig, updateConfig, triggerExport, triggerReindex, triggerImport } from '../api/client.js';
+import { getConfig, updateConfig, triggerExport, triggerReindex, triggerImport, testLLM, testEmbedding } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 
-type SectionKey = 'llm' | 'search' | 'lifecycle' | 'layers' | 'gate';
+type SectionKey = 'llm' | 'search' | 'lifecycle' | 'layers' | 'gate' | 'sieve';
 
 // ─── Provider & Model Presets ────────────────────────────────────────────────
 
@@ -166,6 +166,7 @@ export default function Settings() {
   const [editingSection, setEditingSection] = useState<SectionKey | null>(null);
   const [draft, setDraft] = useState<any>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [testState, setTestState] = useState<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string; latency?: number }>>({});
   const { t } = useI18n();
 
   useEffect(() => {
@@ -266,6 +267,9 @@ export default function Settings() {
         maxInjectionTokens: config.gate?.maxInjectionTokens ?? 2000,
         skipSmallTalk: config.gate?.skipSmallTalk ?? false,
       }),
+      sieve: () => ({
+        contextMessages: config.sieve?.contextMessages ?? 4,
+      }),
     };
 
     const d = sectionDrafts[section]();
@@ -335,6 +339,11 @@ export default function Settings() {
       if (isNaN(mit) || mit < 100 || mit > 50000) errors.push(t('settings.validationTokenRange'));
     }
 
+    if (section === 'sieve') {
+      const cm = Number(draft.contextMessages);
+      if (isNaN(cm) || cm < 2 || cm > 20) errors.push(t('settings.validationPositiveNumber'));
+    }
+
     if (errors.length > 0) {
       setToast({ message: errors[0], type: 'error' });
       return;
@@ -392,6 +401,10 @@ export default function Settings() {
         payload.gate = {
           maxInjectionTokens: Number(draft.maxInjectionTokens),
           skipSmallTalk: draft.skipSmallTalk,
+        };
+      } else if (section === 'sieve') {
+        payload.sieve = {
+          contextMessages: Number(draft.contextMessages),
         };
       }
 
@@ -635,6 +648,38 @@ export default function Settings() {
     );
   };
 
+  // ─── Test connection handlers ─────────────────────────────────────────────
+
+  const handleTestLLM = async (target: 'extraction' | 'lifecycle') => {
+    const key = `llm.${target}`;
+    setTestState(prev => ({ ...prev, [key]: { status: 'testing' } }));
+    try {
+      const res = await testLLM(target);
+      if (res.ok) {
+        setTestState(prev => ({ ...prev, [key]: { status: 'success', latency: res.latency_ms } }));
+      } else {
+        setTestState(prev => ({ ...prev, [key]: { status: 'error', message: res.error || 'Unknown error' } }));
+      }
+    } catch (e: any) {
+      setTestState(prev => ({ ...prev, [key]: { status: 'error', message: e.message } }));
+    }
+  };
+
+  const handleTestEmbedding = async () => {
+    const key = 'embedding';
+    setTestState(prev => ({ ...prev, [key]: { status: 'testing' } }));
+    try {
+      const res = await testEmbedding();
+      if (res.ok) {
+        setTestState(prev => ({ ...prev, [key]: { status: 'success', latency: res.latency_ms } }));
+      } else {
+        setTestState(prev => ({ ...prev, [key]: { status: 'error', message: res.error || 'Unknown error' } }));
+      }
+    } catch (e: any) {
+      setTestState(prev => ({ ...prev, [key]: { status: 'error', message: e.message } }));
+    }
+  };
+
   // ─── LLM Provider Row (reusable for extraction, lifecycle, embedding) ──────
 
   const renderProviderBlock = (
@@ -840,9 +885,66 @@ export default function Settings() {
         ) : (
           <table>
             <tbody>
-              <tr><td>{t('settings.extractionLlm')}</td><td>{config.llm?.extraction?.provider} / {config.llm?.extraction?.model}</td></tr>
-              <tr><td>{t('settings.lifecycleLlm')}</td><td>{config.llm?.lifecycle?.provider} / {config.llm?.lifecycle?.model}</td></tr>
-              <tr><td>{t('settings.embedding')}</td><td>{config.embedding?.provider} / {config.embedding?.model}</td></tr>
+              <tr>
+                <td>{t('settings.extractionLlm')}</td>
+                <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>{config.llm?.extraction?.provider} / {config.llm?.extraction?.model}</span>
+                  <button
+                    className="btn"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    disabled={testState['llm.extraction']?.status === 'testing'}
+                    onClick={() => handleTestLLM('extraction')}
+                  >
+                    {testState['llm.extraction']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+                  </button>
+                  {testState['llm.extraction']?.status === 'success' && (
+                    <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['llm.extraction'].latency ?? 0 })}</span>
+                  )}
+                  {testState['llm.extraction']?.status === 'error' && (
+                    <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['llm.extraction'].message ?? '' })}</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td>{t('settings.lifecycleLlm')}</td>
+                <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>{config.llm?.lifecycle?.provider} / {config.llm?.lifecycle?.model}</span>
+                  <button
+                    className="btn"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    disabled={testState['llm.lifecycle']?.status === 'testing'}
+                    onClick={() => handleTestLLM('lifecycle')}
+                  >
+                    {testState['llm.lifecycle']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+                  </button>
+                  {testState['llm.lifecycle']?.status === 'success' && (
+                    <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['llm.lifecycle'].latency ?? 0 })}</span>
+                  )}
+                  {testState['llm.lifecycle']?.status === 'error' && (
+                    <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['llm.lifecycle'].message ?? '' })}</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td>{t('settings.embedding')}</td>
+                <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>{config.embedding?.provider} / {config.embedding?.model}</span>
+                  <button
+                    className="btn"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    disabled={testState['embedding']?.status === 'testing'}
+                    onClick={() => handleTestEmbedding()}
+                  >
+                    {testState['embedding']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+                  </button>
+                  {testState['embedding']?.status === 'success' && (
+                    <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['embedding'].latency ?? 0 })}</span>
+                  )}
+                  {testState['embedding']?.status === 'error' && (
+                    <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['embedding'].message ?? '' })}</span>
+                  )}
+                </td>
+              </tr>
               <tr><td>{t('settings.embeddingDimensions')}</td><td>{config.embedding?.dimensions}</td></tr>
             </tbody>
           </table>
@@ -939,6 +1041,22 @@ export default function Settings() {
             <tbody>
               {displayRow(t('settings.maxInjectionTokens'), config.gate?.maxInjectionTokens, t('settings.maxInjectionTokensDesc'))}
               {displayRow(t('settings.skipSmallTalk'), config.gate?.skipSmallTalk ? t('common.on') : t('common.off'), t('settings.skipSmallTalkDesc'))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Sieve (Extraction) ── */}
+      <div className="card">
+        {sectionHeader(t('settings.contextMessages').replace(/ ?\(.*$/, '').split(' ').slice(0, 2).join(' ') || 'Sieve', 'sieve')}
+        {isEditing('sieve') ? (
+          <div style={{ padding: '4px 0' }}>
+            {renderNumberField(t('settings.contextMessages'), t('settings.contextMessagesDesc'), 'contextMessages', 2, 20)}
+          </div>
+        ) : (
+          <table>
+            <tbody>
+              {displayRow(t('settings.contextMessages'), config.sieve?.contextMessages ?? 4, t('settings.contextMessagesDesc'))}
             </tbody>
           </table>
         )}

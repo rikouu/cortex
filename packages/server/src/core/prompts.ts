@@ -88,7 +88,13 @@ If nothing qualifies: { "memories": [], "nothing_extracted": true }
 - Maximum 4 memories per exchange
 - Be specific: "prefers dark mode in all editors" not "has UI preferences"
 - If the user explicitly corrects something, category must be "correction" with importance >= 0.9
-- source: "user_stated" for explicit statements, "user_implied" for implicit info, "observed_pattern" for behavioral patterns`;
+- source: "user_stated" for explicit statements, "user_implied" for implicit info, "observed_pattern" for behavioral patterns
+
+## Multi-turn context
+- [USER] and [ASSISTANT] labels indicate who said what
+- Only extract memories about the USER, never about the assistant
+- If the assistant merely suggests something ("you could say X"), do NOT treat X as a user fact
+- Look for patterns across turns for stronger signals`;
 
 
 // ── Flush: session highlights (conversation summary) ─────

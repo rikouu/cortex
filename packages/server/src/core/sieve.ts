@@ -17,11 +17,17 @@ const DEDUP_DISTANCE_THRESHOLD = 0.15;
 const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
 const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
 
+/** Plain-text metadata prefixes injected by some frameworks */
+const PLAIN_META_RE = /^Conversation info \(untrusted metadata\):.*$/gm;
+const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata)|Conversation (?:info|context|metadata)|Memory context|Previous context)[\s(][^\n]*$/gm;
+
 /** Strip all injected system tags from text to prevent nested pollution */
 function stripInjectedContent(text: string): string {
   return text
     .replace(INJECTED_TAG_RE, '')
     .replace(SYSTEM_TAG_RE, '')
+    .replace(PLAIN_META_RE, '')
+    .replace(SYSTEM_PREFIX_RE, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -47,6 +53,7 @@ export interface ExtractionLogData {
 export interface IngestRequest {
   user_message: string;
   assistant_message: string;
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   agent_id?: string;
   session_id?: string;
 }
@@ -70,6 +77,15 @@ export class MemorySieve {
   async ingest(req: IngestRequest): Promise<IngestResponse> {
     const agentId = req.agent_id || 'default';
 
+    // Build multi-turn messages if provided, otherwise fall back to single pair
+    let cleanMessages: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
+    if (req.messages && req.messages.length > 0) {
+      cleanMessages = req.messages
+        .map(m => ({ role: m.role, content: stripInjectedContent(m.content) }))
+        .filter(m => m.content.length >= 3);
+      if (cleanMessages.length === 0) cleanMessages = undefined;
+    }
+
     // Strip injected tags FIRST to prevent nested pollution
     const cleanUser = stripInjectedContent(req.user_message);
     const cleanAssistant = stripInjectedContent(req.assistant_message);
@@ -80,7 +96,7 @@ export class MemorySieve {
       return { extracted: [], high_signals: [], structured_extractions: [], deduplicated: 0 };
     }
 
-    const exchange = { user: cleanUser, assistant: cleanAssistant };
+    const exchange = { user: cleanUser, assistant: cleanAssistant, messages: cleanMessages };
     const extracted: Memory[] = [];
     let deduplicated = 0;
     let extractionLog: ExtractionLogData | undefined;
@@ -256,7 +272,7 @@ export class MemorySieve {
   // ── Fast channel: regex-based high signal detection ──
 
   private async runFastChannel(
-    exchange: { user: string; assistant: string },
+    exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     agentId: string,
     sessionId?: string,
   ): Promise<{ signals: DetectedSignal[]; extracted: Memory[]; deduplicated: number }> {
@@ -296,7 +312,7 @@ export class MemorySieve {
   // ── Deep channel: LLM structured extraction ──
 
   private async runDeepChannel(
-    exchange: { user: string; assistant: string },
+    exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     agentId: string,
     sessionId?: string,
   ): Promise<{
@@ -434,18 +450,34 @@ export class MemorySieve {
   // ── Core extraction logic ──
 
   private async extractStructuredRaw(
-    exchange: { user: string; assistant: string },
+    exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     profileContext?: string,
   ): Promise<{ raw: string; parsed: ExtractedMemory[] }> {
-    const userSlice = exchange.user.slice(0, 1500);
-    const assistantSlice = exchange.assistant.slice(0, 1500);
+    let conversationBlock: string;
 
-    let prompt: string;
-    if (profileContext) {
-      prompt = `${profileContext}\n\n---\n\nUser: ${userSlice}\n\nAssistant: ${assistantSlice}`;
+    if (exchange.messages && exchange.messages.length > 0) {
+      // Multi-turn mode: format each message with role labels, total limit 3000 chars
+      const parts: string[] = [];
+      let totalLen = 0;
+      for (const m of exchange.messages) {
+        const label = m.role === 'user' ? '[USER]' : '[ASSISTANT]';
+        const slice = m.content.slice(0, 1500);
+        const line = `${label} ${slice}`;
+        if (totalLen + line.length > 3000) break;
+        parts.push(line);
+        totalLen += line.length;
+      }
+      conversationBlock = parts.join('\n\n');
     } else {
-      prompt = `User: ${userSlice}\n\nAssistant: ${assistantSlice}`;
+      // Single-turn mode (backward compatible)
+      const userSlice = exchange.user.slice(0, 1500);
+      const assistantSlice = exchange.assistant.slice(0, 1500);
+      conversationBlock = `[USER] ${userSlice}\n\n[ASSISTANT] ${assistantSlice}`;
     }
+
+    const prompt = profileContext
+      ? `${profileContext}\n\n---\n\n${conversationBlock}`
+      : conversationBlock;
 
     const maxTokens = this.config.sieve.maxExtractionTokens;
 

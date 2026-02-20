@@ -124,6 +124,13 @@ export const getConfig = () => request('/config');
 export const updateConfig = (data: any) =>
   request('/config', { method: 'PATCH', body: JSON.stringify(data) });
 
+// Test connections
+export const testLLM = (target: 'extraction' | 'lifecycle') =>
+  request('/test-llm', { method: 'POST', body: JSON.stringify({ target }) });
+
+export const testEmbedding = () =>
+  request('/test-embedding', { method: 'POST' });
+
 // Export
 export const triggerExport = (format: string = 'json') =>
   request('/export', { method: 'POST', body: JSON.stringify({ format }) });
