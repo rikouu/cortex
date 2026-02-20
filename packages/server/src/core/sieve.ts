@@ -291,9 +291,12 @@ export class MemorySieve {
       }
     }
 
+    const seqPreview = exchange.messages && exchange.messages.length > 0
+      ? exchange.messages.map((m: any) => `[${m.role}] ${m.content.slice(0, 60)}`).join(' → ').slice(0, 300)
+      : cleanUser.slice(0, 200);
     extractionLogs.push({
       channel: 'deep',
-      exchange_preview: cleanUser.slice(0, 200),
+      exchange_preview: seqPreview,
       raw_output: rawOutput,
       parsed_memories: structuredExtractions,
       memories_written: deepWritten,
@@ -351,9 +354,12 @@ export class MemorySieve {
     }
 
     // Generate extraction log for fast channel if signals were detected
+    const fastPreview = exchange.messages && exchange.messages.length > 0
+      ? exchange.messages.map((m: any) => `[${m.role}] ${m.content.slice(0, 60)}`).join(' → ').slice(0, 300)
+      : exchange.user.slice(0, 200);
     const extractionLog: ExtractionLogData | undefined = signals.length > 0 ? {
       channel: 'fast',
-      exchange_preview: exchange.user.slice(0, 200),
+      exchange_preview: fastPreview,
       raw_output: JSON.stringify(signals.map(s => ({ pattern: s.pattern, category: s.category, content: s.content }))),
       parsed_memories: signals.map(s => ({ content: s.content, category: s.category, importance: s.importance, source: 'user_stated' as const, reasoning: `signal: ${s.pattern}` })),
       memories_written: extracted.length,
@@ -435,6 +441,11 @@ export class MemorySieve {
 
     const latency = Date.now() - start;
 
+    // Build exchange preview: show multi-turn messages if available, otherwise just user message
+    const preview = exchange.messages && exchange.messages.length > 0
+      ? exchange.messages.map((m: any) => `[${m.role}] ${m.content.slice(0, 60)}`).join(' → ').slice(0, 300)
+      : exchange.user.slice(0, 200);
+
     return {
       extracted,
       deduplicated,
@@ -442,7 +453,7 @@ export class MemorySieve {
       structuredExtractions,
       extractionLog: {
         channel: 'deep',
-        exchange_preview: exchange.user.slice(0, 200),
+        exchange_preview: preview,
         raw_output: rawOutput,
         parsed_memories: structuredExtractions,
         memories_written: written,
@@ -522,16 +533,16 @@ export class MemorySieve {
 
     if (exchange.messages && exchange.messages.length > 0) {
       // Multi-turn mode: format each message with role labels, total limit 3000 chars
-      // User messages get full space; assistant messages are truncated (context only)
+      // User messages get full space; assistant messages are moderately truncated
       const parts: string[] = [];
       let totalLen = 0;
       for (const m of exchange.messages) {
         const isUser = m.role === 'user';
-        const label = isUser ? '[USER]' : '[ASSISTANT RESPONSE — for context only, do NOT attribute to user]';
-        const maxLen = isUser ? 1500 : 500;
+        const label = isUser ? '[USER]' : '[ASSISTANT]';
+        const maxLen = isUser ? 1500 : 800;
         const slice = m.content.slice(0, maxLen);
         const line = `${label}\n${slice}`;
-        if (totalLen + line.length > 3000) break;
+        if (totalLen + line.length > 4000) break;
         parts.push(line);
         totalLen += line.length;
       }
@@ -539,8 +550,8 @@ export class MemorySieve {
     } else {
       // Single-turn mode (backward compatible)
       const userSlice = exchange.user.slice(0, 1500);
-      const assistantSlice = exchange.assistant.slice(0, 500);
-      conversationBlock = `[USER]\n${userSlice}\n\n[ASSISTANT RESPONSE — for context only, do NOT attribute to user]\n${assistantSlice}`;
+      const assistantSlice = exchange.assistant.slice(0, 800);
+      conversationBlock = `[USER]\n${userSlice}\n\n[ASSISTANT]\n${assistantSlice}`;
     }
 
     const prompt = profileContext

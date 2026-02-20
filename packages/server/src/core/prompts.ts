@@ -151,33 +151,47 @@ Extract entity relationships mentioned in the conversation as (subject, predicat
 - Instructions about how to handle images, files, or tool calls
 - Capability descriptions ("I can analyze images", "I support file uploads")
 - Framework-injected metadata, role markers, or context tags
-- The assistant's own reasoning process or chain-of-thought
-- The assistant's recommendations, analysis, comparisons, or evaluations — these are assistant output, NOT user knowledge
 
-## CRITICAL: User vs Assistant attribution
+## CRITICAL: User vs Assistant — layered attribution
 
-The conversation has [USER] and [ASSISTANT] sections. You MUST distinguish who said what:
+The conversation has [USER] and [ASSISTANT] sections. You MUST apply different rules to each:
 
-**Only the user can be the source of user memories.** The assistant's words are context, NOT user facts.
+### Layer 1: User categories — ONLY from [USER] sections
+identity, preference, decision, fact, entity, correction, todo, skill, relationship, goal, insight, project_state, constraint, policy
 
-✗ WRONG: User asks "which model is best?" → Assistant says "Sonnet 4.6 is best for JSON" → Extract "用户认为 Sonnet 4.6 最好" (WRONG! The assistant said this, not the user)
-✓ RIGHT: User says "I'll go with Sonnet 4.6" → Extract "用户决定使用 Sonnet 4.6" (Correct — user explicitly decided)
+These categories describe THE USER. Only extract them from what the user explicitly said or confirmed.
 
-✗ WRONG: Assistant recommends "use dark mode" → Extract as user preference (WRONG!)
-✓ RIGHT: User says "I like dark mode" → Extract as user preference (Correct)
+✗ WRONG: User asks "which model is best?" → Assistant says "Sonnet 4.6 is best" → Extract "用户认为 Sonnet 4.6 最好"
+  (The assistant said this, not the user!)
+✓ RIGHT: User says "就用 Sonnet 4.6 吧" → Extract "用户决定使用 Sonnet 4.6"
+  (The user explicitly decided)
+✓ RIGHT: User says "好的" / "ok" after assistant recommends X → Extract as user decision for X
+  (User confirmed the recommendation)
 
-Rules:
-- The assistant's recommendations/analysis/suggestions are NEVER user preferences or decisions
-- User asking a question ("which is best?") does NOT mean they agree with the answer
-- Only extract a decision/preference if the USER explicitly states or confirms it
-- If the user says "ok" / "好的" / "就这样" after an assistant recommendation, THAT is a user decision — but attribute the decision to the user, not the assistant's analysis
-- [ASSISTANT RESPONSE] content is provided for context only — to help you understand what the user is referring to
+Key rules:
+- The assistant's analysis/recommendations are NEVER user preferences
+- User asking a question does NOT mean they agree with the answer
+- User confirming ("ok", "好的", "就这样", "明白了") IS a decision — extract what was decided
+
+### Layer 2: Agent categories — from [ASSISTANT] sections
+agent_self_improvement, agent_user_habit, agent_relationship, agent_persona
+
+These categories describe THE AGENT'S OWN LEARNING. Extract them from [ASSISTANT] sections when the agent:
+- Reflects on its own behavior: "我记住了", "下次我会..."
+- Notices user patterns: communication style, habits, preferences in interaction
+- Develops rapport or adjusts its persona for this user
+- Learns a lesson about how to better serve this user
+
+Example: Assistant says "记住了，以后设定时提醒要用 openclaw cron" → agent_self_improvement (agent learned a workflow)
+Example: Assistant notices user always asks in Chinese → agent_user_habit
+
+### Layer 3: Context understanding
+[ASSISTANT] sections help you understand the conversation flow — what was discussed, what the user was responding to. Use this context to better interpret [USER] messages, but do NOT attribute the assistant's words to the user.
 
 ## Multi-turn context
-- [USER] and [ASSISTANT] / [ASSISTANT RESPONSE] labels indicate who said what
-- Extract user memories from [USER] sections. Use [ASSISTANT] sections only as context.
-- Constraint/policy categories capture rules and strategies set by the user.
-- Agent growth categories (agent_*) capture the agent's own learning and observations — these are the ONLY categories where the agent reflects on itself, and should come from [ASSISTANT] sections.
+- [USER] and [ASSISTANT] labels indicate who said what
+- Look at the full conversation flow — earlier turns provide context for later ones
+- If the user references something from a previous turn, connect the dots
 - Look for patterns across turns for stronger signals`;
 
 
