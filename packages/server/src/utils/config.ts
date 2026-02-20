@@ -77,6 +77,10 @@ const CortexConfigSchema = z.object({
   }).default({}),
   sieve: z.object({
     highSignalImmediate: z.boolean().default(true),
+    parallelChannels: z.boolean().default(true),
+    profileInjection: z.boolean().default(true),
+    extractionLogging: z.boolean().default(true),
+    maxExtractionTokens: z.number().default(800),
   }).default({}),
   lifecycle: z.object({
     schedule: z.string().default('0 3 * * *'),
@@ -129,6 +133,7 @@ export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
   if (process.env.CORTEX_PORT) envOverrides.port = parseInt(process.env.CORTEX_PORT);
   if (process.env.CORTEX_HOST) envOverrides.host = process.env.CORTEX_HOST;
   if (process.env.CORTEX_DB_PATH) envOverrides.storage = { dbPath: process.env.CORTEX_DB_PATH };
+  if (process.env.CORTEX_AUTH_TOKEN) envOverrides.auth = { token: process.env.CORTEX_AUTH_TOKEN };
 
   // 3. Merge and validate
   const merged = { ...fileConfig, ...envOverrides, ...overrides };

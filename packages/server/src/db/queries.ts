@@ -7,7 +7,9 @@ import { generateId } from '../utils/helpers.js';
 export type MemoryLayer = 'working' | 'core' | 'archive';
 export type MemoryCategory =
   | 'identity' | 'preference' | 'decision' | 'fact' | 'entity'
-  | 'correction' | 'todo' | 'context' | 'summary';
+  | 'correction' | 'todo' | 'context' | 'summary'
+  // V2 新增
+  | 'skill' | 'relationship' | 'goal' | 'insight' | 'project_state';
 
 export interface Memory {
   id: string;

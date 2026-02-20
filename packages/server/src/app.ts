@@ -28,7 +28,7 @@ export class CortexApp {
   readonly llmLifecycle: LLMProvider;
   readonly embeddingProvider: EmbeddingProvider;
 
-  constructor(private config: CortexConfig) {
+  constructor(readonly config: CortexConfig) {
     // Initialize providers
     this.llmExtraction = createCascadeLLM(config.llm.extraction);
     this.llmLifecycle = createCascadeLLM(config.llm.lifecycle);

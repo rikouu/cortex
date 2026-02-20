@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
+import { insertExtractionLog } from '../core/extraction-log.js';
 
 export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/flush', {
@@ -27,11 +28,18 @@ export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): vo
     },
   }, async (req) => {
     const body = req.body as any;
-    return cortex.flush.flush({
+    const result = await cortex.flush.flush({
       messages: body.messages,
       agent_id: body.agent_id,
       session_id: body.session_id,
       reason: body.reason,
     });
+
+    // Write extraction log if available and logging enabled
+    if (result.extraction_log && cortex.config.sieve.extractionLogging) {
+      insertExtractionLog(body.agent_id || 'default', body.session_id, result.extraction_log);
+    }
+
+    return result;
   });
 }

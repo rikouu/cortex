@@ -6,20 +6,26 @@ import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
+import { PROFILE_SYNTHESIS_PROMPT } from '../core/prompts.js';
 
 const log = createLogger('lifecycle');
 
 // Base importance by category (how slowly it decays)
 const BASE_IMPORTANCE: Record<string, number> = {
-  identity: 1.0,
-  preference: 0.9,
-  decision: 0.7,
-  fact: 0.5,
-  entity: 0.6,
-  correction: 0.8,
-  todo: 0.3,
-  context: 0.2,
-  summary: 0.4,
+  identity:      1.0,
+  preference:    0.9,
+  correction:    0.9,
+  skill:         0.85,
+  relationship:  0.85,
+  goal:          0.8,
+  decision:      0.7,
+  entity:        0.6,
+  project_state: 0.6,
+  insight:       0.55,
+  fact:          0.5,
+  summary:       0.4,
+  todo:          0.3,
+  context:       0.2,
 };
 
 export interface LifecycleReport {
@@ -34,6 +40,10 @@ export interface LifecycleReport {
   completedAt: string;
   durationMs: number;
 }
+
+// In-memory profile cache: agentId -> { text, timestamp }
+const profileCache = new Map<string, { text: string; timestamp: number }>();
+const PROFILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class LifecycleEngine {
   constructor(
@@ -76,6 +86,13 @@ export class LifecycleEngine {
 
       // Phase 6: Update decay scores
       await this.updateDecayScores();
+
+      // Phase 7: Synthesize user profiles for all agents
+      try {
+        await this.synthesizeAllProfiles();
+      } catch (e: any) {
+        log.warn({ error: e.message }, 'Profile synthesis failed during lifecycle run');
+      }
 
       report.indexRebuilt = true;
     } catch (e: any) {
@@ -350,5 +367,107 @@ export class LifecycleEngine {
         stmt.run(Math.max(0, decayScore), m.id);
       }
     })();
+  }
+
+  /**
+   * Synthesize a compact user profile from Core memories.
+   * Called after lifecycle runs, and cached for 24h.
+   */
+  async synthesizeProfile(agentId: string): Promise<string> {
+    // Check cache first
+    const cached = profileCache.get(agentId);
+    if (cached && (Date.now() - cached.timestamp) < PROFILE_CACHE_TTL_MS) {
+      return cached.text;
+    }
+
+    const db = getDb();
+
+    // Query top 30 Core memories (non context/summary), ordered by importance
+    const coreMemories = db.prepare(`
+      SELECT category, content, importance FROM memories
+      WHERE agent_id = ? AND layer = 'core' AND superseded_by IS NULL
+        AND category NOT IN ('context', 'summary')
+      ORDER BY importance DESC
+      LIMIT 30
+    `).all(agentId) as { category: string; content: string; importance: number }[];
+
+    if (coreMemories.length === 0) {
+      return '';
+    }
+
+    // Group by category
+    const grouped = new Map<string, string[]>();
+    for (const m of coreMemories) {
+      const list = grouped.get(m.category) || [];
+      list.push(m.content);
+      grouped.set(m.category, list);
+    }
+
+    // Build input for LLM
+    const lines: string[] = [];
+    for (const [category, items] of grouped) {
+      lines.push(`## ${category}`);
+      for (const item of items) {
+        lines.push(`- ${item}`);
+      }
+      lines.push('');
+    }
+    const input = lines.join('\n');
+
+    let profile: string;
+    try {
+      profile = await this.llm.complete(input, {
+        maxTokens: 400,
+        temperature: 0.2,
+        systemPrompt: PROFILE_SYNTHESIS_PROMPT,
+      });
+      profile = profile.trim();
+    } catch (e: any) {
+      log.warn({ error: e.message }, 'Profile synthesis LLM failed, using fallback');
+      // Fallback: simple concatenation
+      const fallbackLines: string[] = ['[用户画像]'];
+      for (const [category, items] of grouped) {
+        fallbackLines.push(`- ${category}: ${items.slice(0, 3).join('; ')}`);
+      }
+      profile = fallbackLines.join('\n');
+    }
+
+    // Store in agents.metadata
+    try {
+      const agent = db.prepare('SELECT metadata FROM agents WHERE id = ?').get(agentId) as { metadata: string | null } | undefined;
+      let meta: Record<string, any> = {};
+      if (agent?.metadata) {
+        try { meta = JSON.parse(agent.metadata); } catch { /* ignore */ }
+      }
+      meta.profile = profile;
+      meta.profile_updated_at = new Date().toISOString();
+
+      db.prepare('UPDATE agents SET metadata = ?, updated_at = datetime(\'now\') WHERE id = ?')
+        .run(JSON.stringify(meta), agentId);
+    } catch (e: any) {
+      log.warn({ error: e.message }, 'Failed to store profile in agents table');
+    }
+
+    // Update cache
+    profileCache.set(agentId, { text: profile, timestamp: Date.now() });
+
+    log.info({ agent_id: agentId, profile_length: profile.length }, 'Profile synthesized');
+    return profile;
+  }
+
+  /**
+   * Synthesize profiles for all agents after lifecycle run.
+   */
+  async synthesizeAllProfiles(): Promise<void> {
+    const db = getDb();
+    const agents = db.prepare('SELECT DISTINCT id FROM agents').all() as { id: string }[];
+
+    for (const agent of agents) {
+      try {
+        await this.synthesizeProfile(agent.id);
+      } catch (e: any) {
+        log.warn({ agent_id: agent.id, error: e.message }, 'Failed to synthesize profile for agent');
+      }
+    }
   }
 }

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
+import { insertExtractionLog } from '../core/extraction-log.js';
 
 export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/ingest', {
@@ -23,6 +24,12 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
       agent_id: body.agent_id,
       session_id: body.session_id,
     });
+
+    // Write extraction log if available and logging enabled
+    if (result.extraction_log && cortex.config.sieve.extractionLogging) {
+      insertExtractionLog(body.agent_id || 'default', body.session_id, result.extraction_log);
+    }
+
     reply.code(201);
     return result;
   });

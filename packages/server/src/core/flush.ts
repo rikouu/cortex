@@ -1,15 +1,30 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, type Memory } from '../db/index.js';
+import { insertMemory, getMemoryById, type Memory, type MemoryCategory } from '../db/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
+import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
+import type { ExtractedMemory, ExtractionLogData } from './sieve.js';
 
 const log = createLogger('flush');
 
 /** Vector distance threshold for dedup (lower = more similar) */
 const DEDUP_DISTANCE_THRESHOLD = 0.15;
+
+/** Regex to strip injected <cortex_memory> tags and other system metadata */
+const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
+const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
+
+/** Strip all injected system tags from text to prevent nested pollution */
+function stripInjectedContent(text: string): string {
+  return text
+    .replace(INJECTED_TAG_RE, '')
+    .replace(SYSTEM_TAG_RE, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 export interface FlushRequest {
   messages: { role: string; content: string }[];
@@ -21,6 +36,7 @@ export interface FlushRequest {
 export interface FlushResponse {
   flushed: Memory[];
   summary: string;
+  extraction_log?: ExtractionLogData;
 }
 
 export class MemoryFlush {
@@ -34,10 +50,12 @@ export class MemoryFlush {
   async flush(req: FlushRequest): Promise<FlushResponse> {
     const agentId = req.agent_id || 'default';
     const flushed: Memory[] = [];
+    let extractionLog: ExtractionLogData | undefined;
 
-    // 1. Build conversation text from messages
+    // 1. Build conversation text from messages — strip injected tags
     const conversationText = req.messages
-      .map(m => `${m.role}: ${m.content}`)
+      .map(m => `${m.role}: ${stripInjectedContent(m.content)}`)
+      .filter(line => line.length > 10)
       .join('\n')
       .slice(0, 5000);
 
@@ -85,12 +103,18 @@ export class MemoryFlush {
       log.error({ error: e.message }, 'Failed to write flush memory');
     }
 
-    // 4. Try to extract high-priority items for Core (with dedup)
+    // 4. Try to extract high-priority items for Core (structured JSON, with dedup)
     let deduplicated = 0;
+    const deepStart = Date.now();
+    let rawOutput = '';
+    let parsedExtractions: ExtractedMemory[] = [];
+
     try {
-      const coreItems = await this.extractCoreItems(conversationText);
-      for (const item of coreItems) {
-        // Dedup: check if similar content already exists
+      const result = await this.extractCoreItemsStructured(conversationText);
+      rawOutput = result.raw;
+      parsedExtractions = result.parsed;
+
+      for (const item of parsedExtractions) {
         const isDup = await this.isDuplicate(item.content, agentId);
         if (isDup) {
           deduplicated++;
@@ -98,14 +122,19 @@ export class MemoryFlush {
           continue;
         }
 
+        const layer = item.importance >= 0.8 ? 'core' : 'working';
+        const itemExpiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
+
         const mem = insertMemory({
-          layer: 'core',
-          category: item.category as any,
+          layer,
+          category: item.category,
           content: item.content,
           importance: item.importance,
           confidence: 0.8,
           agent_id: agentId,
           source: req.session_id ? `flush:${req.session_id}` : 'flush',
+          expires_at: itemExpiresAt,
+          metadata: JSON.stringify({ extraction_source: item.source, reasoning: item.reasoning }),
         });
         flushed.push(mem);
 
@@ -120,6 +149,20 @@ export class MemoryFlush {
       log.warn({ error: e.message }, 'Core item extraction failed');
     }
 
+    const deepLatency = Date.now() - deepStart;
+
+    if (this.config.sieve.extractionLogging) {
+      extractionLog = {
+        channel: 'flush',
+        exchange_preview: conversationText.slice(0, 200),
+        raw_output: rawOutput,
+        parsed_memories: parsedExtractions,
+        memories_written: flushed.length,
+        memories_deduped: deduplicated,
+        latency_ms: deepLatency,
+      };
+    }
+
     log.info({
       agent_id: agentId,
       reason: req.reason,
@@ -128,67 +171,96 @@ export class MemoryFlush {
       message_count: req.messages.length,
     }, 'Flush completed');
 
-    return { flushed, summary };
+    return { flushed, summary, extraction_log: extractionLog };
   }
 
   private async extractHighlights(text: string): Promise<string> {
-    const prompt = [
-      'Extract the key highlights from this conversation session.',
-      'Focus on: decisions made, state changes, user preferences, blockers/todos.',
-      'Output as concise bullet points in the same language as the input.',
-      'Maximum 5 bullet points.',
-      '',
-      text,
-    ].join('\n');
-
-    return (await this.llm.complete(prompt, {
+    return (await this.llm.complete(text, {
       maxTokens: 300,
       temperature: 0.2,
-      systemPrompt: 'You are a memory extraction assistant. Be concise and factual.',
+      systemPrompt: FLUSH_HIGHLIGHTS_SYSTEM_PROMPT,
     })).trim();
   }
 
-  private async extractCoreItems(text: string): Promise<{ category: string; content: string; importance: number }[]> {
-    const prompt = [
-      'From this conversation, extract ONLY permanent facts about the USER as a person.',
-      'For each fact, provide a JSON array of objects with: category, content, importance.',
-      '',
-      'Categories: identity, preference, decision, fact, todo',
-      'importance: 0.0-1.0 (only include items >= 0.8)',
-      '',
-      'EXTRACT: user preferences, personal facts, decisions, goals, relationships, names, locations.',
-      'DO NOT EXTRACT:',
-      '- Technical discussions, debugging steps, code details, API usage',
-      '- Information about tools, plugins, libraries, or system configuration',
-      '- The assistant\'s explanations, instructions, or suggestions',
-      '- Temporary task context that won\'t matter in future conversations',
-      '',
-      'Output ONLY valid JSON array. If nothing about the user is worth remembering, output [].',
-      '',
-      text.slice(0, 3000),
-    ].join('\n');
-
-    const result = await this.llm.complete(prompt, {
-      maxTokens: 500,
+  private async extractCoreItemsStructured(text: string): Promise<{ raw: string; parsed: ExtractedMemory[] }> {
+    const raw = await this.llm.complete(text.slice(0, 3000), {
+      maxTokens: this.config.sieve.maxExtractionTokens,
       temperature: 0.1,
-      systemPrompt: 'You are a personal memory extraction assistant. You ONLY extract facts about the user — their identity, preferences, decisions, and goals. You never extract technical discussions or implementation details. Output only valid JSON.',
+      systemPrompt: FLUSH_CORE_ITEMS_SYSTEM_PROMPT,
     });
 
+    const parsed = this.parseStructuredOutput(raw);
+    return { raw, parsed };
+  }
+
+  private parseStructuredOutput(raw: string): ExtractedMemory[] {
+    const trimmed = raw.trim();
+
+    let obj: any;
     try {
-      // Try to parse JSON from the response
-      const jsonMatch = result.match(/\[[\s\S]*\]/);
+      obj = JSON.parse(trimmed);
+    } catch {
+      // Fallback: extract JSON object with "memories" key
+      const jsonMatch = trimmed.match(/\{[\s\S]*"memories"[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          obj = JSON.parse(jsonMatch[0]);
+        } catch {
+          // Legacy fallback: try to parse as plain JSON array
+          return this.parseLegacyArray(trimmed);
+        }
+      } else {
+        return this.parseLegacyArray(trimmed);
+      }
+    }
+
+    // Handle new structured format
+    if (obj.memories && Array.isArray(obj.memories)) {
+      return this.validateExtractions(obj.memories);
+    }
+
+    // Handle legacy array format
+    if (Array.isArray(obj)) {
+      return this.validateExtractions(obj);
+    }
+
+    return [];
+  }
+
+  private parseLegacyArray(raw: string): ExtractedMemory[] {
+    try {
+      const jsonMatch = raw.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const items = JSON.parse(jsonMatch[0]);
         if (Array.isArray(items)) {
-          return items.filter(
-            (i: any) => i.category && i.content && typeof i.importance === 'number'
-          );
+          return this.validateExtractions(items);
         }
       }
     } catch {
-      log.warn('Failed to parse core items JSON');
+      log.warn('Failed to parse flush extraction output');
     }
     return [];
+  }
+
+  private validateExtractions(items: any[]): ExtractedMemory[] {
+    const validCategories = new Set<string>(EXTRACTABLE_CATEGORIES);
+
+    return items
+      .filter((m: any) => {
+        if (!m.content || typeof m.content !== 'string' || m.content.length < 3) return false;
+        if (!m.category || !validCategories.has(m.category)) return false;
+        if (typeof m.importance !== 'number' || m.importance < 0 || m.importance > 1) return false;
+        return true;
+      })
+      .map((m: any) => ({
+        content: m.content,
+        category: m.category as MemoryCategory,
+        importance: m.importance,
+        source: (['user_stated', 'user_implied', 'observed_pattern'].includes(m.source)
+          ? m.source
+          : 'user_implied') as ExtractedMemory['source'],
+        reasoning: m.reasoning || '',
+      }));
   }
 
   /**

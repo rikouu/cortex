@@ -6,11 +6,23 @@ import type { LLMProvider } from '../src/llm/interface.js';
 import type { EmbeddingProvider } from '../src/embedding/interface.js';
 import type { VectorBackend } from '../src/vector/interface.js';
 
-// Mock LLM that returns structured extraction
-function createMockLLM(response = 'Summary: User discussed Tokyo real estate investment.'): LLMProvider {
+// Mock LLM that returns structured JSON extraction
+function createMockLLM(response?: string): LLMProvider {
+  const defaultResponse = JSON.stringify({
+    memories: [
+      {
+        content: 'User is interested in Tokyo real estate investment',
+        category: 'fact',
+        importance: 0.7,
+        source: 'user_implied',
+        reasoning: 'User asked about Tokyo real estate prices',
+      },
+    ],
+    nothing_extracted: false,
+  });
   return {
     name: 'mock',
-    complete: vi.fn().mockResolvedValue(response),
+    complete: vi.fn().mockResolvedValue(response ?? defaultResponse),
   };
 }
 
@@ -69,12 +81,12 @@ describe('MemorySieve', () => {
     expect(result.extracted.length).toBeGreaterThan(0);
   });
 
-  it('should store LLM summary as working memory', async () => {
+  it('should store LLM structured extractions', async () => {
     const config = loadConfig({
       storage: { dbPath: ':memory:', walMode: false },
       markdownExport: { enabled: false, exportMemoryMd: false, debounceMs: 999999 },
     });
-    const mockLLM = createMockLLM('User is interested in Tokyo real estate.');
+    const mockLLM = createMockLLM();
     const sieve = new MemorySieve(mockLLM, createMockEmbedding(), createMockVector(), config);
 
     const result = await sieve.ingest({
@@ -82,7 +94,8 @@ describe('MemorySieve', () => {
       assistant_message: 'Tokyo real estate has been rising...',
     });
 
-    expect(result.summary).toBeTruthy();
+    expect(result.structured_extractions.length).toBeGreaterThan(0);
+    expect(result.structured_extractions[0]!.category).toBe('fact');
     expect(mockLLM.complete).toHaveBeenCalled();
   });
 
@@ -102,7 +115,8 @@ describe('MemorySieve', () => {
       assistant_message: 'Some response',
     });
 
-    // Should still work, using raw text fallback
-    expect(result.summary).toBeTruthy();
+    // Should still work, with empty extractions
+    expect(result.structured_extractions).toEqual([]);
+    expect(result.extracted).toBeDefined();
   });
 });

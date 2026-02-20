@@ -126,7 +126,59 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.75,
     name: 'important_fact',
   },
+  {
+    category: 'skill',
+    patterns: [
+      /我会[^，。！？\n]{1,30}/,
+      /我擅长/,
+      /我熟悉/,
+      /我精通/,
+      /i know how to/i,
+      /i(?:'m| am) (?:good|proficient|experienced|skilled) (?:at|in|with)/i,
+      /i have experience (?:with|in)/i,
+      /得意な/,
+      /できます/,
+      /スキル/,
+    ],
+    importance: 0.85,
+    name: 'skill',
+  },
+  {
+    category: 'relationship',
+    patterns: [
+      /我的(同事|老板|领导|经理|朋友|搭档|合伙人|老婆|老公|女朋友|男朋友)/,
+      /我(同事|老板|领导)[^，。！？\n]{1,20}/,
+      /my (colleague|coworker|boss|manager|friend|partner|wife|husband|girlfriend|boyfriend)/i,
+      /i work with/i,
+      /チームメンバー/,
+      /同僚の/,
+      /上司の/,
+    ],
+    importance: 0.85,
+    name: 'relationship',
+  },
+  {
+    category: 'goal',
+    patterns: [
+      /我的目标是/,
+      /我想(要|达到|实现|完成)/,
+      /我计划/,
+      /我打算/,
+      /i want to achieve/i,
+      /my goal is/i,
+      /i(?:'m| am) (?:planning|trying|aiming) to/i,
+      /i plan to/i,
+      /目標は/,
+      /達成したい/,
+    ],
+    importance: 0.8,
+    name: 'goal',
+  },
 ];
+
+/** Regex to strip injected system tags before pattern matching */
+const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
+const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
 
 /**
  * Detect high-signal information from user/assistant exchange.
@@ -134,7 +186,10 @@ const HIGH_SIGNAL_PATTERNS: {
  */
 export function detectHighSignals(exchange: { user: string; assistant: string }): DetectedSignal[] {
   const signals: DetectedSignal[] = [];
-  const text = `${exchange.user}\n${exchange.assistant}`;
+  // Strip injected tags to avoid matching content from previous memory injections
+  const cleanUser = exchange.user.replace(INJECTED_TAG_RE, '').replace(SYSTEM_TAG_RE, '');
+  const cleanAssistant = exchange.assistant.replace(INJECTED_TAG_RE, '').replace(SYSTEM_TAG_RE, '');
+  const text = `${cleanUser}\n${cleanAssistant}`;
 
   for (const rule of HIGH_SIGNAL_PATTERNS) {
     for (const pattern of rule.patterns) {
