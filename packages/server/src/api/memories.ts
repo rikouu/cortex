@@ -48,6 +48,8 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
               'identity', 'preference', 'decision', 'fact', 'entity',
               'correction', 'todo', 'context', 'summary',
               'skill', 'relationship', 'goal', 'insight', 'project_state',
+              'constraint', 'policy',
+              'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona',
             ],
           },
           content: { type: 'string' },

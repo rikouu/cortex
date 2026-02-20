@@ -67,7 +67,7 @@ const CortexConfigSchema = z.object({
     }).default({}),
   }).default({}),
   gate: z.object({
-    maxInjectionTokens: z.number().default(2000),
+    maxInjectionTokens: z.number().default(3000),
     skipSmallTalk: z.boolean().default(true),
     layerWeights: z.object({
       core: z.number().default(1.0),

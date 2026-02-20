@@ -264,7 +264,7 @@ export default function Settings() {
         archive: { ttl: config.layers?.archive?.ttl ?? '90d', compressBackToCore: config.layers?.archive?.compressBackToCore ?? false },
       }),
       gate: () => ({
-        maxInjectionTokens: config.gate?.maxInjectionTokens ?? 2000,
+        maxInjectionTokens: config.gate?.maxInjectionTokens ?? 3000,
         skipSmallTalk: config.gate?.skipSmallTalk ?? false,
       }),
       sieve: () => ({

@@ -171,7 +171,9 @@ Conversations → [Working Memory] → [Core Memory] → [Archive]
 
 ### Memory Categories
 
-Cortex classifies memories into 14 categories, each with a tuned importance and decay rate:
+Cortex classifies memories into 20 categories across three attribution tracks, each with a tuned importance and decay rate:
+
+**User memories** — facts about the user:
 
 | Category | Description | Importance |
 |----------|-------------|------------|
@@ -187,15 +189,41 @@ Cortex classifies memories into 14 categories, each with a tuned importance and 
 | `insight` | Lessons learned, experience-based wisdom | 0.5-0.7 |
 | `fact` | Factual knowledge about the user | 0.5-0.8 |
 | `todo` | Action items, follow-ups | 0.6-0.8 |
-| `context` | Session context (system use) | 0.2 |
-| `summary` | Compressed summaries (system use) | 0.4 |
+
+**Operational** — rules and strategies:
+
+| Category | Description | Importance |
+|----------|-------------|------------|
+| `constraint` | Hard rules that must never be violated ("never do X") | 0.9-1.0 |
+| `policy` | Default execution strategies ("prefer X before Y") | 0.7-0.9 |
+
+**Agent growth** — the agent's own learning:
+
+| Category | Description | Importance |
+|----------|-------------|------------|
+| `agent_persona` | Agent's own character, tone, personality | 0.8-1.0 |
+| `agent_relationship` | Interaction dynamics, rapport, trust | 0.8-0.9 |
+| `agent_user_habit` | Observations about user patterns and rhythms | 0.7-0.9 |
+| `agent_self_improvement` | Behavioral improvements, mistakes noticed | 0.7-0.9 |
+
+**System** (internal use):
+
+| Category | Description | Importance |
+|----------|-------------|------------|
+| `context` | Session context | 0.2 |
+| `summary` | Compressed summaries | 0.4 |
 
 ### Memory Sieve (Extraction)
 
-The Memory Sieve uses a **dual-channel extraction** pipeline:
+The Memory Sieve uses a **dual-channel extraction** pipeline with **three-track attribution**:
 
-1. **Fast Channel** — Regex-based pattern matching detects high-signal information (identity, preferences, corrections, skills, relationships, goals) with zero LLM latency
+1. **Fast Channel** — Regex-based pattern matching (Chinese/English/Japanese) detects high-signal information with zero LLM latency
 2. **Deep Channel** — LLM-powered structured extraction outputs categorized JSON with importance scores, reasoning, and source attribution
+
+**Three-track attribution** routes memories to the right category:
+- **User track** — user-stated facts, preferences, decisions
+- **Operational track** — constraints and policies set by the user or system
+- **Agent track** — the agent's own reflections, observations, and persona
 
 Both channels run in parallel. Results are cross-deduplicated using vector similarity. Memories with importance ≥ 0.8 go directly to Core; lower-importance items go to Working with a TTL.
 
@@ -232,14 +260,16 @@ The lifecycle engine runs automatically (configurable schedule) and handles:
 
 Cortex uses **hybrid search** — combining BM25 full-text search (exact keyword matching) with vector semantic search (conceptual similarity). Results are fused using Reciprocal Rank Fusion (RRF) and weighted by layer priority, recency, and access frequency.
 
+**Priority injection**: When formatting results for context injection, `constraint` and `agent_persona` memories are injected first to ensure critical rules and persona are never truncated by the token budget.
+
 ### MCP Tools
 
 When connected via MCP, the AI automatically gets these tools:
 
 | Tool | What it does |
 |------|-------------|
-| `cortex_recall` | Search memories for relevant context |
-| `cortex_remember` | Store an important fact or decision |
+| `cortex_recall` | Search memories with priority injection (constraints and persona first) |
+| `cortex_remember` | Store a memory: user facts, constraints, policies, or agent self-observations |
 | `cortex_forget` | Remove or correct a memory |
 | `cortex_search_debug` | Debug search scoring details |
 | `cortex_stats` | Get memory statistics |

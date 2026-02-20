@@ -20,7 +20,7 @@ interface Memory {
 type SortField = 'created_at' | 'importance' | 'decay_score' | 'access_count' | 'confidence';
 type SortDir = 'desc' | 'asc';
 
-const CATEGORIES = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state'];
+const CATEGORIES = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state', 'constraint', 'policy', 'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona'];
 
 export default function MemoryBrowser() {
   const [memories, setMemories] = useState<Memory[]>([]);

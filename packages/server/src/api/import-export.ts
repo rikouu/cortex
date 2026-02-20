@@ -7,7 +7,7 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('import-export');
 
 const VALID_LAYERS = new Set(['working', 'core', 'archive']);
-const VALID_CATEGORIES = new Set(['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state']);
+const VALID_CATEGORIES = new Set(['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state', 'constraint', 'policy', 'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona']);
 
 const CATEGORY_LABELS: Record<string, string> = {
   identity: 'User Profile',
@@ -24,6 +24,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   project_state: 'Project Status',
   context: 'Context',
   summary: 'Historical Memory Summary',
+  constraint: 'Constraints',
+  policy: 'Policies & Strategies',
+  agent_self_improvement: 'Agent Self-Improvement',
+  agent_user_habit: 'Agent User Observations',
+  agent_relationship: 'Agent Relationship Dynamics',
+  agent_persona: 'Agent Persona & Style',
 };
 
 export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexApp): void {
@@ -259,6 +265,19 @@ function importFromMemoryMd(content: string): { imported: number; skipped: numbe
     'insights': 'insight',
     'project': 'project_state',
     'project_state': 'project_state',
+    'constraint': 'constraint',
+    'constraints': 'constraint',
+    'policy': 'policy',
+    'policies': 'policy',
+    'strategy': 'policy',
+    'strategies': 'policy',
+    'agent_self_improvement': 'agent_self_improvement',
+    'self_improvement': 'agent_self_improvement',
+    'agent_user_habit': 'agent_user_habit',
+    'user_habit': 'agent_user_habit',
+    'agent_relationship': 'agent_relationship',
+    'agent_persona': 'agent_persona',
+    'persona': 'agent_persona',
   };
 
   for (const line of lines) {

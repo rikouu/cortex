@@ -115,6 +115,14 @@ export default {
     toastDeleteFailed: 'Delete failed',
     toastCategoryUpdated: 'Updated {{count}} memories to category "{{category}}"',
     toastUpdateFailed: 'Update failed',
+    categories: {
+      constraint: 'Constraints',
+      policy: 'Policies',
+      agent_self_improvement: 'Agent Self-Improvement',
+      agent_user_habit: 'Agent User Observations',
+      agent_relationship: 'Agent Relationship',
+      agent_persona: 'Agent Persona',
+    },
   },
   memoryDetail: {
     title: 'Memory Detail',
@@ -462,7 +470,7 @@ export default {
     archiveCompressBackDesc: 'When archiving, merge similar memories and write compressed insights back to Core. Helps maintain long-term knowledge.',
     gateTitle: 'Gate',
     maxInjectionTokens: 'Max Injection Tokens',
-    maxInjectionTokensDesc: 'Maximum tokens of memory context injected into each AI conversation. Higher = more context but increases latency and cost. Recommended: 1000-4000.',
+    maxInjectionTokensDesc: 'Maximum tokens of memory context injected into each AI conversation. Higher = more context but increases latency and cost. Default: 3000. Recommended: 2000-5000. Constraint and persona memories are injected first.',
     skipSmallTalk: 'Skip Small Talk',
     skipSmallTalkDesc: 'Skip memory extraction for casual greetings and small talk (e.g. "Hi", "Thanks"). Saves LLM costs without losing meaningful information.',
     // Duration units

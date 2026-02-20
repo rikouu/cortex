@@ -287,6 +287,84 @@ const migrations = [
       ALTER TABLE extraction_logs ADD COLUMN memories_smart_updated INTEGER DEFAULT 0;
     `,
   },
+  {
+    name: '005_agent_categories',
+    sql: `
+      -- Rebuild memories table with extended categories (14 → 20)
+      CREATE TABLE memories_new (
+        id            TEXT PRIMARY KEY,
+        layer         TEXT NOT NULL CHECK (layer IN ('working', 'core', 'archive')),
+        category      TEXT NOT NULL CHECK (category IN (
+          'identity', 'preference', 'decision', 'fact', 'entity',
+          'correction', 'todo', 'context', 'summary',
+          'skill', 'relationship', 'goal', 'insight', 'project_state',
+          'constraint', 'policy',
+          'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona'
+        )),
+        content       TEXT NOT NULL,
+        source        TEXT,
+        agent_id      TEXT NOT NULL DEFAULT 'default',
+        importance    REAL NOT NULL DEFAULT 0.5,
+        confidence    REAL NOT NULL DEFAULT 0.8,
+        decay_score   REAL NOT NULL DEFAULT 1.0,
+        access_count  INTEGER NOT NULL DEFAULT 0,
+        last_accessed DATETIME,
+        created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+        updated_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+        expires_at    DATETIME,
+        superseded_by TEXT,
+        metadata      TEXT
+      );
+
+      INSERT INTO memories_new SELECT * FROM memories;
+
+      -- Drop old FTS triggers, table, then old memories table
+      DROP TRIGGER IF EXISTS memories_ai;
+      DROP TRIGGER IF EXISTS memories_ad;
+      DROP TRIGGER IF EXISTS memories_au;
+      DROP TABLE IF EXISTS memories_fts;
+      DROP TABLE memories;
+      ALTER TABLE memories_new RENAME TO memories;
+
+      -- Rebuild indexes
+      CREATE INDEX idx_memories_layer ON memories(layer);
+      CREATE INDEX idx_memories_category ON memories(layer, category);
+      CREATE INDEX idx_memories_decay ON memories(layer, decay_score);
+      CREATE INDEX idx_memories_expires ON memories(expires_at) WHERE expires_at IS NOT NULL;
+      CREATE INDEX idx_memories_agent ON memories(agent_id);
+
+      -- Rebuild FTS
+      CREATE VIRTUAL TABLE memories_fts USING fts5(
+        content,
+        category,
+        content=memories,
+        content_rowid=rowid,
+        tokenize='trigram'
+      );
+
+      -- Re-populate FTS from existing data
+      INSERT INTO memories_fts(rowid, content, category)
+        SELECT rowid, content, category FROM memories;
+
+      -- Rebuild FTS triggers
+      CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memories_fts(rowid, content, category)
+        VALUES (new.rowid, new.content, new.category);
+      END;
+
+      CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, content, category)
+        VALUES ('delete', old.rowid, old.content, old.category);
+      END;
+
+      CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, content, category)
+        VALUES ('delete', old.rowid, old.content, old.category);
+        INSERT INTO memories_fts(rowid, content, category)
+        VALUES (new.rowid, new.content, new.category);
+      END;
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

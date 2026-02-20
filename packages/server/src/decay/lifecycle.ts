@@ -13,11 +13,17 @@ const log = createLogger('lifecycle');
 // Base importance by category (how slowly it decays)
 const BASE_IMPORTANCE: Record<string, number> = {
   identity:      1.0,
+  constraint:    1.0,
   preference:    0.9,
   correction:    0.9,
+  agent_persona: 0.9,
   skill:         0.85,
   relationship:  0.85,
+  agent_relationship: 0.85,
   goal:          0.8,
+  agent_user_habit: 0.8,
+  policy:        0.75,
+  agent_self_improvement: 0.75,
   decision:      0.7,
   entity:        0.6,
   project_state: 0.6,

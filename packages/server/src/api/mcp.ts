@@ -7,6 +7,8 @@ const VALID_MCP_CATEGORIES = new Set<string>([
   'identity', 'preference', 'decision', 'fact', 'entity',
   'correction', 'todo', 'skill', 'relationship', 'goal',
   'insight', 'project_state',
+  'constraint', 'policy',
+  'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona',
 ]);
 
 export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void {
@@ -15,7 +17,6 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
       const result = await cortex.gate.recall({
         query,
         agent_id: agentId || 'mcp',
-        max_tokens: 2000,
       });
       const memories = result.memories.slice(0, maxResults || 5);
       return { context: result.context, memories, meta: result.meta };

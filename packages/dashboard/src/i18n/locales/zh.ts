@@ -115,6 +115,14 @@ export default {
     toastDeleteFailed: '删除失败',
     toastCategoryUpdated: '已将 {{count}} 条记忆的分类更新为 "{{category}}"',
     toastUpdateFailed: '更新失败',
+    categories: {
+      constraint: '硬约束',
+      policy: '执行策略',
+      agent_self_improvement: 'Agent 自我改进',
+      agent_user_habit: 'Agent 用户习惯观察',
+      agent_relationship: 'Agent 相处模式',
+      agent_persona: 'Agent 人设风格',
+    },
   },
   memoryDetail: {
     title: '记忆详情',
@@ -462,7 +470,7 @@ export default {
     archiveCompressBackDesc: '归档时将相似记忆合并压缩，并将提炼的洞察回写到核心层，帮助维持长期知识。',
     gateTitle: 'Gate（记忆注入）',
     maxInjectionTokens: '最大注入 Token 数',
-    maxInjectionTokensDesc: '每次对话注入的记忆上下文最大 token 数。越大提供越多上下文，但会增加延迟和成本。推荐：1000-4000。',
+    maxInjectionTokensDesc: '每次对话注入的记忆上下文最大 token 数。越大提供越多上下文，但会增加延迟和成本。默认 3000。推荐：2000-5000。硬约束和人设记忆会优先注入。',
     skipSmallTalk: '跳过闲聊',
     skipSmallTalkDesc: '跳过对寒暄和闲聊（如"你好""谢谢"）的记忆提取，节省 LLM 开销，不会丢失有意义的信息。',
     // 时间单位

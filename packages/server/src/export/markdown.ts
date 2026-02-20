@@ -22,6 +22,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   project_state: 'Project Status',
   context: 'Context',
   summary: 'Historical Memory Summary',
+  constraint: 'Constraints',
+  policy: 'Policies & Strategies',
+  agent_self_improvement: 'Agent Self-Improvement',
+  agent_user_habit: 'Agent User Observations',
+  agent_relationship: 'Agent Relationship Dynamics',
+  agent_persona: 'Agent Persona & Style',
 };
 
 export class MarkdownExporter {
@@ -82,7 +88,7 @@ export class MarkdownExporter {
     ];
 
     // Ordered categories
-    const categoryOrder = ['identity', 'preference', 'decision', 'skill', 'relationship', 'goal', 'fact', 'entity', 'insight', 'project_state', 'correction', 'todo', 'summary'];
+    const categoryOrder = ['identity', 'preference', 'decision', 'skill', 'relationship', 'goal', 'fact', 'entity', 'insight', 'project_state', 'correction', 'todo', 'summary', 'constraint', 'policy', 'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona'];
 
     for (const cat of categoryOrder) {
       const entries = sections.get(cat);

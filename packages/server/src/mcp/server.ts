@@ -35,7 +35,7 @@ export interface MCPServerDeps {
 const TOOLS: MCPTool[] = [
   {
     name: 'cortex_recall',
-    description: 'Search your memory for relevant past conversations and facts',
+    description: 'Search memory for relevant context including user facts, preferences, constraints, agent observations, and persona. Results are priority-ranked: constraints and agent persona are injected first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -48,7 +48,7 @@ const TOOLS: MCPTool[] = [
   },
   {
     name: 'cortex_remember',
-    description: 'Store an important fact, preference, or decision in memory',
+    description: 'Store a memory: user facts/preferences, constraints (hard rules), policies (strategies), or agent self-observations (improvement, user habits, relationship, persona)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -59,6 +59,8 @@ const TOOLS: MCPTool[] = [
             'identity', 'preference', 'decision', 'fact', 'entity',
             'correction', 'todo', 'skill', 'relationship', 'goal',
             'insight', 'project_state',
+            'constraint', 'policy',
+            'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona',
           ],
           description: 'Memory category',
           default: 'fact',

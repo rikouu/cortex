@@ -219,12 +219,20 @@ export class HybridSearchEngine {
 
   /**
    * Format search results for injection into agent context.
+   * Priority categories (constraint, agent_persona) are injected first to ensure
+   * critical rules and persona are never truncated.
    */
   formatForInjection(results: SearchResult[], maxTokens: number): string {
     if (results.length === 0) return '';
 
+    // Separate priority categories from regular results
+    const PRIORITY_CATEGORIES = new Set(['constraint', 'agent_persona']);
+    const priorityResults = results.filter(r => PRIORITY_CATEGORIES.has(r.category));
+    const regularResults = results.filter(r => !PRIORITY_CATEGORIES.has(r.category));
+
     const lines: string[] = ['<cortex_memory>'];
     let tokens = estimateTokens(lines[0]!);
+    const injectedIds = new Set<string>();
 
     const layerLabels: Record<string, string> = {
       core: '核心记忆',
@@ -232,7 +240,25 @@ export class HybridSearchEngine {
       archive: '历史记忆',
     };
 
-    for (const r of results) {
+    const categoryLabels: Record<string, string> = {
+      constraint: '约束',
+      agent_persona: '人设',
+    };
+
+    // Phase 1: Inject priority categories first
+    for (const r of priorityResults) {
+      const label = categoryLabels[r.category] || layerLabels[r.layer] || r.layer;
+      const line = `[${label}] ${r.content}`;
+      const lineTokens = estimateTokens(line);
+      if (tokens + lineTokens > maxTokens - 20) break;
+      lines.push(line);
+      tokens += lineTokens;
+      injectedIds.add(r.id);
+    }
+
+    // Phase 2: Fill remaining budget with regular results
+    for (const r of regularResults) {
+      if (injectedIds.has(r.id)) continue;
       const line = `[${layerLabels[r.layer] || r.layer}] ${r.content}`;
       const lineTokens = estimateTokens(line);
       if (tokens + lineTokens > maxTokens - 20) break;

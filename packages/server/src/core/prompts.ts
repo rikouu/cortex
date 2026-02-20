@@ -8,11 +8,13 @@
  *   3. Future utility    — Can this answer a question in a future conversation?
  */
 
-// V2 valid categories for LLM extraction (context/summary are system-internal only)
+// V3 valid categories for LLM extraction (context/summary are system-internal only)
 export const EXTRACTABLE_CATEGORIES = [
   'identity', 'preference', 'decision', 'fact', 'entity',
   'correction', 'todo', 'skill', 'relationship', 'goal',
   'insight', 'project_state',
+  'constraint', 'policy',
+  'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona',
 ] as const;
 
 // ── Sieve: single-exchange structured extraction ─────────────────
@@ -28,11 +30,18 @@ CHECK 1 · TEMPORAL SCOPE — Will this still matter in a different conversation
   ✓ Weeks-to-months: ongoing projects, current goals, active decisions, evolving plans
   ✗ Session-only: a specific command that was run, a particular error being debugged, the current task's progress
 
-CHECK 2 · ATTRIBUTION — Is this the user's own information?
+CHECK 2 · ATTRIBUTION — Who does this information belong to?
+  User attribution (most categories):
   ✓ Facts the user states about themselves, their world, or their intentions
   ✓ Preferences the user expresses (explicitly or through repeated choices)
   ✓ Decisions or commitments the user makes
-  ✗ Explanations, suggestions, or reasoning produced by the assistant
+  Operational attribution (constraint/policy):
+  ✓ Rules or constraints set by the user or system: "never do X", "always do Y first"
+  ✓ Default execution strategies and behavioral norms
+  Agent attribution (agent_* categories):
+  ✓ Agent's own reflections on its behavior and improvements
+  ✓ Agent's observations about user patterns and habits
+  ✓ Interaction dynamics, rapport, and communication preferences
   ✗ System-generated metadata, tool outputs, injected context
 
 CHECK 3 · FUTURE UTILITY — Could a future conversation benefit from knowing this?
@@ -40,11 +49,16 @@ CHECK 3 · FUTURE UTILITY — Could a future conversation benefit from knowing t
   ✓ "What tools / stack / workflow does the user prefer?" → preference
   ✓ "What projects is the user working on?" → project_state
   ✓ "What decisions has the user made about X?" → decision
+  ✓ "What must I never do?" → constraint
   ✓ "What should I always / never do for this user?" → preference
+  ✓ "What default strategy should I follow?" → policy
   ✓ "Who are the important people the user mentions?" → relationship
   ✓ "What skills does the user have?" → skill
   ✓ "What is the user trying to achieve?" → goal
   ✓ "What lesson did the user learn?" → insight
+  ✓ "How should the agent improve its behavior?" → agent_self_improvement
+  ✓ "What patterns does the user show?" → agent_user_habit
+  ✓ "How does the agent interact with this user?" → agent_relationship
   ✗ "What exact error message appeared?" → ephemeral debugging
   ✗ "What code did the assistant write?" → assistant output
   ✗ "What was the API response format?" → reference material, not personal memory
@@ -53,6 +67,7 @@ A fact must pass ALL THREE checks to be extracted.
 
 ## Categories and importance ranges:
 
+### User categories:
 identity       0.9-1.0  Who the user is: name, profession, role, location, language, background
 preference     0.8-0.9  What the user likes/dislikes/prefers: tools, workflows, styles, habits
 decision       0.8-0.9  Concrete choices the user committed to: "will use X", "switched to Y"
@@ -66,6 +81,16 @@ goal           0.7-0.9  Objectives, plans, milestones the user is working toward
 insight        0.5-0.7  Lessons learned, observations, experience-based wisdom
 project_state  0.5-0.7  Project progress, status changes, architecture decisions
 
+### Operational categories:
+constraint     0.9-1.0  Hard rules that must never be violated: "never do X", "禁止 Y", "絶対にXしてはいけない"
+policy         0.7-0.9  Default execution strategies: "prefer X before Y", "always do X first"
+
+### Agent growth categories (agent's own learning):
+agent_self_improvement  0.7-0.9  Agent's behavioral improvements: mistakes noticed, better approaches
+agent_user_habit        0.7-0.9  Observations about user patterns: communication style, work rhythm
+agent_relationship      0.8-0.9  Interaction dynamics: rapport, communication preferences, trust
+agent_persona           0.8-1.0  Agent's own character/style: tone, role positioning, personality
+
 ## Output format
 Output ONLY a valid JSON object:
 {
@@ -74,7 +99,7 @@ Output ONLY a valid JSON object:
       "content": "the specific memory content — use the same language as the user",
       "category": "one of the categories above",
       "importance": 0.0-1.0,
-      "source": "user_stated|user_implied|observed_pattern",
+      "source": "user_stated|user_implied|observed_pattern|system_defined|self_reflection",
       "reasoning": "why this is worth remembering (one sentence)"
     }
   ],
@@ -85,14 +110,22 @@ If nothing qualifies: { "memories": [], "nothing_extracted": true }
 
 ## Rules
 - Use the same language as the user's input for content
-- Maximum 4 memories per exchange
+- Maximum 5 memories per exchange
 - Be specific: "prefers dark mode in all editors" not "has UI preferences"
 - If the user explicitly corrects something, category must be "correction" with importance >= 0.9
-- source: "user_stated" for explicit statements, "user_implied" for implicit info, "observed_pattern" for behavioral patterns
+- source values:
+  - "user_stated" for explicit user statements
+  - "user_implied" for implicit user info
+  - "observed_pattern" for behavioral patterns (user or agent observations)
+  - "system_defined" for system-level constraints and policies
+  - "self_reflection" for agent's own learning and reflections
+- constraint uses source: "user_stated" or "system_defined"
+- policy uses source: "user_stated" or "observed_pattern"
+- agent_* categories use source: "observed_pattern" or "self_reflection"
 
 ## Multi-turn context
 - [USER] and [ASSISTANT] labels indicate who said what
-- Only extract memories about the USER, never about the assistant
+- Extract user memories using user categories. Constraint/policy categories capture rules and strategies. Agent growth categories (agent_*) capture the agent's own learning and observations — these are the ONLY categories where the agent reflects on itself.
 - If the assistant merely suggests something ("you could say X"), do NOT treat X as a user fact
 - Look for patterns across turns for stronger signals`;
 
@@ -132,6 +165,7 @@ Your job: extract structured facts from a conversation that should be stored per
 
 ## Extraction categories and criteria:
 
+### User categories:
 identity       0.9-1.0  Who the user is: name, profession, role, location, language, background
 preference     0.8-0.9  What the user likes/dislikes/prefers: tools, workflows, styles, habits
 decision       0.8-0.9  Concrete choices the user committed to: "will use X", "switched to Y"
@@ -145,14 +179,24 @@ entity         0.6-0.8  Named tools, projects, organizations the user works with
 insight        0.5-0.7  Lessons learned, observations, experience-based wisdom
 project_state  0.5-0.7  Project progress, status changes, architecture decisions
 
+### Operational categories:
+constraint     0.9-1.0  Hard rules that must never be violated: "never do X", "禁止 Y", "絶対にXしてはいけない"
+policy         0.7-0.9  Default execution strategies: "prefer X before Y", "always do X first"
+
+### Agent growth categories (agent's own learning):
+agent_self_improvement  0.7-0.9  Agent's behavioral improvements: mistakes noticed, better approaches
+agent_user_habit        0.7-0.9  Observations about user patterns: communication style, work rhythm
+agent_relationship      0.8-0.9  Interaction dynamics: rapport, communication preferences, trust
+agent_persona           0.8-1.0  Agent's own character/style: tone, role positioning, personality
+
 ## Critical: only extract if ALL these are true:
 1. The fact will likely matter in a future conversation (not session-specific)
-2. The fact originates from the user (not from the assistant or system)
+2. Attribution is correct: user categories for user info, constraint/policy for rules, agent_* for agent's own learning
 3. The importance is genuinely >= 0.5
 
 ## Do NOT extract:
 - Technical implementation details or debugging steps
-- The assistant's suggestions, explanations, or generated code
+- The assistant's suggestions, explanations, or generated code (unless they are agent self-reflections for agent_* categories)
 - Temporary task context ("we're fixing bug #123")
 - System metadata, injected tags, or tool outputs
 - Facts that are common knowledge (not specific to this user)
@@ -165,7 +209,7 @@ Output ONLY a valid JSON object:
       "content": "the specific memory content",
       "category": "one of the categories above",
       "importance": 0.0-1.0,
-      "source": "user_stated|user_implied|observed_pattern",
+      "source": "user_stated|user_implied|observed_pattern|system_defined|self_reflection",
       "reasoning": "why this is worth remembering"
     }
   ],
@@ -215,13 +259,15 @@ export const PROFILE_SYNTHESIS_PROMPT = `You are synthesizing a compact user pro
 
 Given a list of memories grouped by category, produce a concise user profile (200 words max) in the same language as the memories.
 
-Format:
-[用户画像]
-- 身份：...
-- 偏好：...
-- 当前项目：...
-- 技能：...
-- 关系：...
-- 目标：...
+Use this section structure (translate section names to match the memory language):
+- Identity: name, role, location, background
+- Preferences: tools, workflows, styles, habits
+- Current projects: active work, status
+- Skills: expertise, proficiency
+- Relationships: key people, their roles
+- Goals: objectives, plans
+- Constraints: hard rules, things that must never happen
+- Policies: default execution strategies
+- Agent growth: self-improvement notes, user habit observations, interaction dynamics, persona style
 
 Only include sections that have data. Be specific and factual. Do not infer or speculate.`;

@@ -9,7 +9,10 @@ export type MemoryCategory =
   | 'identity' | 'preference' | 'decision' | 'fact' | 'entity'
   | 'correction' | 'todo' | 'context' | 'summary'
   // V2 新增
-  | 'skill' | 'relationship' | 'goal' | 'insight' | 'project_state';
+  | 'skill' | 'relationship' | 'goal' | 'insight' | 'project_state'
+  // V3 新增
+  | 'constraint' | 'policy'
+  | 'agent_self_improvement' | 'agent_user_habit' | 'agent_relationship' | 'agent_persona';
 
 export interface Memory {
   id: string;

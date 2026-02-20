@@ -174,6 +174,47 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.8,
     name: 'goal',
   },
+  {
+    category: 'constraint',
+    patterns: [
+      // Chinese — require constraint context to avoid false positives like "我不能吃辣"
+      /禁止.{1,30}/,
+      /绝对不[要能可]/,
+      /(不得|不许|不允许|不可以).{1,40}/,
+      /(永远|任何时候|无论如何)都?不[要能可以]/,
+      // English
+      /must not/i,
+      /never .{1,30}(do|allow|execute|run|use)/i,
+      /forbidden/i,
+      /prohibited/i,
+      /do not .{1,30} under any circumstances/i,
+      // Japanese
+      /してはいけない/,
+      /禁じ/,
+      /絶対に.{0,20}(ない|だめ|いけない)/,
+      /厳禁/,
+    ],
+    importance: 0.95,
+    name: 'constraint',
+  },
+  {
+    category: 'agent_self_improvement',
+    patterns: [
+      // Chinese
+      /我(发现|注意到|意识到)(自己|我).{0,20}(应该|可以|需要).{0,20}(改进|优化|调整)/,
+      /下次(我|应该|可以)/,
+      // English
+      /i (should|could|need to) (improve|adjust|change)/i,
+      /next time i (should|will|could)/i,
+      /i noticed (that )?i/i,
+      // Japanese
+      /次回は.{0,20}(べき|ようにする|改善)/,
+      /反省.{0,20}(した|する|点|すべき)/,
+      /改善(すべき|した方|できる|点)/,
+    ],
+    importance: 0.75,
+    name: 'agent_self_improvement',
+  },
 ];
 
 /** Regex to strip injected system tags before pattern matching */

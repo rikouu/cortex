@@ -127,7 +127,7 @@ async function cortexRecall(
   const res = await fetch(`${cortexUrl}/api/v1/recall`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, agent_id: agentId, max_tokens: 2000 }),
+    body: JSON.stringify({ query, agent_id: agentId }),
     signal: AbortSignal.timeout(RECALL_TIMEOUT),
   });
   if (!res.ok) return null;
@@ -237,7 +237,7 @@ export default {
     // ── Tool: cortex_recall ─────────────────────────────
     api.registerTool({
       name: 'cortex_recall',
-      description: 'Search Cortex long-term memory for relevant past conversations, facts, and preferences. Use this at the start of conversations or when you need context about a topic.',
+      description: 'Search Cortex long-term memory for relevant past conversations, facts, preferences, constraints, and agent observations. Use this at the start of conversations or when you need context about a topic. Constraints and persona are prioritized in results.',
       parameters: {
         type: 'object',
         properties: {
@@ -261,7 +261,7 @@ export default {
     // ── Tool: cortex_remember ───────────────────────────
     api.registerTool({
       name: 'cortex_remember',
-      description: 'Store an important fact, preference, or decision in Cortex long-term memory. Use this when the user shares something worth remembering for future conversations.',
+      description: 'Store a memory in Cortex long-term memory. Use for facts, preferences, decisions, constraints ("never do X"), policies ("prefer X before Y"), or agent self-observations.',
       parameters: {
         type: 'object',
         properties: {
@@ -273,6 +273,8 @@ export default {
               'identity', 'preference', 'decision', 'fact', 'entity',
               'correction', 'todo', 'skill', 'relationship', 'goal',
               'insight', 'project_state',
+              'constraint', 'policy',
+              'agent_self_improvement', 'agent_user_habit', 'agent_relationship', 'agent_persona',
             ],
             default: 'fact',
           },
@@ -308,7 +310,7 @@ export default {
     // ── Tool: cortex_ingest ─────────────────────────────
     api.registerTool({
       name: 'cortex_ingest',
-      description: 'Send a conversation exchange to Cortex for automatic memory extraction via LLM. The LLM will analyze the conversation and extract any important facts, preferences, or decisions. Use this after meaningful conversations to build long-term memory.',
+      description: 'Send a conversation exchange to Cortex for automatic memory extraction via LLM. Extracts facts, preferences, decisions, constraints, policies, and agent self-improvement observations. Use this after meaningful conversations to build long-term memory.',
       parameters: {
         type: 'object',
         properties: {
