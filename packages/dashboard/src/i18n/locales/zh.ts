@@ -540,5 +540,6 @@ export default {
     exactDupThresholdDesc: '低于此向量距离的记忆被视为精确重复，直接跳过。默认 0.08，范围 0.01-0.2。',
     relationExtraction: '自动提取关系',
     relationExtractionDesc: '自动从对话中提取实体关系（谁使用什么、谁认识谁），在记忆提取时同步进行。',
+    dimensionWarning: 'Embedding 维度一旦写入数据即被锁定。切换到不同维度的模型需要全量重建向量索引（所有已有向量将被重新生成）。',
   },
 } as const;

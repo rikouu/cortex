@@ -4,6 +4,7 @@ import { AnthropicLLMProvider } from './anthropic.js';
 import { OllamaLLMProvider } from './ollama.js';
 import { GoogleLLMProvider } from './google.js';
 import { OpenRouterLLMProvider } from './openrouter.js';
+import { DeepSeekLLMProvider } from './deepseek.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('llm-cascade');
@@ -49,6 +50,8 @@ export function createLLMProvider(config: { provider: string; model?: string; ap
     case 'google':
     case 'gemini':
       return new GoogleLLMProvider(config);
+    case 'deepseek':
+      return new DeepSeekLLMProvider(config);
     case 'openrouter':
       return new OpenRouterLLMProvider(config);
     case 'ollama':

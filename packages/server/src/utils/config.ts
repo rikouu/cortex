@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const LLMProviderSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'google', 'gemini', 'openrouter', 'ollama', 'none']),
+  provider: z.enum(['openai', 'anthropic', 'google', 'gemini', 'deepseek', 'openrouter', 'ollama', 'none']),
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
