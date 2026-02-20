@@ -281,6 +281,12 @@ const migrations = [
       CREATE INDEX idx_extraction_logs_agent ON extraction_logs(agent_id, created_at);
     `,
   },
+  {
+    name: '004_smart_update_column',
+    sql: `
+      ALTER TABLE extraction_logs ADD COLUMN memories_smart_updated INTEGER DEFAULT 0;
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

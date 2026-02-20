@@ -82,6 +82,9 @@ const CortexConfigSchema = z.object({
     extractionLogging: z.boolean().default(true),
     maxExtractionTokens: z.number().default(800),
     contextMessages: z.number().min(2).max(20).default(4),
+    smartUpdate: z.boolean().default(true),
+    similarityThreshold: z.number().min(0.1).max(0.8).default(0.35),
+    exactDupThreshold: z.number().min(0.01).max(0.2).default(0.08),
   }).default({}),
   lifecycle: z.object({
     schedule: z.string().default('0 3 * * *'),

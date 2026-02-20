@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getMemory, updateMemory, search } from '../api/client.js';
+import { getMemory, updateMemory, search, getMemoryChain } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 
 interface Memory {
@@ -21,6 +21,12 @@ interface Memory {
 
 const CATEGORIES = ['identity', 'preference', 'decision', 'fact', 'entity', 'correction', 'todo', 'context', 'summary', 'skill', 'relationship', 'goal', 'insight', 'project_state'];
 
+/** Parse metadata JSON safely */
+function parseMeta(m: Memory): Record<string, any> | null {
+  if (!m.metadata) return null;
+  try { return JSON.parse(m.metadata); } catch { return null; }
+}
+
 export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; onBack: () => void }) {
   const [memory, setMemory] = useState<Memory | null>(null);
   const [chain, setChain] = useState<Memory[]>([]);
@@ -39,28 +45,23 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
   }, [toast]);
 
   useEffect(() => {
-    loadMemoryChain(memoryId);
+    loadMemoryData(memoryId);
   }, [memoryId]);
 
-  const loadMemoryChain = async (id: string) => {
+  const loadMemoryData = async (id: string) => {
     setLoading(true);
     try {
       const mem = await getMemory(id);
       setMemory(mem);
       setDraft({ content: mem.content, category: mem.category, importance: mem.importance });
 
-      // Build superseded_by chain
-      const chainMems: Memory[] = [mem];
-      let currentId = mem.superseded_by;
-      const visited = new Set<string>([id]);
-      while (currentId && !visited.has(currentId)) {
-        visited.add(currentId);
-        try {
-          const next = await getMemory(currentId);
-          if (next) { chainMems.push(next); currentId = next.superseded_by; } else break;
-        } catch { break; }
+      // Load version chain via API (single call)
+      try {
+        const chainRes = await getMemoryChain(id);
+        setChain(chainRes.chain || []);
+      } catch {
+        setChain([mem]);
       }
-      setChain(chainMems);
 
       // Find similar memories
       try {
@@ -97,6 +98,10 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
     decayCurve.push({ day: d, score: Math.exp(-lambda * d) });
   }
 
+  // Determine the latest version in the chain
+  const latestInChain = chain.length > 0 ? chain[chain.length - 1] : null;
+  const isLatest = latestInChain?.id === memory.id;
+
   return (
     <div>
       {/* Toast */}
@@ -113,7 +118,15 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <button className="btn" onClick={onBack}>{t('common.back')}</button>
-        {!editing && <button className="btn primary" onClick={() => setEditing(true)}>{t('common.edit')}</button>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {!isLatest && latestInChain && (
+            <button className="btn" style={{ background: 'var(--success)', color: '#fff' }}
+              onClick={() => { loadMemoryData(latestInChain.id); window.scrollTo(0, 0); }}>
+              {t('memoryDetail.latestVersion')}
+            </button>
+          )}
+          {!editing && <button className="btn primary" onClick={() => setEditing(true)}>{t('common.edit')}</button>}
+        </div>
       </div>
       <h1 className="page-title">{t('memoryDetail.title')}</h1>
 
@@ -239,7 +252,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
               key={s.id}
               className="memory-card"
               style={{ cursor: 'pointer' }}
-              onClick={() => { loadMemoryChain(s.id); window.scrollTo(0, 0); }}
+              onClick={() => { loadMemoryData(s.id); window.scrollTo(0, 0); }}
             >
               <div className="header">
                 <span className={`badge ${s.layer}`}>{s.layer}</span>
@@ -261,32 +274,65 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
         <div className="card">
           <h3 style={{ marginBottom: 12 }}>{t('memoryDetail.revisionChain', { count: chain.length })}</h3>
           <div style={{ position: 'relative' }}>
-            {chain.map((m, i) => (
-              <div key={m.id} style={{ display: 'flex', marginBottom: 16 }}>
-                <div style={{ width: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{
-                    width: 16, height: 16, borderRadius: '50%',
-                    background: i === 0 ? 'var(--primary)' : 'var(--border)',
-                    border: '2px solid var(--primary)', zIndex: 1,
-                  }} />
-                  {i < chain.length - 1 && <div style={{ width: 2, flex: 1, background: 'var(--border)' }} />}
-                </div>
-                <div style={{
-                  flex: 1, padding: 12, borderRadius: 8,
-                  background: i === 0 ? 'rgba(99,102,241,0.1)' : 'rgba(0,0,0,0.15)',
-                  border: i === 0 ? '1px solid var(--primary)' : '1px solid var(--border)',
-                }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12 }}>
-                    <span className={`badge ${m.layer}`}>{m.layer}</span>
-                    {i === 0 && <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{t('memoryDetail.current')}</span>}
-                    {i > 0 && <span style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.superseded')}</span>}
-                    <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{m.created_at?.slice(0, 19)}</span>
+            {chain.map((m, i) => {
+              const isCurrent = m.id === memory.id;
+              const isLatestVersion = i === chain.length - 1;
+              const meta = parseMeta(m);
+              const updateType = meta?.smart_update_type as string | undefined;
+              const updateReasoning = meta?.update_reasoning as string | undefined;
+
+              // Determine highlight color
+              let borderColor = 'var(--border)';
+              let bgColor = 'rgba(0,0,0,0.15)';
+              if (isCurrent) { borderColor = 'var(--primary)'; bgColor = 'rgba(99,102,241,0.1)'; }
+              else if (isLatestVersion) { borderColor = 'var(--success)'; bgColor = 'rgba(34,197,94,0.1)'; }
+
+              return (
+                <div key={m.id} style={{ display: 'flex', marginBottom: 16, cursor: isCurrent ? 'default' : 'pointer' }}
+                  onClick={() => { if (!isCurrent) { loadMemoryData(m.id); window.scrollTo(0, 0); } }}>
+                  <div style={{ width: 40, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{
+                      width: 16, height: 16, borderRadius: '50%',
+                      background: isCurrent ? 'var(--primary)' : isLatestVersion ? 'var(--success)' : 'var(--border)',
+                      border: `2px solid ${isCurrent ? 'var(--primary)' : isLatestVersion ? 'var(--success)' : 'var(--border)'}`,
+                      zIndex: 1,
+                    }} />
+                    {i < chain.length - 1 && <div style={{ width: 2, flex: 1, background: 'var(--border)' }} />}
                   </div>
-                  <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'monospace' }}>{m.id}</div>
+                  <div style={{
+                    flex: 1, padding: 12, borderRadius: 8,
+                    background: bgColor,
+                    border: `1px solid ${borderColor}`,
+                  }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span className={`badge ${m.layer}`}>{m.layer}</span>
+                      {isCurrent && <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{t('memoryDetail.current')}</span>}
+                      {isLatestVersion && !isCurrent && <span style={{ color: 'var(--success)', fontWeight: 600 }}>{t('memoryDetail.latestVersion')}</span>}
+                      {!isLatestVersion && !isCurrent && <span style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.superseded')}</span>}
+                      {/* Smart update type badge */}
+                      {updateType === 'merge' && (
+                        <span style={{ background: 'rgba(34,197,94,0.2)', color: '#22c55e', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                          {t('memoryDetail.merged')}
+                        </span>
+                      )}
+                      {updateType === 'replace' && (
+                        <span style={{ background: 'rgba(249,115,22,0.2)', color: '#f97316', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                          {t('memoryDetail.replaced')}
+                        </span>
+                      )}
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{m.created_at?.slice(0, 19)}</span>
+                    </div>
+                    <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                    {updateReasoning && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontStyle: 'italic' }}>
+                        {t('memoryDetail.updateReason')}: {updateReasoning}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'monospace' }}>{m.id}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

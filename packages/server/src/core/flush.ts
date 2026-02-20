@@ -1,17 +1,17 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, type Memory, type MemoryCategory } from '../db/index.js';
+import { insertMemory, getMemoryById, updateMemory, type Memory, type MemoryCategory } from '../db/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
-import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
-import type { ExtractedMemory, ExtractionLogData } from './sieve.js';
+import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, SMART_UPDATE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
+import type { ExtractedMemory, ExtractionLogData, SimilarMemory, SmartUpdateDecision } from './sieve.js';
 
 const log = createLogger('flush');
 
-/** Vector distance threshold for dedup (lower = more similar) */
-const DEDUP_DISTANCE_THRESHOLD = 0.15;
+/** Legacy fallback threshold when smartUpdate is disabled */
+const LEGACY_DEDUP_THRESHOLD = 0.15;
 
 /** Regex to strip injected <cortex_memory> tags and other system metadata */
 const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
@@ -109,8 +109,9 @@ export class MemoryFlush {
       log.error({ error: e.message }, 'Failed to write flush memory');
     }
 
-    // 4. Try to extract high-priority items for Core (structured JSON, with dedup)
+    // 4. Try to extract high-priority items for Core (structured JSON, with smart dedup)
     let deduplicated = 0;
+    let smartUpdated = 0;
     const deepStart = Date.now();
     let rawOutput = '';
     let parsedExtractions: ExtractedMemory[] = [];
@@ -121,35 +122,14 @@ export class MemoryFlush {
       parsedExtractions = result.parsed;
 
       for (const item of parsedExtractions) {
-        const isDup = await this.isDuplicate(item.content, agentId);
-        if (isDup) {
+        const processResult = await this.processNewMemory(item, agentId, req.session_id);
+        if (processResult.action === 'skipped') {
           deduplicated++;
           log.info({ category: item.category }, 'Core item deduplicated');
           continue;
         }
-
-        const layer = item.importance >= 0.8 ? 'core' : 'working';
-        const itemExpiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
-
-        const mem = insertMemory({
-          layer,
-          category: item.category,
-          content: item.content,
-          importance: item.importance,
-          confidence: 0.8,
-          agent_id: agentId,
-          source: req.session_id ? `flush:${req.session_id}` : 'flush',
-          expires_at: itemExpiresAt,
-          metadata: JSON.stringify({ extraction_source: item.source, reasoning: item.reasoning }),
-        });
-        flushed.push(mem);
-
-        try {
-          const embedding = await this.embeddingProvider.embed(item.content);
-          if (embedding.length > 0) {
-            await this.vectorBackend.upsert(mem.id, embedding);
-          }
-        } catch { /* vector indexing is best-effort */ }
+        if (processResult.action === 'smart_updated') { smartUpdated++; }
+        if (processResult.memory) flushed.push(processResult.memory);
       }
     } catch (e: any) {
       log.warn({ error: e.message }, 'Core item extraction failed');
@@ -165,6 +145,7 @@ export class MemoryFlush {
         parsed_memories: parsedExtractions,
         memories_written: flushed.length,
         memories_deduped: deduplicated,
+        memories_smart_updated: smartUpdated,
         latency_ms: deepLatency,
       };
     }
@@ -269,24 +250,162 @@ export class MemoryFlush {
       }));
   }
 
-  /**
-   * Check if similar content already exists via vector similarity.
-   */
-  private async isDuplicate(content: string, agentId: string): Promise<boolean> {
+  // ── Smart Update methods (mirrors sieve.ts logic) ──
+
+  private async findSimilar(content: string, agentId: string): Promise<SimilarMemory[]> {
     try {
       const embedding = await this.embeddingProvider.embed(content);
-      if (embedding.length === 0) return false;
+      if (embedding.length === 0) return [];
 
-      const results = await this.vectorBackend.search(embedding, 1, { agent_id: agentId });
-      if (results.length > 0 && results[0]!.distance < DEDUP_DISTANCE_THRESHOLD) {
-        const existing = getMemoryById(results[0]!.id);
-        if (existing && !existing.superseded_by) {
-          return true;
+      const results = await this.vectorBackend.search(embedding, 3, { agent_id: agentId });
+      const similar: SimilarMemory[] = [];
+      for (const r of results) {
+        const mem = getMemoryById(r.id);
+        if (mem && !mem.superseded_by) {
+          similar.push({ memory: mem, distance: r.distance });
         }
       }
+      return similar;
     } catch {
-      // Dedup is best-effort — allow insertion on failure
+      return [];
     }
-    return false;
+  }
+
+  private async smartUpdateDecision(existing: Memory, newContent: string): Promise<SmartUpdateDecision> {
+    const prompt = `EXISTING MEMORY:\n${existing.content}\n\nNEW MEMORY:\n${newContent}`;
+    try {
+      const raw = await this.llm.complete(prompt, {
+        maxTokens: 300,
+        temperature: 0.1,
+        systemPrompt: SMART_UPDATE_SYSTEM_PROMPT,
+      });
+
+      const trimmed = raw.trim();
+      let obj: any;
+      try {
+        obj = JSON.parse(trimmed);
+      } catch {
+        const jsonMatch = trimmed.match(/\{[\s\S]*"action"[\s\S]*\}/);
+        if (jsonMatch) obj = JSON.parse(jsonMatch[0]);
+        else return { action: 'replace', reasoning: 'Failed to parse LLM response' };
+      }
+
+      const action = ['keep', 'replace', 'merge'].includes(obj.action) ? obj.action : 'replace';
+      return {
+        action: action as SmartUpdateDecision['action'],
+        merged_content: obj.merged_content,
+        reasoning: obj.reasoning || '',
+      };
+    } catch (e: any) {
+      log.warn({ error: e.message }, 'Flush smart update LLM call failed, defaulting to replace');
+      return { action: 'replace', reasoning: 'LLM call failed' };
+    }
+  }
+
+  private async executeSmartUpdate(
+    decision: SmartUpdateDecision,
+    existing: Memory,
+    extraction: ExtractedMemory,
+    agentId: string,
+    sessionId?: string,
+  ): Promise<Memory> {
+    const content = decision.action === 'merge' && decision.merged_content
+      ? decision.merged_content
+      : extraction.content;
+
+    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
+    const ttlMs = parseDuration(this.config.layers.working.ttl);
+    const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
+
+    const metadata: Record<string, any> = {
+      extraction_source: extraction.source,
+      reasoning: extraction.reasoning,
+      smart_update_type: decision.action,
+      update_reasoning: decision.reasoning,
+      supersedes: existing.id,
+    };
+
+    const newMem = insertMemory({
+      layer,
+      category: extraction.category,
+      content,
+      importance: extraction.importance,
+      confidence: 0.8,
+      agent_id: agentId,
+      source: sessionId ? `flush:${sessionId}` : 'flush',
+      expires_at: expiresAt,
+      metadata: JSON.stringify(metadata),
+    });
+
+    updateMemory(existing.id, { superseded_by: newMem.id });
+
+    try {
+      const embedding = await this.embeddingProvider.embed(content);
+      if (embedding.length > 0) {
+        await this.vectorBackend.upsert(newMem.id, embedding);
+      }
+    } catch { /* best-effort */ }
+
+    log.info({ action: decision.action, old_id: existing.id, new_id: newMem.id }, 'Flush smart update executed');
+    return newMem;
+  }
+
+  private async processNewMemory(
+    extraction: ExtractedMemory,
+    agentId: string,
+    sessionId?: string,
+  ): Promise<{ action: 'inserted' | 'skipped' | 'smart_updated'; memory?: Memory }> {
+    const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
+
+    const similar = await this.findSimilar(extraction.content, agentId);
+
+    if (!smartUpdate) {
+      if (similar.length > 0 && similar[0]!.distance < LEGACY_DEDUP_THRESHOLD) {
+        return { action: 'skipped' };
+      }
+      return { action: 'inserted', memory: this.insertNewMemory(extraction, agentId, sessionId) };
+    }
+
+    if (similar.length > 0) {
+      const closest = similar[0]!;
+
+      if (closest.distance < exactDupThreshold) {
+        return { action: 'skipped' };
+      }
+
+      if (closest.distance < similarityThreshold) {
+        const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
+        if (decision.action === 'keep') return { action: 'skipped' };
+        const newMem = await this.executeSmartUpdate(decision, closest.memory, extraction, agentId, sessionId);
+        return { action: 'smart_updated', memory: newMem };
+      }
+    }
+
+    return { action: 'inserted', memory: this.insertNewMemory(extraction, agentId, sessionId) };
+  }
+
+  private insertNewMemory(extraction: ExtractedMemory, agentId: string, sessionId?: string): Memory {
+    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
+    const ttlMs = parseDuration(this.config.layers.working.ttl);
+    const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
+
+    const mem = insertMemory({
+      layer,
+      category: extraction.category,
+      content: extraction.content,
+      importance: extraction.importance,
+      confidence: 0.8,
+      agent_id: agentId,
+      source: sessionId ? `flush:${sessionId}` : 'flush',
+      expires_at: expiresAt,
+      metadata: JSON.stringify({ extraction_source: extraction.source, reasoning: extraction.reasoning }),
+    });
+
+    // Index vector (best-effort)
+    this.embeddingProvider.embed(extraction.content).then(embedding => {
+      if (embedding.length > 0) this.vectorBackend.upsert(mem.id, embedding);
+    }).catch(() => {});
+
+    return mem;
   }
 }

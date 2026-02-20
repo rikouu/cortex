@@ -1,17 +1,17 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, deleteMemory, type Memory, type MemoryCategory } from '../db/index.js';
+import { insertMemory, getMemoryById, updateMemory, deleteMemory, type Memory, type MemoryCategory } from '../db/index.js';
 import { detectHighSignals, type DetectedSignal } from '../signals/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
-import { SIEVE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
+import { SIEVE_SYSTEM_PROMPT, SMART_UPDATE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
 
 const log = createLogger('sieve');
 
-/** Vector distance threshold for dedup (lower = more similar, 0 = identical) */
-const DEDUP_DISTANCE_THRESHOLD = 0.15;
+/** Legacy fallback threshold when smartUpdate is disabled */
+const LEGACY_DEDUP_THRESHOLD = 0.15;
 
 /** Regex to strip injected <cortex_memory> tags and other system metadata */
 const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
@@ -40,6 +40,17 @@ export interface ExtractedMemory {
   reasoning: string;
 }
 
+export interface SimilarMemory {
+  memory: Memory;
+  distance: number;
+}
+
+export interface SmartUpdateDecision {
+  action: 'keep' | 'replace' | 'merge';
+  merged_content?: string;
+  reasoning: string;
+}
+
 export interface ExtractionLogData {
   channel: 'fast' | 'deep' | 'flush';
   exchange_preview: string;
@@ -47,6 +58,7 @@ export interface ExtractionLogData {
   parsed_memories: ExtractedMemory[];
   memories_written: number;
   memories_deduped: number;
+  memories_smart_updated: number;
   latency_ms: number;
 }
 
@@ -63,6 +75,7 @@ export interface IngestResponse {
   high_signals: DetectedSignal[];
   structured_extractions: ExtractedMemory[];
   deduplicated: number;
+  smart_updated: number;
   extraction_log?: ExtractionLogData;
 }
 
@@ -93,12 +106,13 @@ export class MemorySieve {
     // Skip if nothing left after stripping
     if (!cleanUser || cleanUser.length < 3) {
       log.info({ agent_id: agentId }, 'Ingest skipped: empty after tag stripping');
-      return { extracted: [], high_signals: [], structured_extractions: [], deduplicated: 0 };
+      return { extracted: [], high_signals: [], structured_extractions: [], deduplicated: 0, smart_updated: 0 };
     }
 
     const exchange = { user: cleanUser, assistant: cleanAssistant, messages: cleanMessages };
     const extracted: Memory[] = [];
     let deduplicated = 0;
+    let smartUpdated = 0;
     let extractionLog: ExtractionLogData | undefined;
 
     // --- Parallel or sequential execution of fast + deep channels ---
@@ -115,19 +129,23 @@ export class MemorySieve {
       let fastSignals: DetectedSignal[] = [];
       let fastExtracted: Memory[] = [];
       let fastDedup = 0;
+      let fastSmartUpdated = 0;
       if (signalResult.status === 'fulfilled') {
         fastSignals = signalResult.value.signals;
         fastExtracted = signalResult.value.extracted;
         fastDedup = signalResult.value.deduplicated;
+        fastSmartUpdated = signalResult.value.smart_updated;
       }
 
       // Collect deep channel results
       let deepExtracted: Memory[] = [];
       let deepDedup = 0;
+      let deepSmartUpdated = 0;
       let structuredExtractions: ExtractedMemory[] = [];
       if (deepResult.status === 'fulfilled') {
         deepExtracted = deepResult.value.extracted;
         deepDedup = deepResult.value.deduplicated;
+        deepSmartUpdated = deepResult.value.smart_updated;
         structuredExtractions = deepResult.value.structuredExtractions;
         extractionLog = deepResult.value.extractionLog;
       }
@@ -137,6 +155,7 @@ export class MemorySieve {
 
       extracted.push(...fastExtracted, ...crossDedup.kept);
       deduplicated = fastDedup + deepDedup + crossDedup.removed;
+      smartUpdated = fastSmartUpdated + deepSmartUpdated;
 
       log.info({
         agent_id: agentId,
@@ -144,6 +163,7 @@ export class MemorySieve {
         deep_extractions: structuredExtractions.length,
         extracted: extracted.length,
         deduplicated,
+        smart_updated: smartUpdated,
       }, 'Ingest completed (parallel)');
 
       return {
@@ -151,6 +171,7 @@ export class MemorySieve {
         high_signals: fastSignals,
         structured_extractions: structuredExtractions,
         deduplicated,
+        smart_updated: smartUpdated,
         extraction_log: extractionLog,
       };
     }
@@ -159,29 +180,17 @@ export class MemorySieve {
     // 1. High signal detection (regex, no LLM)
     const highSignals = detectHighSignals(exchange);
 
-    // 2. Write high signals immediately to Core (with dedup check)
+    // 2. Write high signals immediately to Core (with dedup/smart-update check)
     if (this.config.sieve.highSignalImmediate && highSignals.length > 0) {
       for (const signal of highSignals) {
         try {
-          const isDup = await this.isDuplicate(signal.content, agentId);
-          if (isDup) {
-            deduplicated++;
-            log.info({ category: signal.category }, 'High signal deduplicated');
-            continue;
-          }
-
-          const mem = insertMemory({
-            layer: 'core',
-            category: signal.category,
-            content: signal.content,
-            importance: signal.importance,
-            confidence: signal.confidence,
-            agent_id: agentId,
-            source: req.session_id ? `session:${req.session_id}` : 'sieve',
-          });
-          extracted.push(mem);
-          await this.indexVector(mem.id, signal.content);
-          log.info({ category: signal.category, pattern: signal.pattern }, 'High signal -> Core');
+          const result = await this.processNewMemory(
+            { content: signal.content, category: signal.category, importance: signal.importance, source: 'user_stated', reasoning: '' },
+            agentId, req.session_id, signal.confidence,
+          );
+          if (result.action === 'skipped') { deduplicated++; continue; }
+          if (result.action === 'smart_updated') { smartUpdated++; }
+          if (result.memory) extracted.push(result.memory);
         } catch (e: any) {
           log.error({ error: e.message }, 'Failed to write high signal');
         }
@@ -207,36 +216,15 @@ export class MemorySieve {
     const deepLatency = Date.now() - deepStart;
     let deepWritten = 0;
     let deepDeduped = 0;
+    let deepSmartUpdated = 0;
 
     // Write structured extractions
     for (const mem of structuredExtractions) {
       try {
-        const isDup = await this.isDuplicate(mem.content, agentId);
-        if (isDup) {
-          deepDeduped++;
-          deduplicated++;
-          continue;
-        }
-
-        const layer = mem.importance >= 0.8 ? 'core' : 'working';
-        const ttlMs = parseDuration(this.config.layers.working.ttl);
-        const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
-
-        const written = insertMemory({
-          layer,
-          category: mem.category,
-          content: mem.content,
-          importance: mem.importance,
-          confidence: 0.8,
-          agent_id: agentId,
-          source: req.session_id ? `session:${req.session_id}` : 'sieve',
-          expires_at: expiresAt,
-          metadata: JSON.stringify({ extraction_source: mem.source, reasoning: mem.reasoning }),
-        });
-        extracted.push(written);
-        await this.indexVector(written.id, mem.content);
-        deepWritten++;
-        log.info({ category: mem.category, importance: mem.importance, layer }, 'Structured extraction -> Memory');
+        const result = await this.processNewMemory(mem, agentId, req.session_id);
+        if (result.action === 'skipped') { deepDeduped++; deduplicated++; continue; }
+        if (result.action === 'smart_updated') { deepSmartUpdated++; smartUpdated++; }
+        if (result.memory) { extracted.push(result.memory); deepWritten++; }
       } catch (e: any) {
         log.error({ error: e.message, category: mem.category }, 'Failed to write structured extraction');
       }
@@ -249,6 +237,7 @@ export class MemorySieve {
       parsed_memories: structuredExtractions,
       memories_written: deepWritten,
       memories_deduped: deepDeduped,
+      memories_smart_updated: deepSmartUpdated,
       latency_ms: deepLatency,
     };
 
@@ -258,6 +247,7 @@ export class MemorySieve {
       deep_extractions: structuredExtractions.length,
       extracted: extracted.length,
       deduplicated,
+      smart_updated: smartUpdated,
     }, 'Ingest completed');
 
     return {
@@ -265,6 +255,7 @@ export class MemorySieve {
       high_signals: highSignals,
       structured_extractions: structuredExtractions,
       deduplicated,
+      smart_updated: smartUpdated,
       extraction_log: extractionLog,
     };
   }
@@ -275,38 +266,29 @@ export class MemorySieve {
     exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     agentId: string,
     sessionId?: string,
-  ): Promise<{ signals: DetectedSignal[]; extracted: Memory[]; deduplicated: number }> {
+  ): Promise<{ signals: DetectedSignal[]; extracted: Memory[]; deduplicated: number; smart_updated: number }> {
     const signals = detectHighSignals(exchange);
     const extracted: Memory[] = [];
     let deduplicated = 0;
+    let smart_updated = 0;
 
     if (this.config.sieve.highSignalImmediate && signals.length > 0) {
       for (const signal of signals) {
         try {
-          const isDup = await this.isDuplicate(signal.content, agentId);
-          if (isDup) {
-            deduplicated++;
-            continue;
-          }
-
-          const mem = insertMemory({
-            layer: 'core',
-            category: signal.category,
-            content: signal.content,
-            importance: signal.importance,
-            confidence: signal.confidence,
-            agent_id: agentId,
-            source: sessionId ? `session:${sessionId}` : 'sieve',
-          });
-          extracted.push(mem);
-          await this.indexVector(mem.id, signal.content);
+          const result = await this.processNewMemory(
+            { content: signal.content, category: signal.category, importance: signal.importance, source: 'user_stated', reasoning: '' },
+            agentId, sessionId, signal.confidence,
+          );
+          if (result.action === 'skipped') { deduplicated++; continue; }
+          if (result.action === 'smart_updated') { smart_updated++; }
+          if (result.memory) extracted.push(result.memory);
         } catch (e: any) {
           log.error({ error: e.message }, 'Fast channel: failed to write signal');
         }
       }
     }
 
-    return { signals, extracted, deduplicated };
+    return { signals, extracted, deduplicated, smart_updated };
   }
 
   // ── Deep channel: LLM structured extraction ──
@@ -318,11 +300,13 @@ export class MemorySieve {
   ): Promise<{
     extracted: Memory[];
     deduplicated: number;
+    smart_updated: number;
     structuredExtractions: ExtractedMemory[];
     extractionLog: ExtractionLogData;
   }> {
     const extracted: Memory[] = [];
     let deduplicated = 0;
+    let smart_updated = 0;
     let structuredExtractions: ExtractedMemory[] = [];
     const start = Date.now();
     let rawOutput = '';
@@ -341,30 +325,10 @@ export class MemorySieve {
     let written = 0;
     for (const mem of structuredExtractions) {
       try {
-        const isDup = await this.isDuplicate(mem.content, agentId);
-        if (isDup) {
-          deduplicated++;
-          continue;
-        }
-
-        const layer = mem.importance >= 0.8 ? 'core' : 'working';
-        const ttlMs = parseDuration(this.config.layers.working.ttl);
-        const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
-
-        const writtenMem = insertMemory({
-          layer,
-          category: mem.category,
-          content: mem.content,
-          importance: mem.importance,
-          confidence: 0.8,
-          agent_id: agentId,
-          source: sessionId ? `session:${sessionId}` : 'sieve',
-          expires_at: expiresAt,
-          metadata: JSON.stringify({ extraction_source: mem.source, reasoning: mem.reasoning }),
-        });
-        extracted.push(writtenMem);
-        await this.indexVector(writtenMem.id, mem.content);
-        written++;
+        const result = await this.processNewMemory(mem, agentId, sessionId);
+        if (result.action === 'skipped') { deduplicated++; continue; }
+        if (result.action === 'smart_updated') { smart_updated++; }
+        if (result.memory) { extracted.push(result.memory); written++; }
       } catch (e: any) {
         log.error({ error: e.message }, 'Deep channel: failed to write extraction');
       }
@@ -375,6 +339,7 @@ export class MemorySieve {
     return {
       extracted,
       deduplicated,
+      smart_updated,
       structuredExtractions,
       extractionLog: {
         channel: 'deep',
@@ -383,6 +348,7 @@ export class MemorySieve {
         parsed_memories: structuredExtractions,
         memories_written: written,
         memories_deduped: deduplicated,
+        memories_smart_updated: smart_updated,
         latency_ms: latency,
       },
     };
@@ -418,7 +384,7 @@ export class MemorySieve {
                 normB += fastEmb[i]! * fastEmb[i]!;
               }
               const distance = 1 - dot / (Math.sqrt(normA) * Math.sqrt(normB));
-              if (distance < DEDUP_DISTANCE_THRESHOLD) {
+              if (distance < this.config.sieve.exactDupThreshold) {
                 isDup = true;
                 break;
               }
@@ -556,26 +522,209 @@ export class MemorySieve {
     return undefined;
   }
 
+  // ── Smart Update: three-tier matching ──
+
   /**
-   * Check if similar content already exists via vector similarity.
-   * Returns true if a near-duplicate is found.
+   * Find similar memories via vector search.
+   * Returns top-K similar memories with distances.
    */
-  private async isDuplicate(content: string, agentId: string): Promise<boolean> {
+  private async findSimilar(content: string, agentId: string): Promise<SimilarMemory[]> {
     try {
       const embedding = await this.embeddingProvider.embed(content);
-      if (embedding.length === 0) return false;
+      if (embedding.length === 0) return [];
 
-      const results = await this.vectorBackend.search(embedding, 1, { agent_id: agentId });
-      if (results.length > 0 && results[0]!.distance < DEDUP_DISTANCE_THRESHOLD) {
-        const existing = getMemoryById(results[0]!.id);
-        if (existing && !existing.superseded_by) {
-          return true;
+      const results = await this.vectorBackend.search(embedding, 3, { agent_id: agentId });
+      const similar: SimilarMemory[] = [];
+      for (const r of results) {
+        const mem = getMemoryById(r.id);
+        if (mem && !mem.superseded_by) {
+          similar.push({ memory: mem, distance: r.distance });
         }
       }
+      return similar;
     } catch {
-      // If vector search fails, allow insertion (dedup is best-effort)
+      return [];
     }
-    return false;
+  }
+
+  /**
+   * Ask LLM to decide: keep, replace, or merge.
+   */
+  private async smartUpdateDecision(existing: Memory, newContent: string): Promise<SmartUpdateDecision> {
+    const prompt = `EXISTING MEMORY:\n${existing.content}\n\nNEW MEMORY:\n${newContent}`;
+    try {
+      const raw = await this.llm.complete(prompt, {
+        maxTokens: 300,
+        temperature: 0.1,
+        systemPrompt: SMART_UPDATE_SYSTEM_PROMPT,
+      });
+
+      const trimmed = raw.trim();
+      let obj: any;
+      try {
+        obj = JSON.parse(trimmed);
+      } catch {
+        const jsonMatch = trimmed.match(/\{[\s\S]*"action"[\s\S]*\}/);
+        if (jsonMatch) obj = JSON.parse(jsonMatch[0]);
+        else return { action: 'replace', reasoning: 'Failed to parse LLM response, defaulting to replace' };
+      }
+
+      const action = ['keep', 'replace', 'merge'].includes(obj.action) ? obj.action : 'replace';
+      return {
+        action: action as SmartUpdateDecision['action'],
+        merged_content: obj.merged_content,
+        reasoning: obj.reasoning || '',
+      };
+    } catch (e: any) {
+      log.warn({ error: e.message }, 'Smart update LLM call failed, defaulting to replace');
+      return { action: 'replace', reasoning: 'LLM call failed' };
+    }
+  }
+
+  /**
+   * Execute a smart update decision: replace or merge.
+   * Sets superseded_by on the old memory and creates/indexes the new one.
+   */
+  private async executeSmartUpdate(
+    decision: SmartUpdateDecision,
+    existing: Memory,
+    extraction: ExtractedMemory,
+    agentId: string,
+    sessionId?: string,
+    confidenceOverride?: number,
+  ): Promise<Memory> {
+    const content = decision.action === 'merge' && decision.merged_content
+      ? decision.merged_content
+      : extraction.content;
+
+    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
+    const ttlMs = parseDuration(this.config.layers.working.ttl);
+    const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
+
+    const metadata: Record<string, any> = {
+      extraction_source: extraction.source,
+      reasoning: extraction.reasoning,
+      smart_update_type: decision.action,
+      update_reasoning: decision.reasoning,
+      supersedes: existing.id,
+    };
+
+    const newMem = insertMemory({
+      layer,
+      category: extraction.category,
+      content,
+      importance: extraction.importance,
+      confidence: confidenceOverride ?? 0.8,
+      agent_id: agentId,
+      source: sessionId ? `session:${sessionId}` : 'sieve',
+      expires_at: expiresAt,
+      metadata: JSON.stringify(metadata),
+    });
+
+    // Mark old memory as superseded
+    updateMemory(existing.id, { superseded_by: newMem.id });
+
+    // Index the new memory's vector
+    await this.indexVector(newMem.id, content);
+
+    log.info({
+      action: decision.action,
+      old_id: existing.id,
+      new_id: newMem.id,
+      reasoning: decision.reasoning,
+    }, 'Smart update executed');
+
+    return newMem;
+  }
+
+  /**
+   * Unified entry point for processing a new memory extraction.
+   * Implements three-tier matching:
+   *   distance < exactDupThreshold  → exact duplicate, skip
+   *   distance < similarityThreshold → semantic overlap, LLM decides
+   *   distance >= similarityThreshold → unrelated, normal insert
+   *
+   * When smartUpdate=false, falls back to legacy behavior (distance < 0.15 → skip).
+   */
+  async processNewMemory(
+    extraction: ExtractedMemory,
+    agentId: string,
+    sessionId?: string,
+    confidenceOverride?: number,
+  ): Promise<{ action: 'inserted' | 'skipped' | 'smart_updated'; memory?: Memory }> {
+    const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
+
+    // Find similar memories
+    const similar = await this.findSimilar(extraction.content, agentId);
+
+    if (!smartUpdate) {
+      // Legacy behavior: simple threshold skip
+      if (similar.length > 0 && similar[0]!.distance < LEGACY_DEDUP_THRESHOLD) {
+        return { action: 'skipped' };
+      }
+      // Normal insert
+      const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride);
+      await this.indexVector(mem.id, extraction.content);
+      return { action: 'inserted', memory: mem };
+    }
+
+    // Three-tier matching
+    if (similar.length > 0) {
+      const closest = similar[0]!;
+
+      if (closest.distance < exactDupThreshold) {
+        // Tier 1: exact duplicate → skip
+        log.info({ distance: closest.distance, existing_id: closest.memory.id }, 'Exact duplicate, skipping');
+        return { action: 'skipped' };
+      }
+
+      if (closest.distance < similarityThreshold) {
+        // Tier 2: semantic overlap → LLM decides
+        const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
+
+        if (decision.action === 'keep') {
+          log.info({ existing_id: closest.memory.id, reasoning: decision.reasoning }, 'Smart update: keep existing');
+          return { action: 'skipped' };
+        }
+
+        // replace or merge
+        const newMem = await this.executeSmartUpdate(
+          decision, closest.memory, extraction, agentId, sessionId, confidenceOverride,
+        );
+        return { action: 'smart_updated', memory: newMem };
+      }
+    }
+
+    // Tier 3: unrelated → normal insert
+    const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride);
+    await this.indexVector(mem.id, extraction.content);
+    return { action: 'inserted', memory: mem };
+  }
+
+  /**
+   * Insert a new memory (shared helper for normal inserts).
+   */
+  private insertNewMemory(
+    extraction: ExtractedMemory,
+    agentId: string,
+    sessionId?: string,
+    confidenceOverride?: number,
+  ): Memory {
+    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
+    const ttlMs = parseDuration(this.config.layers.working.ttl);
+    const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
+
+    return insertMemory({
+      layer,
+      category: extraction.category,
+      content: extraction.content,
+      importance: extraction.importance,
+      confidence: confidenceOverride ?? 0.8,
+      agent_id: agentId,
+      source: sessionId ? `session:${sessionId}` : 'sieve',
+      expires_at: expiresAt,
+      metadata: JSON.stringify({ extraction_source: extraction.source, reasoning: extraction.reasoning }),
+    });
   }
 
   private async indexVector(id: string, content: string): Promise<void> {

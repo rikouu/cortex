@@ -141,6 +141,10 @@ export default {
     content: '内容',
     toastUpdated: '记忆已更新',
     toastSaveFailed: '保存失败：{{message}}',
+    latestVersion: '最新版本',
+    merged: '已合并',
+    replaced: '已替换',
+    updateReason: '原因',
   },
   agents: {
     title: '智能体',
@@ -513,5 +517,11 @@ export default {
     // Sieve 设置
     contextMessages: '提取上下文消息数',
     contextMessagesDesc: '发送给记忆提取的最近对话消息条数。更多消息提供更丰富的上下文，但增加 LLM 开销。默认 4 条，范围 2-20。',
+    smartUpdate: '智能更新（去重）',
+    smartUpdateDesc: '启用后，通过 LLM 智能决策相似记忆应保留、替换还是合并，而非简单跳过重复。',
+    similarityThreshold: '相似度阈值',
+    similarityThresholdDesc: '认为记忆语义相关的最大向量距离。在此距离内的记忆将触发 LLM 智能更新决策。默认 0.35，范围 0.1-0.8。',
+    exactDupThreshold: '精确重复阈值',
+    exactDupThresholdDesc: '低于此向量距离的记忆被视为精确重复，直接跳过。默认 0.08，范围 0.01-0.2。',
   },
 } as const;

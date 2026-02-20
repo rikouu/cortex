@@ -269,6 +269,9 @@ export default function Settings() {
       }),
       sieve: () => ({
         contextMessages: config.sieve?.contextMessages ?? 4,
+        smartUpdate: config.sieve?.smartUpdate ?? true,
+        similarityThreshold: config.sieve?.similarityThreshold ?? 0.35,
+        exactDupThreshold: config.sieve?.exactDupThreshold ?? 0.08,
       }),
     };
 
@@ -342,6 +345,10 @@ export default function Settings() {
     if (section === 'sieve') {
       const cm = Number(draft.contextMessages);
       if (isNaN(cm) || cm < 2 || cm > 20) errors.push(t('settings.validationPositiveNumber'));
+      const st = Number(draft.similarityThreshold);
+      if (isNaN(st) || st < 0.1 || st > 0.8) errors.push(t('settings.validationThresholdRange'));
+      const edt = Number(draft.exactDupThreshold);
+      if (isNaN(edt) || edt < 0.01 || edt > 0.2) errors.push(t('settings.validationThresholdRange'));
     }
 
     if (errors.length > 0) {
@@ -405,6 +412,9 @@ export default function Settings() {
       } else if (section === 'sieve') {
         payload.sieve = {
           contextMessages: Number(draft.contextMessages),
+          smartUpdate: draft.smartUpdate,
+          similarityThreshold: Number(draft.similarityThreshold),
+          exactDupThreshold: Number(draft.exactDupThreshold),
         };
       }
 
@@ -1052,11 +1062,17 @@ export default function Settings() {
         {isEditing('sieve') ? (
           <div style={{ padding: '4px 0' }}>
             {renderNumberField(t('settings.contextMessages'), t('settings.contextMessagesDesc'), 'contextMessages', 2, 20)}
+            {renderToggleField(t('settings.smartUpdate'), t('settings.smartUpdateDesc'), 'smartUpdate')}
+            {renderSlider(t('settings.similarityThreshold'), t('settings.similarityThresholdDesc'), 'similarityThreshold', 0.1, 0.8, 0.01)}
+            {renderSlider(t('settings.exactDupThreshold'), t('settings.exactDupThresholdDesc'), 'exactDupThreshold', 0.01, 0.2, 0.01)}
           </div>
         ) : (
           <table>
             <tbody>
               {displayRow(t('settings.contextMessages'), config.sieve?.contextMessages ?? 4, t('settings.contextMessagesDesc'))}
+              {displayRow(t('settings.smartUpdate'), (config.sieve?.smartUpdate ?? true) ? t('common.on') : t('common.off'), t('settings.smartUpdateDesc'))}
+              {displayRow(t('settings.similarityThreshold'), (config.sieve?.similarityThreshold ?? 0.35).toFixed(2), t('settings.similarityThresholdDesc'))}
+              {displayRow(t('settings.exactDupThreshold'), (config.sieve?.exactDupThreshold ?? 0.08).toFixed(2), t('settings.exactDupThresholdDesc'))}
             </tbody>
           </table>
         )}

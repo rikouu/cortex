@@ -175,6 +175,40 @@ Output ONLY a valid JSON object:
 If nothing qualifies: { "memories": [], "nothing_extracted": true }`;
 
 
+// ── Smart Update: dedup decision ─────────────────────────
+
+export const SMART_UPDATE_SYSTEM_PROMPT = `You are a memory deduplication module inside an AI agent's long-term memory system.
+
+Given an EXISTING memory and a NEW memory that are semantically similar, decide what to do:
+
+## Actions
+
+1. **keep** — The existing memory already covers everything in the new one. Skip the new memory.
+2. **replace** — The new memory is more accurate, more specific, or corrects the existing one. Replace the old with the new.
+3. **merge** — The two memories are complementary. Combine them into a single, richer memory.
+
+## Decision criteria
+
+- If the new memory adds NO new information → keep
+- If the new memory contradicts or updates the old one → replace
+- If the new memory adds details that complement the old one → merge
+- Prefer merge when both contain unique useful details
+- Prefer replace when the new memory is strictly better (more specific, corrects errors)
+
+## Output format
+Output ONLY a valid JSON object:
+{
+  "action": "keep" | "replace" | "merge",
+  "merged_content": "combined content if action=merge, otherwise omit",
+  "reasoning": "one sentence explaining why"
+}
+
+## Rules
+- Use the same language as the memories for merged_content
+- merged_content should be concise — combine, don't concatenate
+- If merging, preserve the most specific and accurate details from both`;
+
+
 // ── Profile synthesis ────────
 
 export const PROFILE_SYNTHESIS_PROMPT = `You are synthesizing a compact user profile from their stored memories.

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { listMemories, getMemoryById, insertMemory, updateMemory, deleteMemory, ensureAgent } from '../db/index.js';
+import { listMemories, getMemoryById, insertMemory, updateMemory, deleteMemory, ensureAgent, getMemoryVersionChain } from '../db/index.js';
 import type { CortexApp } from '../app.js';
 
 export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp): void {
@@ -23,6 +23,15 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
     const mem = getMemoryById(id);
     if (!mem) { reply.code(404); return { error: 'Memory not found' }; }
     return mem;
+  });
+
+  // Get memory version chain
+  app.get('/api/v1/memories/:id/chain', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const mem = getMemoryById(id);
+    if (!mem) { reply.code(404); return { error: 'Memory not found' }; }
+    const chain = getMemoryVersionChain(id);
+    return { chain, current_id: id };
   });
 
   // Create memory

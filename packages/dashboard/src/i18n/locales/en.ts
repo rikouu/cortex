@@ -141,6 +141,10 @@ export default {
     content: 'Content',
     toastUpdated: 'Memory updated',
     toastSaveFailed: 'Save failed: {{message}}',
+    latestVersion: 'Latest Version',
+    merged: 'Merged',
+    replaced: 'Replaced',
+    updateReason: 'Reason',
   },
   agents: {
     title: 'Agents',
@@ -513,5 +517,11 @@ export default {
     // Sieve settings
     contextMessages: 'Context Messages for Extraction',
     contextMessagesDesc: 'Number of recent conversation messages sent for memory extraction. More messages provide richer context but increase LLM cost. Default: 4, Range: 2-20.',
+    smartUpdate: 'Smart Update (Dedup)',
+    smartUpdateDesc: 'When enabled, uses LLM to intelligently decide whether to keep, replace, or merge similar memories instead of simple duplicate skipping.',
+    similarityThreshold: 'Similarity Threshold',
+    similarityThresholdDesc: 'Maximum vector distance to consider memories as semantically related. Memories within this distance trigger LLM-based smart update decisions. Default: 0.35, Range: 0.1-0.8.',
+    exactDupThreshold: 'Exact Duplicate Threshold',
+    exactDupThresholdDesc: 'Vector distance below which memories are considered exact duplicates and silently skipped. Default: 0.08, Range: 0.01-0.2.',
   },
 } as const;

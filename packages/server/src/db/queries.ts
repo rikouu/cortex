@@ -270,6 +270,53 @@ export function getLifecycleLogs(limit = 50): LifecycleLogEntry[] {
   return db.prepare('SELECT * FROM lifecycle_log ORDER BY executed_at DESC LIMIT ?').all(limit) as LifecycleLogEntry[];
 }
 
+// ============ Version Chain ============
+
+/**
+ * Get the full version chain for a memory.
+ * Walks backward (via superseded_by) to find the oldest ancestor,
+ * then walks forward to build the complete chain (old → new).
+ * Returns at most 50 entries.
+ */
+export function getMemoryVersionChain(id: string): Memory[] {
+  const db = getDb();
+  const MAX_CHAIN = 50;
+
+  // Start from the given memory
+  const origin = db.prepare('SELECT * FROM memories WHERE id = ?').get(id) as Memory | null;
+  if (!origin) return [];
+
+  // Walk backward: find ancestors where superseded_by points to us
+  const visited = new Set<string>([origin.id]);
+  const ancestors: Memory[] = [];
+  let currentId = origin.id;
+
+  while (ancestors.length < MAX_CHAIN) {
+    const parent = db.prepare('SELECT * FROM memories WHERE superseded_by = ?').get(currentId) as Memory | null;
+    if (!parent || visited.has(parent.id)) break;
+    visited.add(parent.id);
+    ancestors.unshift(parent);
+    currentId = parent.id;
+  }
+
+  // Walk forward from origin via superseded_by
+  const descendants: Memory[] = [];
+  currentId = origin.superseded_by as string;
+
+  while (currentId && descendants.length < MAX_CHAIN) {
+    if (visited.has(currentId)) break;
+    visited.add(currentId);
+    const next = db.prepare('SELECT * FROM memories WHERE id = ?').get(currentId) as Memory | null;
+    if (!next) break;
+    descendants.push(next);
+    currentId = next.superseded_by as string;
+  }
+
+  // Build chain: ancestors + origin + descendants (old → new)
+  const chain = [...ancestors, origin, ...descendants];
+  return chain.slice(0, MAX_CHAIN);
+}
+
 // ============ Stats ============
 
 export function getStats(agentId?: string): Record<string, any> {
