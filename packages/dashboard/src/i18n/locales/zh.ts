@@ -358,6 +358,9 @@ export default {
     sourceExtraction: '自动提取',
     sourceManual: '手动创建',
     autoRefresh: '自动刷新',
+    tooMany: '仅显示前 200 条关系，请使用过滤器缩小范围。',
+    extractionCount: '确认次数',
+    expired: '已过期',
   },
   lifecycle: {
     title: '生命周期引擎',

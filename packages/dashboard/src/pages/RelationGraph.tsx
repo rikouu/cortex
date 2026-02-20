@@ -10,6 +10,8 @@ interface Relation {
   confidence: number;
   source: string;
   agent_id: string;
+  extraction_count: number;
+  expired: number;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +34,7 @@ export default function RelationGraph() {
   const [nodeMemories, setNodeMemories] = useState<any[]>([]);
   const [loadingMemories, setLoadingMemories] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [tooMany, setTooMany] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const nodesRef = useRef<Map<string, Node>>(new Map());
@@ -40,7 +43,10 @@ export default function RelationGraph() {
   const { t } = useI18n();
 
   const load = () => {
-    listRelations().then(setRelations);
+    listRelations({ limit: '200', include_expired: '1' }).then((data: Relation[]) => {
+      setRelations(data);
+      setTooMany(data.length >= 200);
+    });
   };
 
   useEffect(() => { load(); }, []);
@@ -385,6 +391,11 @@ export default function RelationGraph() {
             {t('relations.graphHint')}
             {' '}{t('relations.lineThickness')}
           </p>
+          {tooMany && (
+            <p style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
+              {t('relations.tooMany')}
+            </p>
+          )}
         </div>
       )}
 
@@ -434,7 +445,7 @@ export default function RelationGraph() {
         <div className="card">
           <table>
             <thead>
-              <tr><th>{t('relations.subject')}</th><th>{t('relations.predicate')}</th><th>{t('relations.object')}</th><th>{t('relations.confidence')}</th><th>{t('relations.source')}</th><th>{t('relations.created')}</th><th></th></tr>
+              <tr><th>{t('relations.subject')}</th><th>{t('relations.predicate')}</th><th>{t('relations.object')}</th><th>{t('relations.confidence')}</th><th>{t('relations.extractionCount')}</th><th>{t('relations.source')}</th><th>{t('relations.created')}</th><th></th></tr>
             </thead>
             <tbody>
               {filteredRelations.map(r => (
@@ -449,6 +460,10 @@ export default function RelationGraph() {
                       </div>
                       {r.confidence?.toFixed(2)}
                     </div>
+                  </td>
+                  <td>
+                    {r.extraction_count ?? 1}
+                    {r.expired ? <span style={{ marginLeft: 4, fontSize: 10, color: '#f59e0b' }}>{t('relations.expired')}</span> : null}
                   </td>
                   <td>{sourceBadge(r.source)}</td>
                   <td>{r.created_at?.slice(0, 10)}</td>

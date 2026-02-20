@@ -379,6 +379,33 @@ const migrations = [
       CREATE INDEX idx_relations_agent ON relations(agent_id);
     `,
   },
+  {
+    name: '007_relation_quality',
+    sql: `
+      -- Evidence chain table (provenance tracking)
+      CREATE TABLE relation_evidence (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        relation_id TEXT NOT NULL REFERENCES relations(id) ON DELETE CASCADE,
+        memory_id   TEXT REFERENCES memories(id),
+        source      TEXT NOT NULL,
+        confidence  REAL NOT NULL,
+        context     TEXT,
+        created_at  DATETIME NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_relation_evidence_rel ON relation_evidence(relation_id);
+      CREATE INDEX idx_relation_evidence_mem ON relation_evidence(memory_id);
+
+      -- Extraction confirmation count
+      ALTER TABLE relations ADD COLUMN extraction_count INTEGER NOT NULL DEFAULT 1;
+
+      -- Temporal marker (0=active, 1=past/expired fact)
+      ALTER TABLE relations ADD COLUMN expired INTEGER NOT NULL DEFAULT 0;
+
+      -- Backfill: create initial evidence for existing relations
+      INSERT INTO relation_evidence (relation_id, memory_id, source, confidence)
+      SELECT id, source_memory_id, source, confidence FROM relations;
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

@@ -105,10 +105,11 @@ Output ONLY a valid JSON object:
   ],
   "relations": [
     {
-      "subject": "entity name (e.g. Harry)",
-      "predicate": "one of: uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to",
-      "object": "entity name (e.g. Tokyo)",
-      "confidence": 0.0-1.0
+      "subject": "entity name (1-5 words, e.g. Harry)",
+      "predicate": "MUST be exactly one of: uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to|not_uses|not_interested_in|dislikes — any other value will be REJECTED",
+      "object": "entity name (1-5 words, e.g. Tokyo)",
+      "confidence": 0.0-1.0,
+      "expired": "boolean, true if past tense (e.g. 'used to', 'previously', 'no longer')"
     }
   ],
   "nothing_extracted": false
@@ -118,11 +119,14 @@ If nothing qualifies: { "memories": [], "nothing_extracted": true }
 
 ## Relations
 Extract entity relationships mentioned in the conversation as (subject, predicate, object) triples.
+- ONLY extract relationships that are EXPLICITLY stated. Do NOT infer or speculate.
+- subject/object MUST be short entity names (1-5 words), NOT descriptions or sentences
 - Only extract when BOTH entities are explicitly mentioned
-- subject/object should be concise entity names (not full sentences)
 - Use the same language as user input for entity names
 - Maximum 3 relations per exchange
-- Standard predicates: uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to
+- If the relationship is PAST TENSE (used to, previously, no longer), set "expired": true
+- For negative relationships (does not use, dislikes), use negative predicates: not_uses, not_interested_in, dislikes
+- Standard predicates: uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to, not_uses, not_interested_in, dislikes
 - If no clear relations exist, omit the relations array or use empty array
 
 ## Rules
@@ -232,10 +236,11 @@ Output ONLY a valid JSON object:
   ],
   "relations": [
     {
-      "subject": "entity name",
-      "predicate": "one of: uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to",
-      "object": "entity name",
-      "confidence": 0.0-1.0
+      "subject": "entity name (1-5 words)",
+      "predicate": "MUST be exactly one of: uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to|not_uses|not_interested_in|dislikes — any other value will be REJECTED",
+      "object": "entity name (1-5 words)",
+      "confidence": 0.0-1.0,
+      "expired": "boolean, true if past tense (e.g. 'used to', 'previously', 'no longer')"
     }
   ],
   "nothing_extracted": false
@@ -245,11 +250,14 @@ If nothing qualifies: { "memories": [], "nothing_extracted": true }
 
 ## Relations
 Extract entity relationships mentioned in the conversation as (subject, predicate, object) triples.
+- ONLY extract relationships that are EXPLICITLY stated. Do NOT infer or speculate.
+- subject/object MUST be short entity names (1-5 words), NOT descriptions or sentences
 - Only extract when BOTH entities are explicitly mentioned
-- subject/object should be concise entity names (not full sentences)
 - Use the same language as the conversation for entity names
 - Maximum 5 relations per flush
-- Standard predicates: uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to
+- If the relationship is PAST TENSE (used to, previously, no longer), set "expired": true
+- For negative relationships (does not use, dislikes), use negative predicates: not_uses, not_interested_in, dislikes
+- Standard predicates: uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to, not_uses, not_interested_in, dislikes
 - If no clear relations exist, omit the relations array or use empty array`;
 
 

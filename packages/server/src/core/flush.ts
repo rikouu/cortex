@@ -6,7 +6,8 @@ import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
 import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, SMART_UPDATE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
-import { type ExtractedMemory, type ExtractedRelation, type ExtractionLogData, type SimilarMemory, type SmartUpdateDecision, VALID_PREDICATES } from './sieve.js';
+import { type ExtractedMemory, type ExtractedRelation, type ExtractionLogData, type SimilarMemory, type SmartUpdateDecision } from './sieve.js';
+import { parseRelations } from './relation-utils.js';
 
 const log = createLogger('flush');
 
@@ -145,6 +146,7 @@ export class MemoryFlush {
               source_memory_id: firstMemoryId,
               agent_id: agentId,
               source: 'flush',
+              expired: rel.expired ? 1 : 0,
             });
           } catch (e: any) {
             log.warn({ error: e.message }, 'Flush: failed to upsert relation');
@@ -221,7 +223,7 @@ export class MemoryFlush {
       }
     }
 
-    const relations = this.parseRelations(obj);
+    const relations = parseRelations(obj);
 
     // Handle new structured format
     if (obj.memories && Array.isArray(obj.memories)) {
@@ -236,24 +238,7 @@ export class MemoryFlush {
     return { memories: [], relations };
   }
 
-  private parseRelations(obj: any): ExtractedRelation[] {
-    if (!obj?.relations || !Array.isArray(obj.relations)) return [];
-
-    return obj.relations
-      .filter((r: any) => {
-        if (!r.subject || typeof r.subject !== 'string' || r.subject.length < 1) return false;
-        if (!r.object || typeof r.object !== 'string' || r.object.length < 1) return false;
-        if (!r.predicate || !VALID_PREDICATES.has(r.predicate)) return false;
-        if (typeof r.confidence === 'number' && (r.confidence < 0 || r.confidence > 1)) return false;
-        return true;
-      })
-      .map((r: any) => ({
-        subject: r.subject,
-        predicate: r.predicate,
-        object: r.object,
-        confidence: typeof r.confidence === 'number' ? r.confidence : 0.8,
-      }));
-  }
+  // parseRelations is now imported from ./relation-utils.js
 
   private parseLegacyArray(raw: string): ExtractedMemory[] {
     try {

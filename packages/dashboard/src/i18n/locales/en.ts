@@ -358,6 +358,9 @@ export default {
     sourceExtraction: 'Auto-extracted',
     sourceManual: 'Manual',
     autoRefresh: 'Auto-refresh',
+    tooMany: 'Only showing the first 200 relations. Use filters to narrow down.',
+    extractionCount: 'Confirmations',
+    expired: 'Expired',
   },
   lifecycle: {
     title: 'Lifecycle Engine',

@@ -7,6 +7,7 @@ import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
 import { SIEVE_SYSTEM_PROMPT, SMART_UPDATE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
+import { parseRelations } from './relation-utils.js';
 
 const log = createLogger('sieve');
 
@@ -45,12 +46,15 @@ export interface ExtractedRelation {
   predicate: string;
   object: string;
   confidence: number;
+  expired?: boolean;
 }
 
 export const VALID_PREDICATES = new Set([
   'uses', 'works_at', 'lives_in', 'knows', 'manages', 'belongs_to',
   'created', 'prefers', 'studies', 'skilled_in', 'collaborates_with',
   'reports_to', 'owns', 'interested_in', 'related_to',
+  // Negative predicates for conflict modeling
+  'not_uses', 'not_interested_in', 'dislikes',
 ]);
 
 export interface SimilarMemory {
@@ -258,6 +262,7 @@ export class MemorySieve {
             source_memory_id: firstMemoryId,
             agent_id: agentId,
             source: 'extraction',
+            expired: rel.expired ? 1 : 0,
           });
         } catch (e: any) {
           log.warn({ error: e.message }, 'Failed to upsert relation');
@@ -385,6 +390,7 @@ export class MemorySieve {
             source_memory_id: firstMemoryId,
             agent_id: agentId,
             source: 'extraction',
+            expired: rel.expired ? 1 : 0,
           });
           log.info({ action: result.action, subject: rel.subject, predicate: rel.predicate, object: rel.object }, 'Relation upserted');
         } catch (e: any) {
@@ -541,7 +547,7 @@ export class MemorySieve {
 
     // Handle nothing_extracted
     if (obj.nothing_extracted === true || !obj.memories || !Array.isArray(obj.memories)) {
-      return { memories: [], relations: this.parseRelations(obj) };
+      return { memories: [], relations: parseRelations(obj) };
     }
 
     const validCategories = new Set<string>(EXTRACTABLE_CATEGORIES);
@@ -563,27 +569,10 @@ export class MemorySieve {
         reasoning: m.reasoning || '',
       }));
 
-    return { memories, relations: this.parseRelations(obj) };
+    return { memories, relations: parseRelations(obj) };
   }
 
-  private parseRelations(obj: any): ExtractedRelation[] {
-    if (!obj?.relations || !Array.isArray(obj.relations)) return [];
-
-    return obj.relations
-      .filter((r: any) => {
-        if (!r.subject || typeof r.subject !== 'string' || r.subject.length < 1) return false;
-        if (!r.object || typeof r.object !== 'string' || r.object.length < 1) return false;
-        if (!r.predicate || !VALID_PREDICATES.has(r.predicate)) return false;
-        if (typeof r.confidence === 'number' && (r.confidence < 0 || r.confidence > 1)) return false;
-        return true;
-      })
-      .map((r: any) => ({
-        subject: r.subject,
-        predicate: r.predicate,
-        object: r.object,
-        confidence: typeof r.confidence === 'number' ? r.confidence : 0.8,
-      }));
-  }
+  // parseRelations is now imported from ./relation-utils.js
 
   // ── Profile retrieval for injection ──
 

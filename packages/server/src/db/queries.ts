@@ -42,8 +42,20 @@ export interface Relation {
   source_memory_id: string | null;
   agent_id: string;
   source: string;
+  extraction_count: number;
+  expired: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface RelationEvidence {
+  id: number;
+  relation_id: string;
+  memory_id: string | null;
+  source: string;
+  confidence: number;
+  context: string | null;
+  created_at: string;
 }
 
 export interface AccessLogEntry {
@@ -237,14 +249,14 @@ export function insertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'update
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO relations (id, subject, predicate, object, confidence, source_memory_id, agent_id, source, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, rel.subject, rel.predicate, rel.object, rel.confidence, rel.source_memory_id || null, rel.agent_id || 'default', rel.source || 'manual', now, now);
+    INSERT INTO relations (id, subject, predicate, object, confidence, source_memory_id, agent_id, source, extraction_count, expired, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, rel.subject, rel.predicate, rel.object, rel.confidence, rel.source_memory_id || null, rel.agent_id || 'default', rel.source || 'manual', rel.extraction_count ?? 1, rel.expired ?? 0, now, now);
 
   return db.prepare('SELECT * FROM relations WHERE id = ?').get(id) as Relation;
 }
 
-export function upsertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'updated_at'>): Relation & { action: 'created' | 'updated' } {
+export function upsertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'updated_at' | 'extraction_count'> & { extraction_count?: number }): Relation & { action: 'created' | 'updated' } {
   const db = getDb();
   const agentId = rel.agent_id || 'default';
   const now = new Date().toISOString();
@@ -255,11 +267,17 @@ export function upsertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'update
   ).get(rel.subject, rel.predicate, rel.object, agentId) as Relation | undefined;
 
   if (existing) {
-    // Update: take higher confidence, update timestamp and source_memory_id
-    const newConfidence = Math.max(existing.confidence, rel.confidence);
+    // EMA confidence update: new = 0.3 * incoming + 0.7 * existing
+    const newConfidence = 0.3 * rel.confidence + 0.7 * existing.confidence;
+    const expired = rel.expired ?? existing.expired;
     db.prepare(
-      'UPDATE relations SET confidence = ?, source_memory_id = COALESCE(?, source_memory_id), source = ?, updated_at = ? WHERE id = ?'
-    ).run(newConfidence, rel.source_memory_id || null, rel.source || existing.source, now, existing.id);
+      'UPDATE relations SET confidence = ?, source_memory_id = COALESCE(?, source_memory_id), source = ?, extraction_count = extraction_count + 1, expired = ?, updated_at = ? WHERE id = ?'
+    ).run(newConfidence, rel.source_memory_id || null, rel.source || existing.source, expired, now, existing.id);
+
+    // Record evidence
+    db.prepare(
+      'INSERT INTO relation_evidence (relation_id, memory_id, source, confidence) VALUES (?, ?, ?, ?)'
+    ).run(existing.id, rel.source_memory_id || null, rel.source || 'manual', rel.confidence);
 
     const updated = db.prepare('SELECT * FROM relations WHERE id = ?').get(existing.id) as Relation;
     return { ...updated, action: 'updated' };
@@ -267,16 +285,22 @@ export function upsertRelation(rel: Omit<Relation, 'id' | 'created_at' | 'update
 
   // Insert new
   const id = generateId();
+  const expired = rel.expired ?? 0;
   db.prepare(`
-    INSERT INTO relations (id, subject, predicate, object, confidence, source_memory_id, agent_id, source, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, rel.subject, rel.predicate, rel.object, rel.confidence, rel.source_memory_id || null, agentId, rel.source || 'manual', now, now);
+    INSERT INTO relations (id, subject, predicate, object, confidence, source_memory_id, agent_id, source, extraction_count, expired, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, rel.subject, rel.predicate, rel.object, rel.confidence, rel.source_memory_id || null, agentId, rel.source || 'manual', 1, expired, now, now);
+
+  // Record initial evidence
+  db.prepare(
+    'INSERT INTO relation_evidence (relation_id, memory_id, source, confidence) VALUES (?, ?, ?, ?)'
+  ).run(id, rel.source_memory_id || null, rel.source || 'manual', rel.confidence);
 
   const created = db.prepare('SELECT * FROM relations WHERE id = ?').get(id) as Relation;
   return { ...created, action: 'created' };
 }
 
-export function listRelations(opts?: { subject?: string; object?: string; agent_id?: string; limit?: number }): Relation[] {
+export function listRelations(opts?: { subject?: string; object?: string; agent_id?: string; limit?: number; include_expired?: boolean }): Relation[] {
   const db = getDb();
   const conditions: string[] = [];
   const params: any[] = [];
@@ -284,9 +308,17 @@ export function listRelations(opts?: { subject?: string; object?: string; agent_
   if (opts?.subject) { conditions.push('subject = ?'); params.push(opts.subject); }
   if (opts?.object) { conditions.push('object = ?'); params.push(opts.object); }
   if (opts?.agent_id) { conditions.push('agent_id = ?'); params.push(opts.agent_id); }
+  if (!opts?.include_expired) { conditions.push('expired = 0'); }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   return db.prepare(`SELECT * FROM relations ${where} ORDER BY updated_at DESC LIMIT ?`).all(...params, opts?.limit || 100) as Relation[];
+}
+
+export function getRelationEvidence(relationId: string): RelationEvidence[] {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM relation_evidence WHERE relation_id = ? ORDER BY created_at DESC'
+  ).all(relationId) as RelationEvidence[];
 }
 
 export function deleteRelation(id: string): boolean {

@@ -93,6 +93,9 @@ export class LifecycleEngine {
       // Phase 6: Update decay scores
       await this.updateDecayScores();
 
+      // Phase 6b: Decay stale relation confidences
+      await this.updateRelationDecay();
+
       // Phase 7: Synthesize user profiles for all agents
       try {
         await this.synthesizeAllProfiles();
@@ -372,6 +375,40 @@ export class LifecycleEngine {
 
         const decayScore = Math.min(1.0, baseImp * accessFreq + recencyFactor * m.importance);
         stmt.run(Math.max(0, decayScore), m.id);
+      }
+    })();
+  }
+
+  /**
+   * Decay confidence of relations that haven't been re-confirmed recently.
+   * 30-day grace period: only decay relations older than 30 days since last update.
+   * Uses exponential decay: decayed = max(0.1, confidence * exp(-lambda * (days - 30)))
+   */
+  private async updateRelationDecay(): Promise<void> {
+    const db = getDb();
+    const lambda = this.config.lifecycle.decayLambda;
+
+    const relations = db.prepare(
+      "SELECT id, confidence, updated_at FROM relations WHERE expired = 0"
+    ).all() as { id: string; confidence: number; updated_at: string }[];
+
+    const now = Date.now();
+    const GRACE_DAYS = 30;
+    const stmt = db.prepare('UPDATE relations SET confidence = ? WHERE id = ?');
+
+    db.transaction(() => {
+      for (const rel of relations) {
+        const updatedAt = new Date(rel.updated_at).getTime();
+        const daysSinceUpdate = (now - updatedAt) / 86_400_000;
+
+        if (daysSinceUpdate <= GRACE_DAYS) continue;
+
+        const excessDays = daysSinceUpdate - GRACE_DAYS;
+        const decayed = Math.max(0.1, rel.confidence * Math.exp(-lambda * excessDays));
+
+        if (Math.abs(decayed - rel.confidence) > 0.001) {
+          stmt.run(decayed, rel.id);
+        }
       }
     })();
   }
