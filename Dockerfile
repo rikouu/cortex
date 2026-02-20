@@ -30,9 +30,8 @@ COPY packages/cortex-bridge/package.json packages/cortex-bridge/
 COPY packages/mcp-client/package.json packages/mcp-client/
 RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
 
-# Copy built server
+# Copy built server (compiled JS from dist, no source needed)
 COPY --from=builder /app/packages/server/dist packages/server/dist/
-COPY --from=builder /app/packages/server/src packages/server/src/
 
 # Copy built dashboard static files
 COPY --from=builder /app/packages/dashboard/dist packages/dashboard/dist/
@@ -50,4 +49,4 @@ EXPOSE 21100
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://localhost:21100/api/v1/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"
 
-CMD ["npx", "tsx", "packages/server/src/index.ts"]
+CMD ["node", "packages/server/dist/index.js"]
