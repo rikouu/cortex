@@ -656,7 +656,7 @@ export class MemorySieve {
    * Find similar memories via vector search.
    * Returns top-K similar memories with distances.
    */
-  private async findSimilar(content: string, agentId: string): Promise<SimilarMemory[]> {
+  private async findSimilar(content: string, agentId: string, categories?: string[]): Promise<SimilarMemory[]> {
     try {
       const embedding = await this.embeddingProvider.embed(content);
       if (embedding.length === 0) return [];
@@ -666,6 +666,7 @@ export class MemorySieve {
       for (const r of results) {
         const mem = getMemoryById(r.id);
         if (mem && !mem.superseded_by && !mem.is_pinned) {
+          if (categories && categories.length > 0 && !categories.includes(mem.category)) continue;
           similar.push({ memory: mem, distance: r.distance });
         }
       }
@@ -787,8 +788,13 @@ export class MemorySieve {
       ? Math.min(similarityThreshold * 1.5, 0.6)
       : similarityThreshold;
 
+    // Corrections search within related categories to find the memory being corrected
+    const correctionCategories = extraction.category === 'correction'
+      ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
+      : undefined;
+
     // Find similar memories
-    const similar = await this.findSimilar(extraction.content, agentId);
+    const similar = await this.findSimilar(extraction.content, agentId, correctionCategories);
 
     if (!smartUpdate) {
       // Legacy behavior: simple threshold skip

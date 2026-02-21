@@ -157,6 +157,31 @@ export class LifecycleEngine {
 
     let promoted = 0;
     for (const entry of candidates) {
+      // High-importance memories (identity, correction, constraint) auto-promote regardless of access
+      if (entry.importance >= 0.9) {
+        if (!dryRun) {
+          const newId = generateId();
+          insertMemory({
+            id: newId,
+            layer: 'core',
+            category: entry.category === 'context' ? 'fact' : entry.category,
+            content: entry.content,
+            importance: Math.max(entry.importance, 0.6),
+            confidence: entry.confidence,
+            agent_id: entry.agent_id,
+            source: 'lifecycle:auto-promotion',
+          });
+          updateMemory(entry.id, { superseded_by: newId });
+          try {
+            const emb = await this.embeddingProvider.embed(entry.content);
+            if (emb.length > 0) await this.vectorBackend.upsert(newId, emb);
+          } catch { /* best effort */ }
+          insertLifecycleLog('promote', [entry.id, newId], { score: 1.0, from: 'working', to: 'core', reason: 'high_importance_auto' });
+        }
+        promoted++;
+        continue;
+      }
+
       const score = this.computePromotionScore(entry);
       if (score >= threshold) {
         if (!dryRun) {
@@ -374,7 +399,8 @@ export class LifecycleEngine {
         const daysSinceAccess = (now - lastAccessed) / 86_400_000;
         const recencyFactor = Math.exp(-lambda * daysSinceAccess);
 
-        const decayScore = Math.min(1.0, baseImp * accessFreq + recencyFactor * m.importance);
+        // Floor guarantee: high baseImp categories (identity, constraint) always retain 0.3+ even with zero access
+        const decayScore = Math.min(1.0, baseImp * 0.3 + baseImp * accessFreq * 0.3 + recencyFactor * m.importance * 0.4);
         stmt.run(Math.max(0, decayScore), m.id);
       }
     })();

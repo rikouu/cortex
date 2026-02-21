@@ -9,12 +9,12 @@ services:
       - CORTEX_PORT=21100
       - CORTEX_HOST=0.0.0.0
       - CORTEX_DB_PATH=cortex/brain.db
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # Dashboard auth (optional — set in .env to enable login)
       - CORTEX_AUTH_TOKEN=${CORTEX_AUTH_TOKEN:-}
       - LOG_LEVEL=info
       # Timezone: set to your local timezone, e.g. Asia/Shanghai, Asia/Tokyo, America/New_York
-      - TZ=${TZ:-UTC}
+      - TZ=Asia/Tokyo
     restart: unless-stopped
 
   # Optional: Qdrant for high-performance vector search
