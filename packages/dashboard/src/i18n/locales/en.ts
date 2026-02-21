@@ -535,8 +535,12 @@ export default {
     testSuccess: 'OK ({{latency}}ms)',
     testFailed: 'Failed: {{message}}',
     // Sieve settings
+    fastChannelEnabled: 'Fast Channel (Regex)',
+    fastChannelEnabledDesc: 'Enable regex-based fast extraction channel. Useful for catching high-signal patterns instantly. Disable if using a strong LLM where deep channel alone is sufficient.',
     contextMessages: 'Context Messages for Extraction',
     contextMessagesDesc: 'Number of recent conversation messages sent for memory extraction. More messages provide richer context but increase LLM cost. Default: 4, Range: 2-20.',
+    maxConversationChars: 'Max Conversation Chars',
+    maxConversationCharsDesc: 'Maximum total characters of conversation text sent to LLM for extraction. Increase for longer conversations. Default: 4000, Range: 2000-16000.',
     smartUpdate: 'Smart Update (Dedup)',
     smartUpdateDesc: 'When enabled, uses LLM to intelligently decide whether to keep, replace, or merge similar memories instead of simple duplicate skipping.',
     similarityThreshold: 'Similarity Threshold',

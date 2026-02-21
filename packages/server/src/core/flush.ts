@@ -211,7 +211,7 @@ export class MemoryFlush {
   }
 
   private async extractCoreItemsStructured(text: string): Promise<{ raw: string; parsed: ExtractedMemory[]; relations: ExtractedRelation[] }> {
-    const raw = await this.llm.complete(text.slice(0, 3000), {
+    const raw = await this.llm.complete(text.slice(0, this.config.sieve.maxConversationChars), {
       maxTokens: this.config.sieve.maxExtractionTokens,
       temperature: 0.1,
       systemPrompt: FLUSH_CORE_ITEMS_SYSTEM_PROMPT,

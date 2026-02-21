@@ -285,7 +285,9 @@ export default function Settings() {
         skipSmallTalk: config.gate?.skipSmallTalk ?? false,
       }),
       sieve: () => ({
+        fastChannelEnabled: config.sieve?.fastChannelEnabled ?? true,
         contextMessages: config.sieve?.contextMessages ?? 4,
+        maxConversationChars: config.sieve?.maxConversationChars ?? 4000,
         smartUpdate: config.sieve?.smartUpdate ?? true,
         similarityThreshold: config.sieve?.similarityThreshold ?? 0.35,
         exactDupThreshold: config.sieve?.exactDupThreshold ?? 0.08,
@@ -429,7 +431,9 @@ export default function Settings() {
         };
       } else if (section === 'sieve') {
         payload.sieve = {
+          fastChannelEnabled: draft.fastChannelEnabled,
           contextMessages: Number(draft.contextMessages),
+          maxConversationChars: Number(draft.maxConversationChars),
           smartUpdate: draft.smartUpdate,
           similarityThreshold: Number(draft.similarityThreshold),
           exactDupThreshold: Number(draft.exactDupThreshold),
@@ -1117,7 +1121,9 @@ export default function Settings() {
         {sectionHeader(t('settings.contextMessages').replace(/ ?\(.*$/, '').split(' ').slice(0, 2).join(' ') || 'Sieve', 'sieve')}
         {isEditing('sieve') ? (
           <div style={{ padding: '4px 0' }}>
+            {renderToggleField(t('settings.fastChannelEnabled'), t('settings.fastChannelEnabledDesc'), 'fastChannelEnabled')}
             {renderNumberField(t('settings.contextMessages'), t('settings.contextMessagesDesc'), 'contextMessages', 2, 20)}
+            {renderNumberField(t('settings.maxConversationChars'), t('settings.maxConversationCharsDesc'), 'maxConversationChars', 2000, 16000)}
             {renderToggleField(t('settings.smartUpdate'), t('settings.smartUpdateDesc'), 'smartUpdate')}
             {renderSlider(t('settings.similarityThreshold'), t('settings.similarityThresholdDesc'), 'similarityThreshold', 0.1, 0.8, 0.01)}
             {renderSlider(t('settings.exactDupThreshold'), t('settings.exactDupThresholdDesc'), 'exactDupThreshold', 0.01, 0.2, 0.01)}
@@ -1126,7 +1132,9 @@ export default function Settings() {
         ) : (
           <table>
             <tbody>
+              {displayRow(t('settings.fastChannelEnabled'), (config.sieve?.fastChannelEnabled ?? true) ? t('common.on') : t('common.off'), t('settings.fastChannelEnabledDesc'))}
               {displayRow(t('settings.contextMessages'), config.sieve?.contextMessages ?? 4, t('settings.contextMessagesDesc'))}
+              {displayRow(t('settings.maxConversationChars'), config.sieve?.maxConversationChars ?? 4000, t('settings.maxConversationCharsDesc'))}
               {displayRow(t('settings.smartUpdate'), (config.sieve?.smartUpdate ?? true) ? t('common.on') : t('common.off'), t('settings.smartUpdateDesc'))}
               {displayRow(t('settings.similarityThreshold'), (config.sieve?.similarityThreshold ?? 0.35).toFixed(2), t('settings.similarityThresholdDesc'))}
               {displayRow(t('settings.exactDupThreshold'), (config.sieve?.exactDupThreshold ?? 0.08).toFixed(2), t('settings.exactDupThresholdDesc'))}

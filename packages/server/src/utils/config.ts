@@ -77,10 +77,12 @@ const CortexConfigSchema = z.object({
   }).default({}),
   sieve: z.object({
     highSignalImmediate: z.boolean().default(true),
+    fastChannelEnabled: z.boolean().default(true),
     parallelChannels: z.boolean().default(true),
     profileInjection: z.boolean().default(true),
     extractionLogging: z.boolean().default(true),
     maxExtractionTokens: z.number().default(800),
+    maxConversationChars: z.number().min(2000).max(16000).default(4000),
     contextMessages: z.number().min(2).max(20).default(4),
     smartUpdate: z.boolean().default(true),
     similarityThreshold: z.number().min(0.1).max(0.8).default(0.35),

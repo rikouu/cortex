@@ -409,6 +409,13 @@ When connected via MCP, the AI automatically gets these tools:
 
 All providers are configurable via the Dashboard UI or `cortex.json`. See `cortex-provider-reference.md` for detailed model comparisons and pricing.
 
+> **Warning: Changing embedding models**
+>
+> Each embedding model produces vectors of a specific dimension. If you switch to a model with different dimensions, **all existing vectors become incompatible**. After changing the embedding model or dimensions:
+> 1. Go to Dashboard → Settings → Data Management → **Reindex Vectors**
+> 2. This regenerates all vectors using the new model (requires API calls for every stored memory)
+> 3. Until reindexed, vector search (recall, dedup, smart update) will not work correctly
+
 ---
 
 ## API Reference

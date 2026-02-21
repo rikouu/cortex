@@ -155,12 +155,17 @@ export class MemorySieve {
     // --- Parallel or sequential execution of fast + deep channels ---
     const parallel = this.config.sieve.parallelChannels;
 
+    const fastEnabled = this.config.sieve.fastChannelEnabled;
+
     if (parallel) {
       // Parallel: run both channels concurrently
-      const [signalResult, deepResult] = await Promise.allSettled([
-        this.runFastChannel(exchange, agentId, req.session_id),
+      const promises: [Promise<any>, Promise<any>] = [
+        fastEnabled
+          ? this.runFastChannel(exchange, agentId, req.session_id)
+          : Promise.resolve({ signals: [], extracted: [], deduplicated: 0, smart_updated: 0 }),
         this.runDeepChannel(exchange, agentId, req.session_id),
-      ]);
+      ];
+      const [signalResult, deepResult] = await Promise.allSettled(promises);
 
       // Collect fast channel results
       let fastSignals: DetectedSignal[] = [];
@@ -215,8 +220,8 @@ export class MemorySieve {
     }
 
     // Sequential execution (default fallback if parallel disabled)
-    // 1. High signal detection (regex, no LLM)
-    const highSignals = detectHighSignals(exchange);
+    // 1. High signal detection (regex, no LLM) — skipped if fast channel disabled
+    const highSignals = fastEnabled ? detectHighSignals(exchange) : [];
 
     // 2. Write high signals immediately to Core (with dedup/smart-update check)
     if (this.config.sieve.highSignalImmediate && highSignals.length > 0) {
@@ -531,26 +536,31 @@ export class MemorySieve {
   ): Promise<{ raw: string; parsed: ExtractedMemory[]; relations: ExtractedRelation[] }> {
     let conversationBlock: string;
 
+    const totalLimit = this.config.sieve.maxConversationChars;
+
     if (exchange.messages && exchange.messages.length > 0) {
-      // Multi-turn mode: format each message with role labels, total limit 3000 chars
-      // User messages get full space; assistant messages are moderately truncated
+      // Multi-turn mode: dynamically allocate per-message limits based on total budget
+      // User messages get ~65% of budget, assistant ~35%
+      const msgCount = exchange.messages.length;
+      const userBudget = Math.floor(totalLimit * 0.65 / Math.max(1, Math.ceil(msgCount / 2)));
+      const assistantBudget = Math.floor(totalLimit * 0.35 / Math.max(1, Math.floor(msgCount / 2)));
       const parts: string[] = [];
       let totalLen = 0;
       for (const m of exchange.messages) {
         const isUser = m.role === 'user';
         const label = isUser ? '[USER]' : '[ASSISTANT]';
-        const maxLen = isUser ? 1500 : 800;
+        const maxLen = isUser ? userBudget : assistantBudget;
         const slice = m.content.slice(0, maxLen);
         const line = `${label}\n${slice}`;
-        if (totalLen + line.length > 4000) break;
+        if (totalLen + line.length > totalLimit) break;
         parts.push(line);
         totalLen += line.length;
       }
       conversationBlock = parts.join('\n\n');
     } else {
       // Single-turn mode (backward compatible)
-      const userSlice = exchange.user.slice(0, 1500);
-      const assistantSlice = exchange.assistant.slice(0, 800);
+      const userSlice = exchange.user.slice(0, Math.floor(totalLimit * 0.65));
+      const assistantSlice = exchange.assistant.slice(0, Math.floor(totalLimit * 0.35));
       conversationBlock = `[USER]\n${userSlice}\n\n[ASSISTANT]\n${assistantSlice}`;
     }
 

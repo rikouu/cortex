@@ -33,43 +33,46 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
       let deduped = 0;
       let resultMem: any;
 
-      // Dedup: check for similar existing memories before inserting
+      // Dedup: check for similar existing memories across ALL agents (cross-agent dedup)
       try {
         const embedding = await cortex.embeddingProvider.embed(content);
         if (embedding.length > 0) {
-          const similar = await cortex.vectorBackend.search(embedding, 1, { agent_id: aid });
-          if (similar.length > 0) {
-            const existing = getMemoryById(similar[0]!.id);
-            if (existing && !existing.superseded_by && !existing.is_pinned) {
-              const { exactDupThreshold, similarityThreshold } = cortex.config.sieve;
+          const similar = await cortex.vectorBackend.search(embedding, 3, {});
+          // Find first valid match (not superseded, not pinned)
+          const { exactDupThreshold, similarityThreshold } = cortex.config.sieve;
+          for (const hit of similar) {
+            const existing = getMemoryById(hit.id);
+            if (!existing || existing.superseded_by || existing.is_pinned) continue;
 
-              if (similar[0]!.distance < exactDupThreshold) {
-                // Exact duplicate — bump access count and return existing
-                updateMemory(existing.id, {
-                  importance: Math.max(existing.importance, importance ?? 0.7),
-                  confidence: Math.min(existing.confidence + 0.05, 1.0),
-                });
-                deduped = 1;
-                resultStatus = 'already_exists';
-                resultMem = { id: existing.id, status: 'already_exists', memory: existing };
-              } else if (similar[0]!.distance < similarityThreshold) {
-                // Similar — supersede old, insert new (explicit user intent = always replace)
-                const mem = insertMemory({
-                  layer: 'core',
-                  category: validCategory,
-                  content,
-                  importance: importance ?? 0.7,
-                  confidence: 0.9,
-                  agent_id: aid,
-                  source: 'mcp:remember',
-                  metadata: JSON.stringify({ supersedes: existing.id, smart_update_type: 'replace' }),
-                });
-                updateMemory(existing.id, { superseded_by: mem.id });
-                await cortex.vectorBackend.upsert(mem.id, embedding);
-                resultStatus = 'replaced';
-                resultMem = { id: mem.id, status: 'remembered', memory: mem };
-              }
+            if (hit.distance < exactDupThreshold) {
+              // Exact duplicate — bump importance and return existing
+              updateMemory(existing.id, {
+                importance: Math.max(existing.importance, importance ?? 0.7),
+                confidence: Math.min(existing.confidence + 0.05, 1.0),
+              });
+              deduped = 1;
+              resultStatus = 'already_exists';
+              resultMem = { id: existing.id, status: 'already_exists', memory: existing };
+              break;
+            } else if (hit.distance < similarityThreshold) {
+              // Similar — supersede old, insert new (explicit user intent = always replace)
+              const mem = insertMemory({
+                layer: 'core',
+                category: validCategory,
+                content,
+                importance: importance ?? 0.7,
+                confidence: 0.9,
+                agent_id: aid,
+                source: 'mcp:remember',
+                metadata: JSON.stringify({ supersedes: existing.id, smart_update_type: 'replace' }),
+              });
+              updateMemory(existing.id, { superseded_by: mem.id });
+              await cortex.vectorBackend.upsert(mem.id, embedding);
+              resultStatus = 'replaced';
+              resultMem = { id: mem.id, status: 'remembered', memory: mem };
+              break;
             }
+            break; // Beyond similarity threshold, no need to check further
           }
 
           if (!resultMem) {

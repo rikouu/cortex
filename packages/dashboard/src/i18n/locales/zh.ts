@@ -535,8 +535,12 @@ export default {
     testSuccess: '正常 ({{latency}}ms)',
     testFailed: '失败：{{message}}',
     // Sieve 设置
+    fastChannelEnabled: '快速通道（正则）',
+    fastChannelEnabledDesc: '启用基于正则的快速提取通道，可即时捕获高信号模式。如果使用强模型（如 Sonnet 4.6），仅依赖深度通道即可，可关闭此项减少误提取。',
     contextMessages: '提取上下文消息数',
     contextMessagesDesc: '发送给记忆提取的最近对话消息条数。更多消息提供更丰富的上下文，但增加 LLM 开销。默认 4 条，范围 2-20。',
+    maxConversationChars: '对话最大字符数',
+    maxConversationCharsDesc: '发送给 LLM 提取的对话文本最大总字符数。长对话可适当增大此值。默认 4000，范围 2000-16000。',
     smartUpdate: '智能更新（去重）',
     smartUpdateDesc: '启用后，通过 LLM 智能决策相似记忆应保留、替换还是合并，而非简单跳过重复。',
     similarityThreshold: '相似度阈值',
