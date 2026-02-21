@@ -10,6 +10,10 @@
         "type": "string",
         "default": "http://localhost:21100"
       },
+      "authToken": {
+        "type": "string",
+        "default": ""
+      },
       "agentId": {
         "type": "string",
         "default": "openclaw"
@@ -17,12 +21,18 @@
       "debug": {
         "type": "boolean",
         "default": false
+      },
+      "contextMessages": {
+        "type": "number",
+        "default": 4
       }
     }
   },
   "uiHints": {
     "cortexUrl": { "label": "Cortex Server URL" },
+    "authToken": { "label": "Auth Token (optional)" },
     "agentId": { "label": "Agent ID" },
-    "debug": { "label": "Enable Debug Logging" }
+    "debug": { "label": "Enable Debug Logging" },
+    "contextMessages": { "label": "Context Messages for Ingestion" }
   }
 }

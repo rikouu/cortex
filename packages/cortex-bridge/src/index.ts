@@ -115,6 +115,17 @@ function getCortexUrl(config: Record<string, any>): string {
   return config.cortexUrl || process.env.CORTEX_URL || 'http://localhost:21100';
 }
 
+function getAuthToken(config: Record<string, any>): string {
+  return (config.authToken as string) || process.env.CORTEX_AUTH_TOKEN || '';
+}
+
+function getHeaders(config: Record<string, any>): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken(config);
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
 function isDebug(config: Record<string, any>): boolean {
   return config.debug === true || process.env.CORTEX_DEBUG === 'true';
 }
@@ -123,10 +134,11 @@ async function cortexRecall(
   cortexUrl: string,
   query: string,
   agentId: string,
+  config: Record<string, any> = {},
 ): Promise<{ context: string; count: number } | null> {
   const res = await fetch(`${cortexUrl}/api/v1/recall`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(config),
     body: JSON.stringify({ query, agent_id: agentId }),
     signal: AbortSignal.timeout(RECALL_TIMEOUT),
   });
@@ -144,6 +156,7 @@ async function cortexIngest(
   assistantMessage: string,
   agentId: string,
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  config: Record<string, any> = {},
 ): Promise<{ ok: boolean; extracted?: number; deduplicated?: number; error?: string }> {
   try {
     const payload: any = {
@@ -156,7 +169,7 @@ async function cortexIngest(
     }
     const res = await fetch(`${cortexUrl}/api/v1/ingest`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(config),
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(INGEST_TIMEOUT),
     });
@@ -180,11 +193,12 @@ async function cortexFlush(
   cortexUrl: string,
   messages: { role: string; content: string }[],
   agentId: string,
+  config: Record<string, any> = {},
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`${cortexUrl}/api/v1/flush`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(config),
       body: JSON.stringify({ messages, agent_id: agentId, reason: 'compaction' }),
       signal: AbortSignal.timeout(FLUSH_TIMEOUT),
     });
@@ -247,7 +261,7 @@ export default {
       },
       async execute(_id: string, params: { query: string }) {
         try {
-          const result = await cortexRecall(cortexUrl, params.query, agentId);
+          const result = await cortexRecall(cortexUrl, params.query, agentId, config);
           if (result) {
             return { content: [{ type: 'text', text: result.context }] };
           }
@@ -285,7 +299,7 @@ export default {
         try {
           const res = await fetch(`${cortexUrl}/api/v1/memories`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getHeaders(config),
             body: JSON.stringify({
               content: params.content,
               category: params.category || 'fact',
@@ -326,6 +340,8 @@ export default {
             cleanForIngestion(params.user_message),
             cleanForIngestion(params.assistant_message),
             agentId,
+            undefined,
+            config,
           );
           if (result.ok) {
             const parts = ['Conversation ingested'];
@@ -360,7 +376,11 @@ export default {
             if (params.object) query.set('object', params.object);
             if (params.limit) query.set('limit', String(params.limit));
             query.set('agent_id', agentId);
+            const headers: Record<string, string> = {};
+            const token = getAuthToken(config);
+            if (token) headers['Authorization'] = `Bearer ${token}`;
             const res = await fetch(`${cortexUrl}/api/v1/relations?${query.toString()}`, {
+              headers,
               signal: AbortSignal.timeout(RECALL_TIMEOUT),
             });
             if (!res.ok) return { content: [{ type: 'text', text: `Failed to fetch relations: HTTP ${res.status}` }] };
@@ -419,7 +439,7 @@ export default {
         const query = cleanForIngestion(rawQuery).slice(0, 500);
         if (!query || query.length < 5) return;
 
-        const result = await cortexRecall(cortexUrl, query, agentId);
+        const result = await cortexRecall(cortexUrl, query, agentId, config);
         if (result) {
           log.info(`[cortex-bridge] Hook recalled ${result.count} memories`);
           return { prependContext: result.context };
@@ -472,7 +492,7 @@ export default {
           return;
         }
 
-        const result = await cortexIngest(cortexUrl, userText, assistantText, agentId, cleanedMessages);
+        const result = await cortexIngest(cortexUrl, userText, assistantText, agentId, cleanedMessages, config);
         if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}, messages=${cleanedMessages.length}`);
       } catch (e) {
         if (debug) log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
@@ -493,7 +513,7 @@ export default {
 
         if (messages.length === 0) return;
 
-        await cortexFlush(cortexUrl, messages, agentId);
+        await cortexFlush(cortexUrl, messages, agentId, config);
         if (debug) log.info(`[cortex-bridge] Hook flushed ${messages.length} messages`);
       } catch (e) {
         if (debug) log.warn(`[cortex-bridge] Hook flush failed: ${(e as Error).message}`);
