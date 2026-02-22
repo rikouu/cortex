@@ -106,13 +106,13 @@ export class MemoryGate {
       }
     }
 
-    // Boost score for memories hit by multiple query variants
+    // Boost score for memories hit by multiple query variants (diminishing returns)
     let results = Array.from(resultMap.values())
       .map(r => {
         const hits = hitCount.get(r.id) ?? 1;
-        return hits > 1
-          ? { ...r, finalScore: r.finalScore * (1 + 0.1 * (hits - 1)) }
-          : r;
+        // ln(1)=0, ln(2)≈0.69, ln(3)≈1.10, ln(5)≈1.61 → boost caps naturally
+        const boost = hits > 1 ? 1 + 0.08 * Math.log(hits) : 1;
+        return { ...r, finalScore: r.finalScore * boost };
       })
       .sort((a, b) => b.finalScore - a.finalScore);
 
