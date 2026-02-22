@@ -79,7 +79,13 @@ export class CortexApp {
       log.info('Reloaded embedding provider');
     }
 
-    // Rebuild dependent engines if any provider changed
+    // Check if search/gate config changed (reranker, query expansion, etc.)
+    const searchConfigChanged = JSON.stringify(this.config.search) !== JSON.stringify(newConfig.search);
+    const gateConfigChanged = JSON.stringify(this.config.gate) !== JSON.stringify(newConfig.gate);
+    if (searchConfigChanged) reloaded.push('search');
+    if (gateConfigChanged) reloaded.push('gate');
+
+    // Rebuild dependent engines if any provider or config changed
     if (reloaded.length > 0) {
       const reranker = createReranker(newConfig.search.reranker, this.llmExtraction);
       this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, newConfig.search, reranker);
