@@ -1,6 +1,6 @@
 import { createLogger } from '../utils/logger.js';
 import { upsertRelation, type Memory, type MemoryCategory } from '../db/index.js';
-import { detectHighSignals, type DetectedSignal } from '../signals/index.js';
+import { detectHighSignals, isSmallTalk, type DetectedSignal } from '../signals/index.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
@@ -96,6 +96,7 @@ export class MemorySieve {
     let smartUpdated = 0;
     const extractionLogs: ExtractionLogData[] = [];
     const fastEnabled = this.config.sieve.fastChannelEnabled;
+    const userIsSmallTalk = isSmallTalk(cleanUser);
 
     // Always run fast channel first, then deep channel.
     // This ensures fast-channel writes are visible to deep-channel dedup via vector search,
@@ -112,17 +113,21 @@ export class MemorySieve {
       if (fastResult.extractionLog) extractionLogs.push(fastResult.extractionLog);
     }
 
-    // 2. Deep channel (LLM structured extraction)
-    const deepResult = await this.runDeepChannel(exchange, agentId, req.session_id);
-    extracted.push(...deepResult.extracted);
-    deduplicated += deepResult.deduplicated;
-    smartUpdated += deepResult.smart_updated;
-    extractionLogs.push(deepResult.extractionLog);
+    // 2. Deep channel (LLM structured extraction) — skip for small talk to save LLM calls
+    let deepExtractionCount = 0;
+    if (!userIsSmallTalk) {
+      const deepResult = await this.runDeepChannel(exchange, agentId, req.session_id);
+      extracted.push(...deepResult.extracted);
+      deduplicated += deepResult.deduplicated;
+      smartUpdated += deepResult.smart_updated;
+      extractionLogs.push(deepResult.extractionLog);
+      deepExtractionCount = deepResult.structuredExtractions.length;
+    }
 
     log.info({
       agent_id: agentId,
       high_signals: highSignals.length,
-      deep_extractions: deepResult.structuredExtractions.length,
+      deep_extractions: deepExtractionCount,
       extracted: extracted.length,
       deduplicated,
       smart_updated: smartUpdated,
@@ -131,7 +136,7 @@ export class MemorySieve {
     return {
       extracted,
       high_signals: highSignals,
-      structured_extractions: deepResult.structuredExtractions,
+      structured_extractions: [],
       deduplicated,
       smart_updated: smartUpdated,
       extraction_logs: extractionLogs,

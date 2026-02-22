@@ -78,7 +78,7 @@ export class SqliteVecBackend implements VectorBackend {
     }
   }
 
-  async search(query: number[], topK: number, _filter?: VectorFilter): Promise<VectorSearchResult[]> {
+  async search(query: number[], topK: number, filter?: VectorFilter): Promise<VectorSearchResult[]> {
     const db = getDb();
 
     if (this.useVec0) {
@@ -96,8 +96,14 @@ export class SqliteVecBackend implements VectorBackend {
       }
     }
 
-    // Fallback: cosine similarity in JS
-    const all = db.prepare('SELECT memory_id, embedding FROM memories_vec_fallback').all() as {
+    // Fallback: cosine similarity in JS with optional agent_id filter
+    let sql = 'SELECT f.memory_id, f.embedding FROM memories_vec_fallback f';
+    const params: any[] = [];
+    if (filter?.agent_id) {
+      sql += ' JOIN memories m ON m.id = f.memory_id WHERE m.agent_id = ? AND m.superseded_by IS NULL';
+      params.push(filter.agent_id);
+    }
+    const all = db.prepare(sql).all(...params) as {
       memory_id: string;
       embedding: string;
     }[];

@@ -186,12 +186,13 @@ export class MemoryWriter {
     sessionId?: string,
     confidenceOverride?: number,
     sourcePrefix = 'sieve',
+    forceLayer?: 'working' | 'core',
   ): Promise<Memory> {
     const content = decision.action === 'merge' && decision.merged_content
       ? decision.merged_content
       : extraction.content;
 
-    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
+    const layer = forceLayer || (extraction.importance >= 0.8 ? 'core' : 'working');
     const ttlMs = parseDuration(this.config.layers.working.ttl);
     const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
 
@@ -258,6 +259,7 @@ export class MemoryWriter {
     sessionId?: string,
     confidenceOverride?: number,
     sourcePrefix = 'sieve',
+    forceLayer?: 'working' | 'core',
   ): Promise<ProcessResult> {
     const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
 
@@ -328,7 +330,7 @@ export class MemoryWriter {
     }
 
     // Tier 3: unrelated → normal insert
-    const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride, sourcePrefix);
+    const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride, sourcePrefix, forceLayer);
     await this.indexVector(mem.id, extraction.content);
     return { action: 'inserted', memory: mem };
   }
@@ -473,8 +475,9 @@ export class MemoryWriter {
     sessionId?: string,
     confidenceOverride?: number,
     sourcePrefix = 'sieve',
+    forceLayer?: 'working' | 'core',
   ): Memory {
-    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
+    const layer = forceLayer || (extraction.importance >= 0.8 ? 'core' : 'working');
     const ttlMs = parseDuration(this.config.layers.working.ttl);
     const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
 

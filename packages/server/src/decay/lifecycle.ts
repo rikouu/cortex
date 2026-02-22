@@ -157,8 +157,9 @@ export class LifecycleEngine {
 
     let promoted = 0;
     for (const entry of candidates) {
-      // High-importance memories (identity, correction, constraint) auto-promote regardless of access
-      if (entry.importance >= 0.9) {
+      // High-importance memories (identity, correction, constraint) auto-promote
+      // BUT skip if confidence is too low (e.g. feedback=bad)
+      if (entry.importance >= 0.9 && entry.confidence >= 0.3) {
         if (!dryRun) {
           const newId = generateId();
           insertMemory({
@@ -175,6 +176,7 @@ export class LifecycleEngine {
           try {
             const emb = await this.embeddingProvider.embed(entry.content);
             if (emb.length > 0) await this.vectorBackend.upsert(newId, emb);
+            await this.vectorBackend.delete([entry.id]);
           } catch { /* best effort */ }
           insertLifecycleLog('promote', [entry.id, newId], { score: 1.0, from: 'working', to: 'core', reason: 'high_importance_auto' });
         }
@@ -183,7 +185,7 @@ export class LifecycleEngine {
       }
 
       const score = this.computePromotionScore(entry);
-      if (score >= threshold) {
+      if (score >= threshold && entry.confidence >= 0.3) {
         if (!dryRun) {
           const newId = generateId();
           insertMemory({
@@ -202,6 +204,7 @@ export class LifecycleEngine {
           try {
             const emb = await this.embeddingProvider.embed(entry.content);
             if (emb.length > 0) await this.vectorBackend.upsert(newId, emb);
+            await this.vectorBackend.delete([entry.id]);
           } catch { /* best effort */ }
 
           insertLifecycleLog('promote', [entry.id, newId], { score, from: 'working', to: 'core' });
@@ -230,36 +233,45 @@ export class LifecycleEngine {
     if (coreEntries.length < 2) return 0;
 
     let merged = 0;
-
-    // Simple text-similarity dedup (cosine on embeddings when available, otherwise content overlap)
-    const seen = new Map<string, Memory>();
+    const superseded = new Set<string>();
+    const { exactDupThreshold } = this.config.sieve;
+    // Use a slightly wider threshold for lifecycle dedup (1.5x exact dup)
+    const lifecycleDupThreshold = exactDupThreshold * 1.5;
 
     for (const entry of coreEntries) {
-      if (entry.is_pinned) continue;  // 跳过锁定记忆
-      // Check for near-duplicate content (simple substring check)
-      let isDuplicate = false;
-      for (const [, existing] of seen) {
-        if (existing.agent_id !== entry.agent_id) continue;
-        const similarity = this.textSimilarity(entry.content, existing.content);
-        if (similarity > 0.85) {
-          // Keep the newer one (it's first due to ORDER BY DESC)
+      if (entry.is_pinned) continue;
+      if (superseded.has(entry.id)) continue;
+
+      try {
+        const embedding = await this.embeddingProvider.embed(entry.content);
+        if (embedding.length === 0) continue;
+
+        const similar = await this.vectorBackend.search(embedding, 5, { agent_id: entry.agent_id });
+        for (const hit of similar) {
+          if (hit.id === entry.id) continue;
+          if (superseded.has(hit.id)) continue;
+          if (hit.distance >= lifecycleDupThreshold) break; // sorted by distance
+
+          const existing = db.prepare(
+            "SELECT * FROM memories WHERE id = ? AND layer = 'core' AND superseded_by IS NULL"
+          ).get(hit.id) as Memory | undefined;
+          if (!existing || existing.is_pinned) continue;
+          if (existing.agent_id !== entry.agent_id) continue;
+
+          // entry is newer (ORDER BY DESC), keep entry, supersede existing
           if (!dryRun) {
-            updateMemory(entry.id, { superseded_by: existing.id });
-            try { await this.vectorBackend.delete([entry.id]); } catch { /* best effort */ }
-            insertLifecycleLog('merge', [entry.id, existing.id], {
-              kept: existing.id,
-              removed: entry.id,
-              similarity,
+            updateMemory(existing.id, { superseded_by: entry.id });
+            try { await this.vectorBackend.delete([existing.id]); } catch { /* best effort */ }
+            insertLifecycleLog('merge', [existing.id, entry.id], {
+              kept: entry.id,
+              removed: existing.id,
+              distance: hit.distance,
             });
           }
+          superseded.add(existing.id);
           merged++;
-          isDuplicate = true;
-          break;
         }
-      }
-      if (!isDuplicate) {
-        seen.set(entry.id, entry);
-      }
+      } catch { /* best effort — skip this entry */ }
     }
 
     return merged;
@@ -322,55 +334,87 @@ export class LifecycleEngine {
     if (expired.length === 0) return 0;
 
     if (!dryRun) {
-      // Compress expired archives into a super-summary
-      const contents = expired.map(e => `- ${e.content}`).join('\n');
-
-      let superSummary: string;
-      try {
-        superSummary = await this.llm.complete(
-          [
-            'Compress these archived memories into a brief super-summary (2-5 sentences).',
-            'Preserve key facts and decisions. Output in the same language.',
-            '',
-            contents.slice(0, 3000),
-          ].join('\n'),
-          { maxTokens: 200, temperature: 0.2 },
-        );
-      } catch {
-        superSummary = `Archived ${expired.length} memories from ${expired[0]?.created_at?.slice(0, 7) || 'unknown period'}.`;
+      // Group by category for better compression (preserve category semantics)
+      const groups = new Map<string, Memory[]>();
+      for (const e of expired) {
+        const list = groups.get(e.category) || [];
+        list.push(e);
+        groups.set(e.category, list);
       }
 
-      // Write super-summary back to Core
-      const newId = generateId();
-      insertMemory({
-        id: newId,
-        layer: 'core',
-        category: 'summary',
-        content: superSummary.trim(),
-        importance: 0.6,
-        confidence: 0.7,
-        agent_id: expired[0]?.agent_id || 'default',
-        source: 'lifecycle:compression',
-        metadata: JSON.stringify({
-          compressed_from: expired.length,
-          original_ids: expired.map(e => e.id),
-        }),
-      });
+      const allOriginalIds: string[] = [];
 
-      try {
-        const emb = await this.embeddingProvider.embed(superSummary);
-        if (emb.length > 0) await this.vectorBackend.upsert(newId, emb);
-      } catch { /* best effort */ }
+      for (const [category, items] of groups) {
+        // Single item: just move back to core without LLM compression
+        if (items.length === 1) {
+          const item = items[0]!;
+          const newId = generateId();
+          insertMemory({
+            id: newId,
+            layer: 'core',
+            category: item.category,
+            content: item.content,
+            importance: Math.max(item.importance, BASE_IMPORTANCE[category] || 0.5),
+            confidence: item.confidence,
+            agent_id: item.agent_id,
+            source: 'lifecycle:compression',
+            metadata: JSON.stringify({ compressed_from: 1, original_ids: [item.id] }),
+          });
+          try {
+            const emb = await this.embeddingProvider.embed(item.content);
+            if (emb.length > 0) await this.vectorBackend.upsert(newId, emb);
+          } catch { /* best effort */ }
+          db.prepare('UPDATE memories SET superseded_by = ? WHERE id = ?').run(newId, item.id);
+          try { await this.vectorBackend.delete([item.id]); } catch { /* best effort */ }
+          allOriginalIds.push(item.id);
+          continue;
+        }
 
-      // Mark originals as superseded
-      const stmt = db.prepare('UPDATE memories SET superseded_by = ? WHERE id = ?');
-      db.transaction(() => {
-        for (const e of expired) stmt.run(newId, e.id);
-      })();
+        // Multiple items: LLM compress per category
+        const contents = items.map(e => `- ${e.content}`).join('\n');
+        let compressed: string;
+        try {
+          compressed = await this.llm.complete(
+            `Compress these ${category} memories into 1-3 concise sentences. Preserve all key facts. Same language as input.\n\n${contents.slice(0, 3000)}`,
+            { maxTokens: 200, temperature: 0.2 },
+          );
+        } catch {
+          compressed = items.map(e => e.content).join('; ');
+        }
 
-      insertLifecycleLog('compress', expired.map(e => e.id), {
-        super_summary_id: newId,
+        const newId = generateId();
+        insertMemory({
+          id: newId,
+          layer: 'core',
+          category: category as any, // preserve original category
+          content: compressed.trim(),
+          importance: BASE_IMPORTANCE[category] || 0.6,
+          confidence: 0.7,
+          agent_id: items[0]?.agent_id || 'default',
+          source: 'lifecycle:compression',
+          metadata: JSON.stringify({ compressed_from: items.length, original_ids: items.map(e => e.id) }),
+        });
+
+        try {
+          const emb = await this.embeddingProvider.embed(compressed);
+          if (emb.length > 0) await this.vectorBackend.upsert(newId, emb);
+        } catch { /* best effort */ }
+
+        const stmt = db.prepare('UPDATE memories SET superseded_by = ? WHERE id = ?');
+        const deleteIds: string[] = [];
+        db.transaction(() => {
+          for (const e of items) {
+            stmt.run(newId, e.id);
+            deleteIds.push(e.id);
+          }
+        })();
+        try { await this.vectorBackend.delete(deleteIds); } catch { /* best effort */ }
+        allOriginalIds.push(...deleteIds);
+      }
+
+      insertLifecycleLog('compress', allOriginalIds, {
         compressed_count: expired.length,
+        groups: groups.size,
       });
     }
 

@@ -48,7 +48,7 @@ export class MemoryFlush {
       .map(m => `${m.role}: ${stripInjectedContent(m.content)}`)
       .filter(line => line.length > 10)
       .join('\n')
-      .slice(0, 5000);
+      .slice(0, this.config.sieve.maxConversationChars);
 
     // 2. Structured extraction first (more valuable than summary)
     let deduplicated = 0;

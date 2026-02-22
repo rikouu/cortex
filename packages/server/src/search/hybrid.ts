@@ -84,7 +84,7 @@ export class HybridSearchEngine {
     try {
       const embedding = await this.embeddingProvider.embed(opts.query);
       if (embedding.length > 0) {
-        vectorResults = await this.vectorBackend.search(embedding, limit * 3);
+        vectorResults = await this.vectorBackend.search(embedding, limit * 3, opts.agent_id ? { agent_id: opts.agent_id } : undefined);
       }
     } catch (e: any) {
       log.warn({ error: e.message }, 'Vector search failed, using text-only');
@@ -130,31 +130,33 @@ export class HybridSearchEngine {
       vectorScore: number;
     }>();
 
-    // Normalize text scores (FTS5 rank is negative, lower = better)
-    const maxTextRank = textResults.length > 0 ? Math.max(...textResults.map(r => Math.abs(r.rank))) : 1;
-    for (const r of textResults) {
-      const normalized = 1 - Math.abs(r.rank) / (maxTextRank + 1);
-      scoreMap.set(r.id, { memory: r, textScore: normalized, vectorScore: 0 });
+    const RRF_K = 60; // RRF constant (standard value)
+
+    // RRF: score = 1/(k + rank), rank is 0-indexed position
+    // Text results: already sorted by FTS5 rank (best first)
+    for (let i = 0; i < textResults.length; i++) {
+      const r = textResults[i]!;
+      const rrfScore = 1 / (RRF_K + i);
+      scoreMap.set(r.id, { memory: r, textScore: rrfScore, vectorScore: 0 });
     }
 
-    // Normalize vector scores (distance, lower = better)
-    const maxDist = vectorResults.length > 0 ? Math.max(...vectorResults.map(r => r.distance)) : 1;
-    for (const r of vectorResults) {
-      const normalized = 1 - r.distance / (maxDist + 0.001);
+    // Vector results: already sorted by distance (best first)
+    for (let i = 0; i < vectorResults.length; i++) {
+      const r = vectorResults[i]!;
+      const rrfScore = 1 / (RRF_K + i);
       const existing = scoreMap.get(r.id);
       if (existing) {
-        existing.vectorScore = normalized;
+        existing.vectorScore = rrfScore;
       } else {
-        // Need to fetch memory from DB
         const db = getDb();
         const memory = db.prepare('SELECT * FROM memories WHERE id = ?').get(r.id) as Memory | undefined;
         if (memory && !memory.superseded_by) {
-          scoreMap.set(r.id, { memory, textScore: 0, vectorScore: normalized });
+          scoreMap.set(r.id, { memory, textScore: 0, vectorScore: rrfScore });
         }
       }
     }
 
-    // Compute final scores
+    // Compute final scores using RRF fusion
     const vw = this.config.vectorWeight;
     const tw = this.config.textWeight;
     const results: SearchResult[] = [];
@@ -163,7 +165,6 @@ export class HybridSearchEngine {
       if (!entry.memory) continue;
       const m = entry.memory;
 
-      // Filter by layers/categories
       if (opts.layers && !opts.layers.includes(m.layer)) continue;
       if (opts.categories && !opts.categories.includes(m.category)) continue;
       if (opts.agent_id && m.agent_id !== opts.agent_id) continue;
@@ -171,13 +172,13 @@ export class HybridSearchEngine {
       const layerWeight = LAYER_WEIGHTS[m.layer] || 0.5;
 
       // Recency boost: exponential decay with half-life of ~14 days
-      // Day 0: +10%, Day 7: +6%, Day 14: +3.7%, Day 30: +1.2%, Day 90: ~0%
       const daysSinceCreation = (Date.now() - new Date(m.created_at).getTime()) / 86_400_000;
       const recencyBoost = 1.0 + 0.1 * Math.exp(-daysSinceCreation / 14);
 
       // Access frequency boost
       const accessBoost = 1.0 + 0.05 * Math.min(m.access_count, this.config.accessBoostCap);
 
+      // RRF fusion: weighted sum of rank-based scores
       const fusedScore = vw * entry.vectorScore + tw * entry.textScore;
       const finalScore = fusedScore * layerWeight * recencyBoost * accessBoost * m.decay_score;
 
