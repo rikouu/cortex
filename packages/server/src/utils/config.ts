@@ -121,7 +121,13 @@ let _configFilePath: string | null = null;
 export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
   // 1. Try loading from config file
   let fileConfig: Record<string, unknown> = {};
+  // Prefer config inside DB directory (typically a Docker volume) so that
+  // Dashboard changes survive container restarts.  Fall back to CWD / home.
+  const dbDir = process.env.CORTEX_DB_PATH
+    ? path.resolve(path.dirname(process.env.CORTEX_DB_PATH))
+    : null;
   const configPaths = [
+    ...(dbDir ? [path.join(dbDir, 'cortex.json')] : []),
     path.resolve('cortex.json'),
     path.resolve('cortex.config.json'),
     path.join(process.env.HOME || '', '.config/cortex/config.json'),
