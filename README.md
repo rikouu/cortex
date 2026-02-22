@@ -14,6 +14,8 @@ Cortex gives your AI agent **persistent memory**. It runs alongside your agent a
 - **Dual-channel extraction** — Fast regex + deep LLM extraction run in parallel
 - **20 memory categories** — Identity, preferences, constraints, agent persona, and more
 - **Hybrid search** — BM25 keyword + vector semantic search with RRF fusion
+- **Query expansion** — LLM-generated search variants for better recall (optional)
+- **LLM reranker** — Re-score results with LLM for improved relevance (optional)
 - **Entity relations** — Auto-extracted knowledge graph (who uses what, who knows whom)
 - **Smart dedup** — Three-tier matching prevents duplicate memories
 - **Multi-provider** — OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Ollama
@@ -369,6 +371,10 @@ The lifecycle engine runs automatically (configurable schedule) and handles:
 
 Cortex uses **hybrid search** — combining BM25 full-text search (exact keyword matching) with vector semantic search (conceptual similarity). Results are fused using Reciprocal Rank Fusion (RRF) and weighted by layer priority, recency, and access frequency.
 
+**Query Expansion** (optional): Before searching, the LLM generates 2-3 variant queries using synonyms and rephrasings. Each variant is searched separately, and results are merged by highest score. This significantly improves recall for vague or loosely-worded queries. Enable in Dashboard → Gate → Query Expansion.
+
+**LLM Reranker** (optional): After initial search, results are re-scored by the LLM for query-specific relevance. Supports two providers: `llm` (uses the extraction model) and `cohere` (Cohere Rerank API). Enable in Dashboard → Search → Reranker.
+
 **Priority injection**: When formatting results for context injection, `constraint` and `agent_persona` memories are injected first to ensure critical rules and persona are never truncated by the token budget.
 
 ### MCP Tools
@@ -478,16 +484,11 @@ With default settings (gpt-4o-mini + text-embedding-3-small):
 
 ## Known Issues
 
-### OpenClaw: `agent_end` hook not firing in streaming mode
+### ~~OpenClaw: `agent_end` hook not firing in streaming mode~~ (Fixed)
 
-**Upstream bug:** [openclaw/openclaw#21863](https://github.com/openclaw/openclaw/issues/21863)
+~~**Upstream bug:** [openclaw/openclaw#21863](https://github.com/openclaw/openclaw/issues/21863)~~
 
-In OpenClaw's streaming mode (used by Telegram and other gateway channels), the `agent_end` hook is not dispatched to plugins. This means the Cortex bridge plugin **cannot automatically save conversations** in streaming mode. Memory recall (`before_agent_start`) works correctly.
-
-**Workarounds:**
-- Add a system prompt instruction telling the Agent to call `cortex_ingest` after meaningful conversations
-- Use `cortex_remember` tool for the Agent to save specific facts during conversation
-- Use a non-streaming channel where the hook fires correctly
+**Resolved** — Fixed upstream in commit `72d1d36`. The `agent_end` hook now fires correctly in streaming mode. Automatic memory extraction works in all modes.
 
 ## License
 
