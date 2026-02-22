@@ -14,6 +14,8 @@ Cortex 让你的 AI 拥有**持久记忆**。它以 Sidecar 进程运行在 Agen
 - **双通道提取** — 快速正则 + 深度 LLM 提取并行运行
 - **20 种记忆分类** — 身份、偏好、约束、Agent 人设等
 - **混合搜索** — BM25 关键词 + 向量语义搜索，RRF 融合
+- **查询扩展** — LLM 生成搜索变体，提高召回率（可选）
+- **LLM 重排序** — 用 LLM 对搜索结果精排，提高相关性（可选）
 - **实体关系** — 自动提取知识图谱（谁用什么、谁认识谁）
 - **智能去重** — 三级匹配防止重复记忆
 - **多提供商** — OpenAI、Anthropic、Google Gemini、DeepSeek、OpenRouter、Ollama
@@ -369,6 +371,10 @@ Sieve 还支持**用户画像注入** — 从核心记忆自动合成用户画�
 
 Cortex 使用**混合搜索** — 将 BM25 全文检索（精确关键词匹配）与向量语义搜索（概念相似性）结合。结果通过 RRF（倒排排名融合）融合，并按层级优先级、新近度和访问频率加权。
 
+**查询扩展**（可选）：搜索前，LLM 自动将查询改写为 2-3 个变体（同义词、不同表述），分别搜索后合并结果。显著提高模糊查询的召回率。在管理面板 → Gate → Query Expansion 开启。
+
+**LLM 重排序**（可选）：初始搜索后，用 LLM 对结果逐条打分精排。支持两种 provider：`llm`（复用提取模型）和 `cohere`（Cohere Rerank API）。在管理面板 → Search → Reranker 开启。
+
 **优先注入**：格式化注入上下文时，`constraint`（硬约束）和 `agent_persona`（人设）记忆优先注入，确保关键规则和人设不会被 token 预算截断。
 
 ### MCP 工具
@@ -478,16 +484,11 @@ cortex/
 
 ## 已知问题
 
-### OpenClaw：streaming 模式下 `agent_end` hook 不触发
+### ~~OpenClaw：streaming 模式下 `agent_end` hook 不触发~~ （已修复）
 
-**上游 bug：** [openclaw/openclaw#21863](https://github.com/openclaw/openclaw/issues/21863)
+~~**上游 bug：** [openclaw/openclaw#21863](https://github.com/openclaw/openclaw/issues/21863)~~
 
-OpenClaw 的 streaming 模式（Telegram 等网关频道使用）下，`agent_end` hook 不会分发给插件。这意味着 Cortex bridge 插件**无法在 streaming 模式下自动保存对话记忆**。记忆召回（`before_agent_start`）工作正常。
-
-**临时解决方案：**
-- 在 Agent 的 system prompt 中添加指令，让 Agent 在有意义的对话后主动调用 `cortex_ingest` 工具
-- 使用 `cortex_remember` 工具让 Agent 在对话中直接保存重要事实
-- 使用非 streaming 频道（该模式下 hook 正常触发）
+**已解决** — 上游已在 commit `72d1d36` 中修复。`agent_end` hook 现在在 streaming 模式下也能正常触发，自动记忆提取在所有模式下均可正常工作。
 
 ## 开源协议
 
