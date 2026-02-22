@@ -367,13 +367,62 @@ The lifecycle engine runs automatically (configurable schedule) and handles:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Search
+### Search (Recall Pipeline)
 
-Cortex uses **hybrid search** — combining BM25 full-text search (exact keyword matching) with vector semantic search (conceptual similarity). Results are fused using Reciprocal Rank Fusion (RRF) and weighted by layer priority, recency, and access frequency.
+The complete recall flow when your AI receives a message:
 
-**Query Expansion** (optional): Before searching, the LLM generates 2-3 variant queries using synonyms and rephrasings. Each variant is searched separately, and results are merged by highest score. This significantly improves recall for vague or loosely-worded queries. Enable in Dashboard → Gate → Query Expansion.
+```
+User message
+     │
+     ▼
+Clean query (strip system tags, metadata)
+     │
+     ▼
+Small-talk detection ──yes──→ Skip (no search)
+     │no
+     ▼
+┌─ Query Expansion (1 LLM call) ──────────────┐
+│  "how was server deployed"                    │
+│   → variant 1: "server deployment steps"      │
+│   → variant 2: "backend setup and config"     │
+└──────────────────────────────────────────────┘
+     │
+     ▼  Each variant searched independently (no LLM)
+┌──────────┐    ┌──────────────┐
+│ BM25 FTS │    │ Vector embed │
+│ keywords │    │  semantics   │
+└────┬─────┘    └──────┬───────┘
+     └──── RRF Fusion ─┘
+     layer weight × recency × access freq = finalScore
+     │
+     ▼
+┌─ Merge & Deduplicate ───────────────────────┐
+│  Same memory from multiple variants:         │
+│   → keep highest finalScore as base          │
+│   → multi-hit boost: +8% × ln(hits)         │
+│     2 hits +5.5% / 3 hits +8.8%             │
+│  Result: union of all variants (~30+ items)  │
+└──────────────────────────────────────────────┘
+     │
+     ▼
+┌─ LLM Reranker (1 LLM call) ────────────────┐
+│  All merged results → LLM scores 0-1        │
+│  Final = rerankerScore × w                   │
+│        + originalScore × (1-w)               │
+│  w = 0.5 default, adjustable in Dashboard   │
+│  Output: top 15 results                      │
+└──────────────────────────────────────────────┘
+     │
+     ▼
+Priority inject: constraint/persona first
+→ fill remaining budget → inject into AI context
 
-**LLM Reranker** (optional): After initial search, results are re-scored by the LLM for query-specific relevance. Supports two providers: `llm` (uses the extraction model) and `cohere` (Cohere Rerank API). Enable in Dashboard → Search → Reranker.
+Total: 2 LLM calls, ~5-7s latency
+```
+
+**Query Expansion** (optional): The LLM generates 2-3 variant queries using synonyms and rephrasings. Each variant is searched separately, expanding the candidate pool. Memories hit by multiple variants receive a logarithmic boost (diminishing returns). Enable in Dashboard → Gate → Query Expansion.
+
+**LLM Reranker** (optional): After merging all variant results, the LLM re-scores them for query-specific relevance. The final score fuses the reranker score with the original score using a configurable weight (default 50:50), preserving signals like layer priority, recency, and access frequency. Supports `llm` (extraction model) and `cohere` (Cohere Rerank API). Enable in Dashboard → Search → Reranker.
 
 **Priority injection**: When formatting results for context injection, `constraint` and `agent_persona` memories are injected first to ensure critical rules and persona are never truncated by the token budget.
 
