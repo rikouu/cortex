@@ -152,18 +152,21 @@ export class MemorySieve {
     let smart_updated = 0;
 
     if (this.config.sieve.highSignalImmediate && signals.length > 0) {
-      for (const signal of signals) {
-        try {
-          const result = await this.writer.processNewMemory(
-            { content: signal.content, category: signal.category, importance: signal.importance, source: 'user_stated', reasoning: '' },
-            agentId, sessionId, signal.confidence, 'session',
-          );
+      try {
+        const signalExtractions: ExtractedMemory[] = signals.map(s => ({
+          content: s.content, category: s.category, importance: s.importance,
+          source: 'user_stated' as const, reasoning: `signal: ${s.pattern}`,
+        }));
+        const batchResults = await this.writer.processNewMemoryBatch(
+          signalExtractions, agentId, sessionId, signals[0]?.confidence, 'session',
+        );
+        for (const result of batchResults) {
           if (result.action === 'skipped') { deduplicated++; continue; }
           if (result.action === 'smart_updated') { smart_updated++; }
           if (result.memory) extracted.push(result.memory);
-        } catch (e: any) {
-          log.error({ error: e.message }, 'Fast channel: failed to write signal');
         }
+      } catch (e: any) {
+        log.error({ error: e.message }, 'Fast channel: batch processing failed');
       }
     }
 

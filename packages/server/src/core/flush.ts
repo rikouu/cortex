@@ -50,21 +50,13 @@ export class MemoryFlush {
       .join('\n')
       .slice(0, 5000);
 
-    // 2. Extract highlights (for API response, not stored as separate memory)
-    let summary: string;
-    try {
-      summary = await this.extractHighlights(conversationText);
-    } catch (e: any) {
-      log.warn({ error: e.message }, 'LLM highlight extraction failed, storing raw summary');
-      summary = conversationText.slice(0, 500);
-    }
-
-    // 3. Structured extraction of core items (with smart dedup via MemoryWriter)
+    // 2. Structured extraction first (more valuable than summary)
     let deduplicated = 0;
     let smartUpdated = 0;
     const deepStart = Date.now();
     let rawOutput = '';
     let parsedExtractions: ExtractedMemory[] = [];
+    let summary = '';
 
     try {
       const result = await this.extractCoreItemsStructured(conversationText);
@@ -109,8 +101,14 @@ export class MemoryFlush {
       log.warn({ error: e.message }, 'Core item extraction failed');
     }
 
-    // 4. Fallback: if no structured items were extracted, write summary to working memory
+    // 3. Fallback: if no structured items were extracted, generate summary and write to working memory
     if (flushed.length === 0) {
+      try {
+        summary = await this.extractHighlights(conversationText);
+      } catch (e: any) {
+        log.warn({ error: e.message }, 'LLM highlight extraction failed');
+        summary = conversationText.slice(0, 500);
+      }
       const ttlMs = parseDuration(this.config.layers.working.ttl);
       const expiresAt = new Date(Date.now() + ttlMs).toISOString();
       try {

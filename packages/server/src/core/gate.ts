@@ -2,27 +2,12 @@ import { createLogger } from '../utils/logger.js';
 import { HybridSearchEngine, type SearchResult } from '../search/index.js';
 import { isSmallTalk } from '../signals/index.js';
 import { expandQuery } from '../search/query-expansion.js';
+import { stripInjectedContent } from '../utils/sanitize.js';
 import type { Reranker } from '../search/reranker.js';
 import type { CortexConfig } from '../utils/config.js';
 import type { LLMProvider } from '../llm/interface.js';
 
 const log = createLogger('gate');
-
-/** Regex to strip injected metadata prefixes from recall queries */
-const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
-const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|function_call)[\s\S]*?<\/(?:system|context|memory|tool_result|function_call)>/g;
-const PLAIN_META_RE = /^Conversation info \(untrusted metadata\):.*$/gm;
-const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata)|Conversation (?:info|context|metadata)|Memory context|Previous context)[\s(][^\n]*$/gm;
-
-function cleanRecallQuery(query: string): string {
-  return query
-    .replace(INJECTED_TAG_RE, '')
-    .replace(SYSTEM_TAG_RE, '')
-    .replace(PLAIN_META_RE, '')
-    .replace(SYSTEM_PREFIX_RE, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 export interface RecallRequest {
   query: string;
@@ -59,7 +44,7 @@ export class MemoryGate {
 
   async recall(req: RecallRequest): Promise<RecallResponse> {
     const start = Date.now();
-    const query = cleanRecallQuery(req.query);
+    const query = stripInjectedContent(req.query);
 
     // Skip small talk
     if (this.config.skipSmallTalk && isSmallTalk(query)) {

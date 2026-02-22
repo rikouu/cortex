@@ -58,12 +58,12 @@ export class MemoryWriter {
   /**
    * Find similar memories via vector search.
    */
-  async findSimilar(content: string, agentId: string, categories?: string[]): Promise<SimilarMemory[]> {
+  async findSimilar(content: string, agentId: string, categories?: string[], topK = 3): Promise<SimilarMemory[]> {
     try {
       const embedding = await this.embeddingProvider.embed(content);
       if (embedding.length === 0) return [];
 
-      const results = await this.vectorBackend.search(embedding, 3, { agent_id: agentId });
+      const results = await this.vectorBackend.search(embedding, topK, { agent_id: agentId });
       const similar: SimilarMemory[] = [];
       for (const r of results) {
         const mem = getMemoryById(r.id);
@@ -271,7 +271,9 @@ export class MemoryWriter {
       ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
       : undefined;
 
-    const similar = await this.findSimilar(extraction.content, agentId, correctionCategories);
+    // Corrections get wider search (top 10) to find the target memory
+    const topK = extraction.category === 'correction' ? 10 : 3;
+    const similar = await this.findSimilar(extraction.content, agentId, correctionCategories, topK);
 
     if (!smartUpdate) {
       // Legacy behavior
@@ -356,17 +358,25 @@ export class MemoryWriter {
       closest?: SimilarMemory;
     }
 
+    // Phase 1: parallel findSimilar for all extractions
+    const similarResults = await Promise.all(
+      extractions.map(ext => {
+        const cats = ext.category === 'correction'
+          ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
+          : undefined;
+        // Corrections get wider search (top 10) to find the target memory
+        const topK = ext.category === 'correction' ? 10 : 3;
+        return this.findSimilar(ext.content, agentId, cats, topK);
+      }),
+    );
+
     const pending: PendingItem[] = [];
     for (let i = 0; i < extractions.length; i++) {
       const extraction = extractions[i]!;
+      const similar = similarResults[i]!;
       const effectiveThreshold = extraction.category === 'correction'
         ? Math.min(similarityThreshold * 1.5, 0.6)
         : similarityThreshold;
-      const correctionCategories = extraction.category === 'correction'
-        ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
-        : undefined;
-
-      const similar = await this.findSimilar(extraction.content, agentId, correctionCategories);
 
       if (!smartUpdate) {
         if (similar.length > 0 && similar[0]!.distance < 0.15) {

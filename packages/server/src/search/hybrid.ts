@@ -170,11 +170,10 @@ export class HybridSearchEngine {
 
       const layerWeight = LAYER_WEIGHTS[m.layer] || 0.5;
 
-      // Recency boost (linear decay over 7 days)
+      // Recency boost: exponential decay with half-life of ~14 days
+      // Day 0: +10%, Day 7: +6%, Day 14: +3.7%, Day 30: +1.2%, Day 90: ~0%
       const daysSinceCreation = (Date.now() - new Date(m.created_at).getTime()) / 86_400_000;
-      const recencyBoost = daysSinceCreation < 7
-        ? 1.0 + 0.1 * (7 - daysSinceCreation) / 7
-        : 1.0;
+      const recencyBoost = 1.0 + 0.1 * Math.exp(-daysSinceCreation / 14);
 
       // Access frequency boost
       const accessBoost = 1.0 + 0.05 * Math.min(m.access_count, this.config.accessBoostCap);
