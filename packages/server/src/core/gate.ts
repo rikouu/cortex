@@ -45,12 +45,17 @@ export interface RecallResponse {
 }
 
 export class MemoryGate {
+  private rerankerWeight: number;
+
   constructor(
     private searchEngine: HybridSearchEngine,
     private config: CortexConfig['gate'],
     private llm?: LLMProvider,
     private reranker?: Reranker,
-  ) {}
+    rerankerWeight?: number,
+  ) {
+    this.rerankerWeight = rerankerWeight ?? 0.5;
+  }
 
   async recall(req: RecallRequest): Promise<RecallResponse> {
     const start = Date.now();
@@ -84,6 +89,7 @@ export class MemoryGate {
 
     // Search all variants and merge results
     const resultMap = new Map<string, SearchResult>();
+    const hitCount = new Map<string, number>();
     for (const q of queries) {
       const { results: qResults } = await this.searchEngine.search({
         query: q,
@@ -92,6 +98,7 @@ export class MemoryGate {
         limit: 15,
       });
       for (const r of qResults) {
+        hitCount.set(r.id, (hitCount.get(r.id) ?? 0) + 1);
         const existing = resultMap.get(r.id);
         if (!existing || r.finalScore > existing.finalScore) {
           resultMap.set(r.id, r);
@@ -99,12 +106,30 @@ export class MemoryGate {
       }
     }
 
-    // Merge, then rerank once with the unified result set
+    // Boost score for memories hit by multiple query variants
     let results = Array.from(resultMap.values())
+      .map(r => {
+        const hits = hitCount.get(r.id) ?? 1;
+        return hits > 1
+          ? { ...r, finalScore: r.finalScore * (1 + 0.1 * (hits - 1)) }
+          : r;
+      })
       .sort((a, b) => b.finalScore - a.finalScore);
 
     if (this.reranker && results.length > 0) {
-      results = await this.reranker.rerank(query, results, 15);
+      // Normalize original scores to 0-1 range for fair fusion
+      const maxOriginal = Math.max(...results.map(r => r.finalScore)) || 1;
+      const originalScores = new Map(results.map(r => [r.id, r.finalScore / maxOriginal]));
+
+      const reranked = await this.reranker.rerank(query, results, 15);
+      const rw = this.rerankerWeight;
+      const ow = 1 - rw;
+
+      // Fuse reranker score with original score
+      results = reranked.map(r => ({
+        ...r,
+        finalScore: rw * r.finalScore + ow * (originalScores.get(r.id) ?? 0),
+      })).sort((a, b) => b.finalScore - a.finalScore);
     } else {
       results = results.slice(0, 15);
     }

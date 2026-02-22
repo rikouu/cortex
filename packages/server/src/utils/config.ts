@@ -115,6 +115,7 @@ const CortexConfigSchema = z.object({
       apiKey: z.string().optional(),
       model: z.string().optional(),
       topN: z.number().default(10),
+      weight: z.number().min(0).max(1).default(0.5),
     }).default({}),
   }).default({}),
   markdownExport: z.object({

@@ -40,7 +40,7 @@ export class CortexApp {
     // Initialize engines
     const reranker = createReranker(config.search.reranker, this.llmExtraction);
     this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, config.search);
-    this.gate = new MemoryGate(this.searchEngine, config.gate, this.llmExtraction, reranker);
+    this.gate = new MemoryGate(this.searchEngine, config.gate, this.llmExtraction, reranker, config.search.reranker?.weight);
     this.sieve = new MemorySieve(this.llmExtraction, this.embeddingProvider, this.vectorBackend, config);
     this.flush = new MemoryFlush(this.llmExtraction, this.embeddingProvider, this.vectorBackend, config);
     this.lifecycle = new LifecycleEngine(this.llmLifecycle, this.embeddingProvider, this.vectorBackend, config);
@@ -89,7 +89,7 @@ export class CortexApp {
     if (reloaded.length > 0) {
       const reranker = createReranker(newConfig.search.reranker, this.llmExtraction);
       this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, newConfig.search);
-      this.gate = new MemoryGate(this.searchEngine, newConfig.gate, this.llmExtraction, reranker);
+      this.gate = new MemoryGate(this.searchEngine, newConfig.gate, this.llmExtraction, reranker, newConfig.search.reranker?.weight);
       this.sieve = new MemorySieve(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
       this.flush = new MemoryFlush(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
       this.lifecycle = new LifecycleEngine(this.llmLifecycle, this.embeddingProvider, this.vectorBackend, newConfig);

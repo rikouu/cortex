@@ -269,6 +269,7 @@ export default function Settings() {
           provider: config.search?.reranker?.provider ?? 'none',
           apiKey: config.search?.reranker?.apiKey ?? '',
           topN: config.search?.reranker?.topN ?? 10,
+          weight: config.search?.reranker?.weight ?? 0.5,
         },
       }),
       lifecycle: () => {
@@ -425,6 +426,7 @@ export default function Settings() {
             provider: draft.reranker?.provider ?? 'none',
             ...(draft.reranker?.apiKey ? { apiKey: draft.reranker.apiKey } : {}),
             topN: Number(draft.reranker?.topN ?? 10),
+            weight: Number(draft.reranker?.weight ?? 0.5),
           },
         };
       } else if (section === 'lifecycle') {
@@ -1088,6 +1090,22 @@ export default function Settings() {
                     onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, topN: Number(e.target.value) } }))}
                     min={3} max={20} style={{ width: 80 }}
                   />
+
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+                      Score Fusion — Reranker : Original = {((draft?.reranker?.weight ?? 0.5) * 100).toFixed(0)}% : {((1 - (draft?.reranker?.weight ?? 0.5)) * 100).toFixed(0)}%
+                    </label>
+                    <input
+                      type="range"
+                      value={draft?.reranker?.weight ?? 0.5}
+                      onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, weight: Number(e.target.value) } }))}
+                      min={0} max={1} step={0.05} style={{ width: '100%' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span>← 信任原始分数</span>
+                      <span>信任 Reranker →</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1099,7 +1117,7 @@ export default function Settings() {
               {displayRow(t('settings.vectorWeight'), config.search?.vectorWeight?.toFixed(2))}
               {displayRow(t('settings.textWeight'), config.search?.textWeight?.toFixed(2))}
               {displayRow(t('settings.recencyBoostWindow'), humanizeDuration(config.search?.recencyBoostWindow), t('settings.recencyBoostWindowDesc'))}
-              {displayRow('Reranker', config.search?.reranker?.enabled ? `${config.search.reranker.provider} (top ${config.search.reranker.topN})` : 'Off')}
+              {displayRow('Reranker', config.search?.reranker?.enabled ? `${config.search.reranker.provider} (top ${config.search.reranker.topN}, weight ${((config.search.reranker.weight ?? 0.5) * 100).toFixed(0)}%)` : 'Off')}
             </tbody>
           </table>
         )}
