@@ -412,6 +412,23 @@ const migrations = [
       ALTER TABLE memories ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    name: '009_extraction_feedback',
+    sql: `
+      CREATE TABLE IF NOT EXISTS extraction_feedback (
+        id          TEXT PRIMARY KEY,
+        memory_id   TEXT NOT NULL,
+        agent_id    TEXT NOT NULL DEFAULT 'default',
+        feedback    TEXT NOT NULL CHECK (feedback IN ('good', 'bad', 'corrected')),
+        original_content  TEXT,
+        corrected_content TEXT,
+        category    TEXT,
+        source_channel TEXT,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_extraction_feedback_agent ON extraction_feedback(agent_id);
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

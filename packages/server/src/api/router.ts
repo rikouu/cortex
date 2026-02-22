@@ -12,6 +12,7 @@ import { registerMCPRoutes } from './mcp.js';
 import { registerImportExportRoutes } from './import-export.js';
 import { registerAgentRoutes } from './agents.js';
 import { registerExtractionLogRoutes } from './extraction-logs.js';
+import { registerFeedbackRoutes } from './feedback.js';
 
 export function registerAllRoutes(app: FastifyInstance, cortex: CortexApp): void {
   registerRecallRoutes(app, cortex);
@@ -26,4 +27,5 @@ export function registerAllRoutes(app: FastifyInstance, cortex: CortexApp): void
   registerImportExportRoutes(app, cortex);
   registerAgentRoutes(app);
   registerExtractionLogRoutes(app);
+  registerFeedbackRoutes(app, cortex);
 }

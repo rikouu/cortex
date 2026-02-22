@@ -71,15 +71,18 @@ export class MemoryFlush {
       rawOutput = result.raw;
       parsedExtractions = result.parsed;
 
-      for (const item of parsedExtractions) {
-        const processResult = await this.writer.processNewMemory(item, agentId, req.session_id, undefined, 'flush');
-        if (processResult.action === 'skipped') {
-          deduplicated++;
-          log.info({ category: item.category }, 'Core item deduplicated');
-          continue;
+      if (parsedExtractions.length > 0) {
+        const batchResults = await this.writer.processNewMemoryBatch(
+          parsedExtractions, agentId, req.session_id, undefined, 'flush',
+        );
+        for (const processResult of batchResults) {
+          if (processResult.action === 'skipped') {
+            deduplicated++;
+            continue;
+          }
+          if (processResult.action === 'smart_updated') { smartUpdated++; }
+          if (processResult.memory) flushed.push(processResult.memory);
         }
-        if (processResult.action === 'smart_updated') { smartUpdated++; }
-        if (processResult.memory) flushed.push(processResult.memory);
       }
 
       // Write extracted relations

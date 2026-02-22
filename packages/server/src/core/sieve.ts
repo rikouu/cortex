@@ -218,14 +218,18 @@ export class MemorySieve {
     }
 
     let written = 0;
-    for (const mem of structuredExtractions) {
+    if (structuredExtractions.length > 0) {
       try {
-        const result = await this.writer.processNewMemory(mem, agentId, sessionId);
-        if (result.action === 'skipped') { deduplicated++; continue; }
-        if (result.action === 'smart_updated') { smart_updated++; }
-        if (result.memory) { extracted.push(result.memory); written++; }
+        const batchResults = await this.writer.processNewMemoryBatch(
+          structuredExtractions, agentId, sessionId, undefined, 'sieve',
+        );
+        for (const result of batchResults) {
+          if (result.action === 'skipped') { deduplicated++; continue; }
+          if (result.action === 'smart_updated') { smart_updated++; }
+          if (result.memory) { extracted.push(result.memory); written++; }
+        }
       } catch (e: any) {
-        log.error({ error: e.message }, 'Deep channel: failed to write extraction');
+        log.error({ error: e.message }, 'Deep channel: batch processing failed');
       }
     }
 
@@ -284,15 +288,26 @@ export class MemorySieve {
     const totalLimit = this.config.sieve.maxConversationChars;
 
     if (exchange.messages && exchange.messages.length > 0) {
-      const msgCount = exchange.messages.length;
-      const userBudget = Math.floor(totalLimit * 0.65 / Math.max(1, Math.ceil(msgCount / 2)));
-      const assistantBudget = Math.floor(totalLimit * 0.35 / Math.max(1, Math.floor(msgCount / 2)));
+      // Dynamic budget: allocate proportional to actual content length, not fixed 65/35.
+      // Each message gets a share of the budget based on its length relative to total.
+      const rawLengths = exchange.messages.map(m => m.content.length);
+      const rawTotal = rawLengths.reduce((a, b) => a + b, 0);
+
+      // Minimum per-message budget: ensure short messages aren't starved
+      const minPerMessage = 200;
+      const overhead = exchange.messages.length * 15; // labels + separators
+      const usableBudget = totalLimit - overhead;
+
       const parts: string[] = [];
       let totalLen = 0;
-      for (const m of exchange.messages) {
-        const isUser = m.role === 'user';
-        const label = isUser ? '[USER]' : '[ASSISTANT]';
-        const maxLen = isUser ? userBudget : assistantBudget;
+      for (let i = 0; i < exchange.messages.length; i++) {
+        const m = exchange.messages[i]!;
+        const label = m.role === 'user' ? '[USER]' : '[ASSISTANT]';
+        // Proportional budget with minimum floor
+        const proportional = rawTotal > 0
+          ? Math.floor(usableBudget * (rawLengths[i]! / rawTotal))
+          : Math.floor(usableBudget / exchange.messages.length);
+        const maxLen = Math.max(minPerMessage, proportional);
         const slice = m.content.slice(0, maxLen);
         const line = `${label}\n${slice}`;
         if (totalLen + line.length > totalLimit) break;
@@ -301,8 +316,13 @@ export class MemorySieve {
       }
       conversationBlock = parts.join('\n\n');
     } else {
-      const userSlice = exchange.user.slice(0, Math.floor(totalLimit * 0.65));
-      const assistantSlice = exchange.assistant.slice(0, Math.floor(totalLimit * 0.35));
+      // Single-turn: dynamic ratio based on actual content lengths
+      const userLen = exchange.user.length;
+      const assistantLen = exchange.assistant.length;
+      const contentTotal = userLen + assistantLen;
+      const userRatio = contentTotal > 0 ? Math.max(0.2, Math.min(0.8, userLen / contentTotal)) : 0.65;
+      const userSlice = exchange.user.slice(0, Math.floor(totalLimit * userRatio));
+      const assistantSlice = exchange.assistant.slice(0, Math.floor(totalLimit * (1 - userRatio)));
       conversationBlock = `[USER]\n${userSlice}\n\n[ASSISTANT]\n${assistantSlice}`;
     }
 

@@ -426,3 +426,61 @@ export function getStats(agentId?: string): Record<string, any> {
     total_access_logs: totalAccessLogs,
   };
 }
+
+// ── Extraction Feedback ──
+
+export interface ExtractionFeedback {
+  id: string;
+  memory_id: string;
+  agent_id: string;
+  feedback: 'good' | 'bad' | 'corrected';
+  original_content: string | null;
+  corrected_content: string | null;
+  category: string | null;
+  source_channel: string | null;
+  created_at: string;
+}
+
+export function insertExtractionFeedback(fb: {
+  memory_id: string;
+  agent_id?: string;
+  feedback: 'good' | 'bad' | 'corrected';
+  original_content?: string;
+  corrected_content?: string;
+  category?: string;
+  source_channel?: string;
+}): ExtractionFeedback {
+  const db = getDb();
+  const id = generateId();
+  db.prepare(`
+    INSERT INTO extraction_feedback (id, memory_id, agent_id, feedback, original_content, corrected_content, category, source_channel)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, fb.memory_id, fb.agent_id || 'default', fb.feedback, fb.original_content || null, fb.corrected_content || null, fb.category || null, fb.source_channel || null);
+
+  return db.prepare('SELECT * FROM extraction_feedback WHERE id = ?').get(id) as ExtractionFeedback;
+}
+
+export function getExtractionFeedbackStats(agentId?: string): {
+  total: number;
+  good: number;
+  bad: number;
+  corrected: number;
+  accuracy_rate: number;
+} {
+  const db = getDb();
+  const filter = agentId ? ' WHERE agent_id = ?' : '';
+  const params = agentId ? [agentId] : [];
+
+  const rows = db.prepare(
+    `SELECT feedback, COUNT(*) as cnt FROM extraction_feedback${filter} GROUP BY feedback`
+  ).all(...params) as { feedback: string; cnt: number }[];
+
+  const counts = { good: 0, bad: 0, corrected: 0 };
+  for (const r of rows) {
+    if (r.feedback in counts) (counts as any)[r.feedback] = r.cnt;
+  }
+  const total = counts.good + counts.bad + counts.corrected;
+  const accuracy_rate = total > 0 ? counts.good / total : 1;
+
+  return { total, ...counts, accuracy_rate };
+}
