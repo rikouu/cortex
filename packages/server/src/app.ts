@@ -10,6 +10,7 @@ import { createVectorBackend } from './vector/index.js';
 import { createCascadeLLM } from './llm/cascade.js';
 import { createCascadeEmbedding } from './embedding/cascade.js';
 import { CachedEmbeddingProvider } from './embedding/cache.js';
+import { createReranker } from './search/reranker.js';
 import type { VectorBackend } from './vector/interface.js';
 import type { LLMProvider } from './llm/interface.js';
 import type { EmbeddingProvider } from './embedding/interface.js';
@@ -37,8 +38,9 @@ export class CortexApp {
     this.vectorBackend = createVectorBackend(config.vectorBackend as any);
 
     // Initialize engines
-    this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, config.search);
-    this.gate = new MemoryGate(this.searchEngine, config.gate);
+    const reranker = createReranker(config.search.reranker, this.llmExtraction);
+    this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, config.search, reranker);
+    this.gate = new MemoryGate(this.searchEngine, config.gate, this.llmExtraction);
     this.sieve = new MemorySieve(this.llmExtraction, this.embeddingProvider, this.vectorBackend, config);
     this.flush = new MemoryFlush(this.llmExtraction, this.embeddingProvider, this.vectorBackend, config);
     this.lifecycle = new LifecycleEngine(this.llmLifecycle, this.embeddingProvider, this.vectorBackend, config);
@@ -79,8 +81,9 @@ export class CortexApp {
 
     // Rebuild dependent engines if any provider changed
     if (reloaded.length > 0) {
-      this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, newConfig.search);
-      this.gate = new MemoryGate(this.searchEngine, newConfig.gate);
+      const reranker = createReranker(newConfig.search.reranker, this.llmExtraction);
+      this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, newConfig.search, reranker);
+      this.gate = new MemoryGate(this.searchEngine, newConfig.gate, this.llmExtraction);
       this.sieve = new MemorySieve(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
       this.flush = new MemoryFlush(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
       this.lifecycle = new LifecycleEngine(this.llmLifecycle, this.embeddingProvider, this.vectorBackend, newConfig);

@@ -264,6 +264,12 @@ export default function Settings() {
         vectorWeight: config.search?.vectorWeight ?? 0.7,
         textWeight: config.search?.textWeight ?? 0.3,
         recencyBoostWindow: config.search?.recencyBoostWindow ?? '7d',
+        reranker: {
+          enabled: config.search?.reranker?.enabled ?? false,
+          provider: config.search?.reranker?.provider ?? 'none',
+          apiKey: config.search?.reranker?.apiKey ?? '',
+          topN: config.search?.reranker?.topN ?? 10,
+        },
       }),
       lifecycle: () => {
         const schedule = config.lifecycle?.schedule ?? '0 3 * * *';
@@ -283,6 +289,10 @@ export default function Settings() {
       gate: () => ({
         maxInjectionTokens: config.gate?.maxInjectionTokens ?? 3000,
         skipSmallTalk: config.gate?.skipSmallTalk ?? false,
+        queryExpansion: {
+          enabled: config.gate?.queryExpansion?.enabled ?? false,
+          maxVariants: config.gate?.queryExpansion?.maxVariants ?? 3,
+        },
       }),
       sieve: () => ({
         fastChannelEnabled: config.sieve?.fastChannelEnabled ?? true,
@@ -410,6 +420,12 @@ export default function Settings() {
           vectorWeight: Number(draft.vectorWeight),
           textWeight: Number(draft.textWeight),
           recencyBoostWindow: draft.recencyBoostWindow,
+          reranker: {
+            enabled: draft.reranker?.enabled ?? false,
+            provider: draft.reranker?.provider ?? 'none',
+            ...(draft.reranker?.apiKey ? { apiKey: draft.reranker.apiKey } : {}),
+            topN: Number(draft.reranker?.topN ?? 10),
+          },
         };
       } else if (section === 'lifecycle') {
         payload.lifecycle = {
@@ -428,6 +444,10 @@ export default function Settings() {
         payload.gate = {
           maxInjectionTokens: Number(draft.maxInjectionTokens),
           skipSmallTalk: draft.skipSmallTalk,
+          queryExpansion: {
+            enabled: draft.queryExpansion?.enabled ?? false,
+            maxVariants: Number(draft.queryExpansion?.maxVariants ?? 3),
+          },
         };
       } else if (section === 'sieve') {
         payload.sieve = {
@@ -1029,6 +1049,48 @@ export default function Settings() {
             {renderToggleField(t('settings.hybridSearch'), t('settings.hybridSearchDesc'), 'hybrid')}
             {renderLinkedWeights()}
             {renderDuration(t('settings.recencyBoostWindow'), t('settings.recencyBoostWindowDesc'), 'recencyBoostWindow')}
+
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
+              <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔍 Search Enhancement</label>
+
+              {renderToggleField('Reranker', 'Re-score results using LLM or Cohere for better relevance', 'reranker.enabled')}
+
+              {draft?.reranker?.enabled && (
+                <div style={{ marginLeft: 16 }}>
+                  <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Provider</label>
+                  <select
+                    value={draft?.reranker?.provider ?? 'none'}
+                    onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, provider: e.target.value } }))}
+                    style={{ width: '100%', marginBottom: 8 }}
+                  >
+                    <option value="llm">LLM (uses extraction model)</option>
+                    <option value="cohere">Cohere</option>
+                    <option value="none">Disabled</option>
+                  </select>
+
+                  {draft?.reranker?.provider === 'cohere' && (
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Cohere API Key</label>
+                      <input
+                        type="password"
+                        value={draft?.reranker?.apiKey ?? ''}
+                        onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, apiKey: e.target.value } }))}
+                        placeholder="Enter Cohere API key"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  )}
+
+                  <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Top N results</label>
+                  <input
+                    type="number"
+                    value={draft?.reranker?.topN ?? 10}
+                    onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, topN: Number(e.target.value) } }))}
+                    min={3} max={20} style={{ width: 80 }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <table>
@@ -1037,6 +1099,7 @@ export default function Settings() {
               {displayRow(t('settings.vectorWeight'), config.search?.vectorWeight?.toFixed(2))}
               {displayRow(t('settings.textWeight'), config.search?.textWeight?.toFixed(2))}
               {displayRow(t('settings.recencyBoostWindow'), humanizeDuration(config.search?.recencyBoostWindow), t('settings.recencyBoostWindowDesc'))}
+              {displayRow('Reranker', config.search?.reranker?.enabled ? `${config.search.reranker.provider} (top ${config.search.reranker.topN})` : 'Off')}
             </tbody>
           </table>
         )}
@@ -1105,12 +1168,30 @@ export default function Settings() {
           <div style={{ padding: '4px 0' }}>
             {renderNumberField(t('settings.maxInjectionTokens'), t('settings.maxInjectionTokensDesc'), 'maxInjectionTokens', 100, 50000)}
             {renderToggleField(t('settings.skipSmallTalk'), t('settings.skipSmallTalkDesc'), 'skipSmallTalk')}
+
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
+              <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔄 Query Expansion</label>
+              {renderToggleField('Query Expansion', 'Use LLM to generate search query variants for better recall', 'queryExpansion.enabled')}
+              {draft?.queryExpansion?.enabled && (
+                <div style={{ marginLeft: 16 }}>
+                  <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Max Variants</label>
+                  <input
+                    type="number"
+                    value={draft?.queryExpansion?.maxVariants ?? 3}
+                    onChange={e => setDraft((d: any) => ({ ...d, queryExpansion: { ...d.queryExpansion, maxVariants: Number(e.target.value) } }))}
+                    min={2} max={5} style={{ width: 80 }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>Including original query</span>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <table>
             <tbody>
               {displayRow(t('settings.maxInjectionTokens'), config.gate?.maxInjectionTokens, t('settings.maxInjectionTokensDesc'))}
               {displayRow(t('settings.skipSmallTalk'), config.gate?.skipSmallTalk ? t('common.on') : t('common.off'), t('settings.skipSmallTalkDesc'))}
+              {displayRow('Query Expansion', config.gate?.queryExpansion?.enabled ? `On (${config.gate.queryExpansion.maxVariants} variants)` : 'Off')}
             </tbody>
           </table>
         )}

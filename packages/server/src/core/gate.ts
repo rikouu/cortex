@@ -1,7 +1,9 @@
 import { createLogger } from '../utils/logger.js';
 import { HybridSearchEngine, type SearchResult } from '../search/index.js';
 import { isSmallTalk } from '../signals/index.js';
+import { expandQuery } from '../search/query-expansion.js';
 import type { CortexConfig } from '../utils/config.js';
+import type { LLMProvider } from '../llm/interface.js';
 
 const log = createLogger('gate');
 
@@ -45,6 +47,7 @@ export class MemoryGate {
   constructor(
     private searchEngine: HybridSearchEngine,
     private config: CortexConfig['gate'],
+    private llm?: LLMProvider,
   ) {}
 
   async recall(req: RecallRequest): Promise<RecallResponse> {
@@ -69,13 +72,34 @@ export class MemoryGate {
 
     const maxTokens = req.max_tokens || this.config.maxInjectionTokens;
 
-    // Search all layers in parallel
-    const { results } = await this.searchEngine.search({
-      query,
-      layers: req.layers,
-      agent_id: req.agent_id,
-      limit: 15,
-    });
+    // Query expansion: generate variant queries for better recall
+    let queries: string[];
+    if (this.config.queryExpansion?.enabled && this.llm) {
+      queries = await expandQuery(query, this.llm, this.config.queryExpansion);
+    } else {
+      queries = [query];
+    }
+
+    // Search all variants and merge results
+    const resultMap = new Map<string, SearchResult>();
+    for (const q of queries) {
+      const { results: qResults } = await this.searchEngine.search({
+        query: q,
+        layers: req.layers,
+        agent_id: req.agent_id,
+        limit: 15,
+      });
+      for (const r of qResults) {
+        const existing = resultMap.get(r.id);
+        if (!existing || r.finalScore > existing.finalScore) {
+          resultMap.set(r.id, r);
+        }
+      }
+    }
+
+    const results = Array.from(resultMap.values())
+      .sort((a, b) => b.finalScore - a.finalScore)
+      .slice(0, 15);
 
     // Format for injection
     const context = this.searchEngine.formatForInjection(results, maxTokens);

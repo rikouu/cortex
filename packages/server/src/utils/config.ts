@@ -74,6 +74,10 @@ const CortexConfigSchema = z.object({
       working: z.number().default(0.8),
       archive: z.number().default(0.5),
     }).default({}),
+    queryExpansion: z.object({
+      enabled: z.boolean().default(false),
+      maxVariants: z.number().min(2).max(5).default(3),
+    }).default({}),
   }).default({}),
   sieve: z.object({
     highSignalImmediate: z.boolean().default(true),
@@ -105,6 +109,13 @@ const CortexConfigSchema = z.object({
     textWeight: z.number().default(0.3),
     recencyBoostWindow: z.string().default('7d'),
     accessBoostCap: z.number().default(10),
+    reranker: z.object({
+      enabled: z.boolean().default(false),
+      provider: z.enum(['cohere', 'llm', 'none']).default('none'),
+      apiKey: z.string().optional(),
+      model: z.string().optional(),
+      topN: z.number().default(10),
+    }).default({}),
   }).default({}),
   markdownExport: z.object({
     enabled: z.boolean().default(true),
