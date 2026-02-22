@@ -1,80 +1,161 @@
-# 🧠 Cortex — 通用 AI Agent 记忆服务
+# 🧠 Cortex — 给你的 AI 一个真正的记忆
 
 [English](./README.md) | **中文**
 
-Cortex 让你的 AI 拥有**持久记忆**。它以 Sidecar 进程运行在 Agent 旁边，自动记住对话内容、提取关键事实，并在需要时召回相关上下文。
+你的 AI 每次对话结束就全忘了。明天问它今天说过的事——一脸茫然。
 
-> **你的 AI 能记住你上周、上个月、甚至去年告诉它的事情 — 跨会话、跨设备。**
+**Cortex 解决这个问题。** 它是一个记忆服务，静默运行在任何 AI Agent 旁边，默默学习你是谁、你在乎什么、你怎么工作。它记住你的名字、偏好、决策、项目——在需要时精准召回相关上下文。
+
+> 把你的 AI 从金鱼升级成真正的私人助理。
+
+```
+"我叫小明，做后端开发，喜欢用 Rust 不喜欢 Go。"
+                    ↓  Cortex 提取 & 存储
+          [identity] 小明，后端开发
+          [preference] 偏好 Rust 而非 Go
+
+    ... 3 周后，新对话 ...
+
+"这个新服务该用什么语言？"
+                    ↓  Cortex 召回
+    "你之前提到过做后端更偏好 Rust。"
+```
+
+---
+
+## 工作原理
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                    写入路径（每轮对话）                       │
+│                                                            │
+│  对话 ──→ Fast Channel (正则, 0ms)                         │
+│           + Deep Channel (LLM, 2-5s)                       │
+│                          ↓                                 │
+│                    提取的记忆                                │
+│                          ↓                                 │
+│              ┌─ 四层去重 ────────────────┐                 │
+│              │ 完全重复 → 跳过           │                 │
+│              │ 近似重复 → 自动替换       │                 │
+│              │ 语义重叠 → LLM 判断       │                 │
+│              │ 全新信息 → 插入           │                 │
+│              └──────────────────────────┘                 │
+│                          ↓                                 │
+│              工作层 (48h) 或 核心层 (永久)                   │
+├────────────────────────────────────────────────────────────┤
+│                    读取路径（每轮对话）                       │
+│                                                            │
+│  用户消息 ──→ 查询扩展（可选）                               │
+│                          ↓                                 │
+│              BM25 + 向量 → RRF 融合                        │
+│                          ↓                                 │
+│              LLM 重排序（可选）                              │
+│                          ↓                                 │
+│              优先注入 → AI 上下文                            │
+│              （约束和人设优先）                               │
+├────────────────────────────────────────────────────────────┤
+│                    生命周期（每天）                           │
+│                                                            │
+│  工作层 → 升级 → 核心层 → 衰减 → 归档层 → 压缩              │
+│                                      ↓                     │
+│                              回流核心层（永不丢失）           │
+└────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## 特性
 
-- **三层记忆** — 工作层（48h）→ 核心层（永久）→ 归档层（90天，压缩回流核心层）
-- **双通道提取** — 快速正则 + 深度 LLM 提取并行运行
+- **三层记忆** — 工作层（48h）→ 核心层（永久）→ 归档层（压缩回流核心层）
+- **双通道提取** — 快速正则 + 深度 LLM，批量智能去重
 - **20 种记忆分类** — 身份、偏好、约束、Agent 人设等
-- **混合搜索** — BM25 关键词 + 向量语义搜索，RRF 融合
-- **查询扩展** — LLM 生成搜索变体，提高召回率（可选）
-- **LLM 重排序** — 用 LLM 对搜索结果精排，提高相关性（可选）
-- **实体关系** — 自动提取知识图谱（谁用什么、谁认识谁）
-- **智能去重** — 三级匹配防止重复记忆
+- **混合搜索** — BM25 + 向量，Reciprocal Rank Fusion 融合
+- **查询扩展** — LLM 生成搜索变体，提高召回率
+- **LLM 重排序** — 对搜索结果精排，提高相关性
+- **实体关系** — 自动提取知识图谱
+- **提取反馈** — 标记记忆好/坏/纠正，追踪提取质量
 - **多提供商** — OpenAI、Anthropic、Google Gemini、DeepSeek、OpenRouter、Ollama
-- **多智能体** — 每个智能体独立配置覆盖，隔离的记忆命名空间
+- **多智能体** — 每个智能体独立配置，隔离的记忆命名空间
 - **管理面板** — 完整管理 UI，含搜索调试、生命周期预览、提取日志
-- **零配置** — 只需一个 OpenAI API Key 即可开箱即用
+- **约 ¥4/月** — 使用 gpt-4o-mini + text-embedding-3-small，每天 50 次对话
 
 ---
 
 ## 30 秒上手
 
-**前提条件**：Node.js ≥ 20，一个 OpenAI API Key（或任何[支持的提供商](#支持的提供商)）
+```bash
+# 克隆并启动（Docker）
+git clone https://github.com/rikouu/cortex.git
+cd cortex
+docker compose up -d
+```
+
+打开 **http://localhost:21100** → 管理面板 → **Settings** → 选择 LLM/Embedding 提供商，输入 API Key。
+
+搞定。不需要 `.env` 文件，不需要环境变量。
+
+<details>
+<summary>或者从源码运行（不用 Docker）</summary>
 
 ```bash
 git clone https://github.com/rikouu/cortex.git
 cd cortex && pnpm install
-cp .env.example .env        # 填入你的 OPENAI_API_KEY
-pnpm dev                     # 运行在 http://localhost:21100
+pnpm dev    # http://localhost:21100
 ```
 
-或者用 Docker（一行命令）：
-
-```bash
-OPENAI_API_KEY=sk-xxx docker compose up -d
-```
-
-打开 http://localhost:21100 — 你会看到管理面板。
+</details>
 
 ---
 
 ## 连接你的 AI
 
-选择你的方式，每种都不超过 2 分钟。
+### 方式 A：OpenClaw 🔥
 
-### 方式 A：Claude Desktop（MCP）
+[OpenClaw](https://github.com/openclaw/openclaw) 是一个开源 AI Agent 框架，内置工具调用、记忆和多渠道支持。Cortex 有专门的桥接插件，无缝集成。
 
-1. 打开 Claude Desktop → **设置** → **开发者** → **编辑配置**
-2. 粘贴以下内容，保存，然后**从菜单栏完全退出并重启** Claude Desktop：
+```bash
+# 1. 安装桥接插件
+openclaw plugins install @cortexmem/cortex-bridge
+
+# 2. 设置 Cortex URL
+echo 'CORTEX_URL=http://localhost:21100' >> .env
+```
+
+**完成。** 你的 Agent 现在会在每次回复前自动召回记忆，每轮对话后自动保存重要信息。
+
+桥接插件挂接 OpenClaw 生命周期：
+
+| 钩子 | 触发时机 | 功能 |
+|------|---------|------|
+| `onBeforeResponse` | AI 回复前 | 召回 & 注入相关记忆 |
+| `onAfterResponse` | AI 回复后 | 提取 & 保存关键信息 |
+| `onBeforeCompaction` | 上下文压缩前 | 紧急保存即将丢失的信息 |
+
+另有 `cortex_recall` 和 `cortex_remember` 工具供按需使用。
+
+完整指南：**[OpenClaw 快速开始](#openclaw-快速开始)**。
+
+### 方式 B：Claude Desktop（MCP）
+
+打开 **Settings** → **Developer** → **Edit Config**，粘贴后重启：
 
 ```json
 {
   "mcpServers": {
     "cortex": {
       "command": "npx",
-      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
-      "env": {
-        "CORTEX_AGENT_ID": "default"
-      }
+      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"]
     }
   }
 }
 ```
 
-3. 开始新对话，对 AI 说：*"你还记得关于我的什么？"*
+### 方式 C：Cursor / Claude Code / 其他 MCP 客户端
 
-### 方式 B：Cursor（MCP）
+<details>
+<summary>Cursor</summary>
 
-1. 打开 Cursor → **设置** → **MCP** → **+ 添加新的全局 MCP 服务器**
-2. 粘贴以下内容并保存：
+**Settings** → **MCP** → **+ Add new global MCP server**：
 
 ```json
 {
@@ -82,26 +163,27 @@ OPENAI_API_KEY=sk-xxx docker compose up -d
     "cortex": {
       "command": "npx",
       "args": ["cortex-mcp"],
-      "env": {
-        "CORTEX_URL": "http://localhost:21100",
-        "CORTEX_AGENT_ID": "default"
-      }
+      "env": { "CORTEX_URL": "http://localhost:21100" }
     }
   }
 }
 ```
 
-### 方式 C：Claude Code（MCP）
+</details>
 
-在终端运行：
+<details>
+<summary>Claude Code</summary>
 
 ```bash
 claude mcp add cortex -- npx cortex-mcp --server-url http://localhost:21100
 ```
 
-### 方式 D：其他 MCP 客户端
+</details>
 
-任何兼容 MCP 的应用（Windsurf、Cline 等），将以下配置添加到客户端的 MCP 配置文件中：
+<details>
+<summary>Windsurf / Cline / 其他</summary>
+
+添加到你的 MCP 客户端配置：
 
 ```json
 {
@@ -109,21 +191,15 @@ claude mcp add cortex -- npx cortex-mcp --server-url http://localhost:21100
     "cortex": {
       "command": "npx",
       "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
-      "env": {
-        "CORTEX_AGENT_ID": "default"
-      }
+      "env": { "CORTEX_AGENT_ID": "default" }
     }
   }
 }
 ```
 
-具体配置文件位置因客户端而异，请查阅你所用客户端的文档。
+</details>
 
-### 方式 E：OpenClaw
-
-查看完整的手把手教程：**[OpenClaw 快速上手](#openclaw-快速上手)**。
-
-### 方式 F：任意应用（REST API）
+### 方式 D：任意应用（REST API）
 
 ```bash
 # 存储记忆
@@ -131,7 +207,7 @@ curl -X POST http://localhost:21100/api/v1/ingest \
   -H "Content-Type: application/json" \
   -d '{"user_message":"我喜欢吃寿司","assistant_message":"记住了！","agent_id":"default"}'
 
-# 检索记忆
+# 召回记忆
 curl -X POST http://localhost:21100/api/v1/recall \
   -H "Content-Type: application/json" \
   -d '{"query":"我喜欢吃什么？","agent_id":"default"}'
@@ -139,11 +215,9 @@ curl -X POST http://localhost:21100/api/v1/recall \
 
 ### 验证是否生效
 
-告诉你的 AI 一些值得记住的信息（比如 *"我最喜欢的颜色是蓝色"*）。然后开一个**新对话**，问 *"我最喜欢什么颜色？"*。如果回答正确，说明 Cortex 已经在工作了。
+告诉你的 AI 一些事情（例如 *"我最喜欢的颜色是蓝色"*）。开一个**新对话**，问 *"我最喜欢什么颜色？"*。如果回答正确，Cortex 就在正常工作了。
 
----
-
-## OpenClaw 快速上手
+## OpenClaw 快速开始
 
 一份面向新手的完整教程，让你的 OpenClaw 智能体拥有持久记忆。
 
@@ -258,97 +332,6 @@ echo 'CORTEX_URL=http://your-server-ip:21100' >> .env
 | 插件没有加载 | 运行 `openclaw plugins list` 确认 `@cortexmem/cortex-bridge` 已安装 |
 | 回复后不保存记忆 | streaming 模式下的已知上游问题 — 见[已知问题](#已知问题) |
 | 连接被拒绝 | 确认 `CORTEX_URL` 已设置且 Cortex 正在运行 |
-
----
-
-## 工作原理
-
-Cortex 使用三层记忆模型，灵感来源于人类记忆的运作方式：
-
-```
-对话 → [工作记忆] → [核心记忆] → [归档记忆]
-          48 小时       永久        90 天
-                                  ↓ 压缩
-                              回流到核心层
-```
-
-| 层级 | 存活时间 | 存储内容 | 类比 |
-|------|---------|---------|------|
-| **Working** | 48小时 | 近期对话上下文 | 短期记忆 |
-| **Core** | 永久 | 关键事实、偏好、决策 | 长期记忆 |
-| **Archive** | 90天 → 压缩回流至 Core | 低频访问条目 | 远期记忆 |
-
-**记忆永不真正丢失。** 归档记忆会被压缩为摘要，永久保留在核心层中。
-
-### 记忆分类
-
-Cortex 将记忆分为 20 个类别，按三轨归属组织，每个类别有独立的重要性和衰减率：
-
-**用户记忆** — 关于用户的事实：
-
-| 类别 | 说明 | 重要性 |
-|------|------|--------|
-| `identity` | 姓名、职业、角色、所在地 | 0.9-1.0 |
-| `preference` | 工具、工作流、风格、习惯 | 0.8-0.9 |
-| `correction` | 对已知信息的修正更新 | 0.9-1.0 |
-| `skill` | 专长、熟练度、技术栈 | 0.8-0.9 |
-| `relationship` | 同事、朋友、组织关系 | 0.8-0.9 |
-| `goal` | 目标、计划、里程碑 | 0.7-0.9 |
-| `decision` | 已做出的具体决策 | 0.8-0.9 |
-| `entity` | 工具、项目、组织等命名实体 | 0.6-0.8 |
-| `project_state` | 项目进度、状态变更 | 0.5-0.7 |
-| `insight` | 经验教训、洞察 | 0.5-0.7 |
-| `fact` | 用户相关的事实信息 | 0.5-0.8 |
-| `todo` | 待办事项、跟进任务 | 0.6-0.8 |
-
-**操作级** — 规则与策略：
-
-| 类别 | 说明 | 重要性 |
-|------|------|--------|
-| `constraint` | 不可违反的硬约束（"禁止 X"、"never do Y"） | 0.9-1.0 |
-| `policy` | 执行策略/默认行为规范（"优先用 X 再 Y"） | 0.7-0.9 |
-
-**Agent 成长** — Agent 自身的学习与观察：
-
-| 类别 | 说明 | 重要性 |
-|------|------|--------|
-| `agent_persona` | Agent 人设/风格：语气、角色定位、个性特征 | 0.8-1.0 |
-| `agent_relationship` | 与用户的相处模式：互动默契、信任边界 | 0.8-0.9 |
-| `agent_user_habit` | 对用户习惯的观察：沟通风格、工作节奏 | 0.7-0.9 |
-| `agent_self_improvement` | Agent 行为改进：错误模式、更好的处理方式 | 0.7-0.9 |
-
-**系统内部**：
-
-| 类别 | 说明 | 重要性 |
-|------|------|--------|
-| `context` | 会话上下文 | 0.2 |
-| `summary` | 压缩摘要 | 0.4 |
-
-### 记忆提取（Memory Sieve）
-
-Memory Sieve 使用**双通道提取**管线，结合**三轨归属**：
-
-1. **快速通道** — 基于正则表达式的模式匹配（中/英/日三语），零 LLM 延迟检测高信号信息
-2. **深度通道** — LLM 驱动的结构化 JSON 提取，输出带有分类、重要性评分、推理依据和来源归属的记忆
-
-**三轨归属**将记忆路由到正确的分类：
-- **用户轨** — 用户自述的事实、偏好、决策
-- **操作轨** — 用户或系统设定的约束和策略
-- **Agent 轨** — Agent 自身的反思、观察和人设
-
-两个通道并行运行，结果通过向量相似度交叉去重。重要性 ≥ 0.8 的记忆直接写入核心层，较低重要性的写入工作记忆（带 TTL）。
-
-Sieve 还支持**用户画像注入** — 从核心记忆自动合成用户画像，注入到提取 prompt 中，帮助 LLM 避免重复提取已知事实，更好地识别增量新信息。
-
-### 记忆生命周期
-
-生命周期引擎自动运行（可配置调度计划），负责：
-
-- **晋升**：重要的工作记忆 → 核心层
-- **合并**：重复/相似的核心记忆 → 合并为一条丰富条目
-- **归档**：衰减的核心记忆 → 归档层
-- **压缩**：过期的归档条目 → 压缩为核心层摘要
-- **画像合成**：从核心记忆自动生成用户画像
 
 ---
 

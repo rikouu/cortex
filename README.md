@@ -1,80 +1,162 @@
-# 🧠 Cortex — Universal AI Agent Memory Service
+# 🧠 Cortex — Give Your AI a Real Memory
 
 **English** | [中文](./README.zh-CN.md)
 
-Cortex gives your AI agent **persistent memory**. It runs alongside your agent as a sidecar, automatically remembering conversations, extracting key facts, and recalling relevant context when needed.
+Your AI forgets everything the moment a conversation ends. Ask it tomorrow what you told it today — blank stare.
 
-> **Your AI remembers what you told it last week, last month, or last year — across sessions, across devices.**
+**Cortex fixes this.** It's a memory service that runs alongside any AI agent, silently learning who you are, what you care about, and how you work. It remembers your name, your preferences, your decisions, your projects — and recalls exactly the right context when you need it.
+
+> Think of it as upgrading your AI from a goldfish to a real assistant.
+
+```
+"My name is Alex, I'm a backend dev, I prefer Rust over Go."
+                    ↓  Cortex extracts & stores
+          [identity] Alex, backend developer
+          [preference] Prefers Rust over Go
+
+    ... 3 weeks later, new conversation ...
+
+"What language should I use for this new service?"
+                    ↓  Cortex recalls
+    "You've mentioned preferring Rust over Go for backend work."
+```
+
+---
+
+## How It Works
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                    WRITE PATH (every turn)                  │
+│                                                            │
+│  Conversation ──→ Fast Channel (regex, 0ms)                │
+│                   + Deep Channel (LLM, 2-5s)               │
+│                          ↓                                 │
+│                  Extracted memories                         │
+│                          ↓                                 │
+│              ┌─ 4-tier dedup ──────────────┐               │
+│              │ exact dup → skip            │               │
+│              │ near-exact → auto-replace   │               │
+│              │ semantic overlap → LLM judge│               │
+│              │ new info → insert           │               │
+│              └────────────────────────────┘               │
+│                          ↓                                 │
+│              Working (48h) or Core (permanent)             │
+├────────────────────────────────────────────────────────────┤
+│                    READ PATH (every turn)                   │
+│                                                            │
+│  User message ──→ Query Expansion (optional)               │
+│                          ↓                                 │
+│              BM25 + Vector → RRF Fusion                    │
+│                          ↓                                 │
+│              LLM Reranker (optional)                       │
+│                          ↓                                 │
+│              Priority inject → AI context                  │
+│              (constraints & persona first)                  │
+├────────────────────────────────────────────────────────────┤
+│                    LIFECYCLE (daily)                        │
+│                                                            │
+│  Working → promote → Core → decay → Archive → compress     │
+│                                      ↓                     │
+│                              back to Core (nothing lost)   │
+└────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Features
 
-- **Three-layer memory** — Working (48h) → Core (permanent) → Archive (90d, compressed back to Core)
-- **Dual-channel extraction** — Fast regex + deep LLM extraction run in parallel
+- **Three-layer memory** — Working (48h) → Core (permanent) → Archive (compressed back to Core)
+- **Dual-channel extraction** — Fast regex + deep LLM, with batch smart dedup
 - **20 memory categories** — Identity, preferences, constraints, agent persona, and more
-- **Hybrid search** — BM25 keyword + vector semantic search with RRF fusion
-- **Query expansion** — LLM-generated search variants for better recall (optional)
-- **LLM reranker** — Re-score results with LLM for improved relevance (optional)
-- **Entity relations** — Auto-extracted knowledge graph (who uses what, who knows whom)
-- **Smart dedup** — Three-tier matching prevents duplicate memories
+- **Hybrid search** — BM25 + vector with Reciprocal Rank Fusion
+- **Query expansion** — LLM-generated search variants for better recall
+- **LLM reranker** — Re-score results for improved relevance
+- **Entity relations** — Auto-extracted knowledge graph
+- **Extraction feedback** — Rate memories good/bad/corrected, track quality
 - **Multi-provider** — OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, Ollama
-- **Multi-agent** — Per-agent config overrides, isolated memory namespaces
+- **Multi-agent** — Per-agent config, isolated memory namespaces
 - **Dashboard** — Full management UI with search debug, lifecycle preview, extraction logs
-- **Zero config** — Works out of the box with just an OpenAI API key
+- **~$0.55/month** — With gpt-4o-mini + text-embedding-3-small at 50 conversations/day
 
 ---
 
 ## 30-Second Setup
 
-**Prerequisites**: Node.js ≥ 20, an OpenAI API key (or any [supported provider](#supported-providers))
+```bash
+# Clone and start (Docker)
+git clone https://github.com/rikouu/cortex.git
+cd cortex
+docker compose up -d
+```
+
+Open **http://localhost:21100** → Dashboard → **Settings** → choose your LLM/Embedding provider and enter your API key.
+
+That's it. No `.env` files, no environment variables.
+
+<details>
+<summary>Or run from source (without Docker)</summary>
 
 ```bash
 git clone https://github.com/rikouu/cortex.git
 cd cortex && pnpm install
-cp .env.example .env        # add your OPENAI_API_KEY
-pnpm dev                     # running at http://localhost:21100
+pnpm dev    # http://localhost:21100
 ```
 
-Or with Docker (one line):
-
-```bash
-OPENAI_API_KEY=sk-xxx docker compose up -d
-```
-
-Open http://localhost:21100 — you'll see the management dashboard.
+</details>
 
 ---
 
 ## Connect Your AI
 
-Choose your setup. Each takes under 2 minutes.
+### Option A: OpenClaw 🔥
 
-### Option A: Claude Desktop (MCP)
+[OpenClaw](https://github.com/openclaw/openclaw) is an open-source AI agent framework with built-in tool use, memory, and multi-channel support. Cortex has a dedicated bridge plugin for seamless integration.
 
-1. Open Claude Desktop → **Settings** → **Developer** → **Edit Config**
-2. Paste this, save, then **fully quit and restart** Claude Desktop:
+```bash
+# 1. Install the bridge plugin
+openclaw plugins install @cortexmem/cortex-bridge
+
+# 2. Set Cortex URL (pick one)
+echo 'CORTEX_URL=http://localhost:21100' >> .env
+# or: openclaw env set CORTEX_URL http://localhost:21100
+```
+
+**Done.** Your agent now automatically recalls memories before every response and saves important facts after each conversation turn.
+
+The bridge hooks into OpenClaw's lifecycle:
+
+| Hook | When | What |
+|------|------|------|
+| `onBeforeResponse` | Before AI responds | Recalls & injects relevant memories |
+| `onAfterResponse` | After AI responds | Extracts & saves key info |
+| `onBeforeCompaction` | Before context compression | Emergency saves before info is lost |
+
+Plus `cortex_recall` and `cortex_remember` tools for on-demand use.
+
+See the full guide: **[OpenClaw Quick Start](#openclaw-quick-start)**.
+
+### Option B: Claude Desktop (MCP)
+
+Open **Settings** → **Developer** → **Edit Config**, paste and restart:
 
 ```json
 {
   "mcpServers": {
     "cortex": {
       "command": "npx",
-      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
-      "env": {
-        "CORTEX_AGENT_ID": "default"
-      }
+      "args": ["cortex-mcp", "--server-url", "http://localhost:21100"]
     }
   }
 }
 ```
 
-3. Start a new conversation and say: *"What do you remember about me?"*
+### Option C: Cursor / Claude Code / Other MCP Clients
 
-### Option B: Cursor (MCP)
+<details>
+<summary>Cursor</summary>
 
-1. Open Cursor → **Settings** → **MCP** → **+ Add new global MCP server**
-2. Paste this and save:
+**Settings** → **MCP** → **+ Add new global MCP server**:
 
 ```json
 {
@@ -82,26 +164,27 @@ Choose your setup. Each takes under 2 minutes.
     "cortex": {
       "command": "npx",
       "args": ["cortex-mcp"],
-      "env": {
-        "CORTEX_URL": "http://localhost:21100",
-        "CORTEX_AGENT_ID": "default"
-      }
+      "env": { "CORTEX_URL": "http://localhost:21100" }
     }
   }
 }
 ```
 
-### Option C: Claude Code (MCP)
+</details>
 
-Run this in your terminal:
+<details>
+<summary>Claude Code</summary>
 
 ```bash
 claude mcp add cortex -- npx cortex-mcp --server-url http://localhost:21100
 ```
 
-### Option D: Other MCP Clients
+</details>
 
-For any MCP-compatible app (Windsurf, Cline, etc.), add this to your client's MCP config file:
+<details>
+<summary>Windsurf / Cline / Other</summary>
+
+Add to your client's MCP config:
 
 ```json
 {
@@ -109,21 +192,15 @@ For any MCP-compatible app (Windsurf, Cline, etc.), add this to your client's MC
     "cortex": {
       "command": "npx",
       "args": ["cortex-mcp", "--server-url", "http://localhost:21100"],
-      "env": {
-        "CORTEX_AGENT_ID": "default"
-      }
+      "env": { "CORTEX_AGENT_ID": "default" }
     }
   }
 }
 ```
 
-Check your client's documentation for the exact config file location.
+</details>
 
-### Option E: OpenClaw
-
-See the full step-by-step guide: **[OpenClaw Quick Start](#openclaw-quick-start)**.
-
-### Option F: Any App (REST API)
+### Option D: Any App (REST API)
 
 ```bash
 # Store a memory
@@ -139,7 +216,7 @@ curl -X POST http://localhost:21100/api/v1/recall \
 
 ### Verify It Works
 
-Tell your AI something memorable (e.g., *"My favorite color is blue"*). Then start a **new conversation** and ask *"What's my favorite color?"*. If it answers correctly, Cortex is working.
+Tell your AI something memorable (e.g., *"My favorite color is blue"*). Start a **new conversation** and ask *"What's my favorite color?"*. If it answers correctly, Cortex is working.
 
 ---
 
@@ -258,97 +335,6 @@ echo 'CORTEX_URL=http://your-server-ip:21100' >> .env
 | Plugin not loading | Run `openclaw plugins list` to verify `@cortexmem/cortex-bridge` is installed |
 | Memories not saving after responses | Known upstream issue in streaming mode — see [Known Issues](#known-issues) |
 | Connection refused | Make sure `CORTEX_URL` is set and Cortex is running |
-
----
-
-## How It Works
-
-Cortex uses a three-layer memory model inspired by how human memory works:
-
-```
-Conversations → [Working Memory] → [Core Memory] → [Archive]
-                   48 hours          permanent       90 days
-                                                  ↓ compressed
-                                              back to Core
-```
-
-| Layer | TTL | What it stores | Analogy |
-|-------|-----|----------------|---------|
-| **Working** | 48h | Recent conversation context | Short-term memory |
-| **Core** | Permanent | Key facts, preferences, decisions | Long-term memory |
-| **Archive** | 90d → compressed to Core | Low-frequency items | Distant memory |
-
-**Nothing is ever truly lost.** Archived memories are compressed into summaries that live permanently in Core.
-
-### Memory Categories
-
-Cortex classifies memories into 20 categories across three attribution tracks, each with a tuned importance and decay rate:
-
-**User memories** — facts about the user:
-
-| Category | Description | Importance |
-|----------|-------------|------------|
-| `identity` | Name, profession, role, location | 0.9-1.0 |
-| `preference` | Tools, workflows, styles, habits | 0.8-0.9 |
-| `correction` | Updates to previously known info | 0.9-1.0 |
-| `skill` | Expertise, proficiency, tech stack | 0.8-0.9 |
-| `relationship` | Colleagues, friends, organizations | 0.8-0.9 |
-| `goal` | Objectives, plans, milestones | 0.7-0.9 |
-| `decision` | Concrete choices committed to | 0.8-0.9 |
-| `entity` | Named tools, projects, organizations | 0.6-0.8 |
-| `project_state` | Project progress, status changes | 0.5-0.7 |
-| `insight` | Lessons learned, experience-based wisdom | 0.5-0.7 |
-| `fact` | Factual knowledge about the user | 0.5-0.8 |
-| `todo` | Action items, follow-ups | 0.6-0.8 |
-
-**Operational** — rules and strategies:
-
-| Category | Description | Importance |
-|----------|-------------|------------|
-| `constraint` | Hard rules that must never be violated ("never do X") | 0.9-1.0 |
-| `policy` | Default execution strategies ("prefer X before Y") | 0.7-0.9 |
-
-**Agent growth** — the agent's own learning:
-
-| Category | Description | Importance |
-|----------|-------------|------------|
-| `agent_persona` | Agent's own character, tone, personality | 0.8-1.0 |
-| `agent_relationship` | Interaction dynamics, rapport, trust | 0.8-0.9 |
-| `agent_user_habit` | Observations about user patterns and rhythms | 0.7-0.9 |
-| `agent_self_improvement` | Behavioral improvements, mistakes noticed | 0.7-0.9 |
-
-**System** (internal use):
-
-| Category | Description | Importance |
-|----------|-------------|------------|
-| `context` | Session context | 0.2 |
-| `summary` | Compressed summaries | 0.4 |
-
-### Memory Sieve (Extraction)
-
-The Memory Sieve uses a **dual-channel extraction** pipeline with **three-track attribution**:
-
-1. **Fast Channel** — Regex-based pattern matching (Chinese/English/Japanese) detects high-signal information with zero LLM latency
-2. **Deep Channel** — LLM-powered structured extraction outputs categorized JSON with importance scores, reasoning, and source attribution
-
-**Three-track attribution** routes memories to the right category:
-- **User track** — user-stated facts, preferences, decisions
-- **Operational track** — constraints and policies set by the user or system
-- **Agent track** — the agent's own reflections, observations, and persona
-
-Both channels run in parallel. Results are cross-deduplicated using vector similarity. Memories with importance ≥ 0.8 go directly to Core; lower-importance items go to Working with a TTL.
-
-The Sieve also supports **user profile injection** — a synthesized profile of the user's Core memories is injected into the extraction prompt, helping the LLM avoid re-extracting known facts and better identify incremental new information.
-
-### Memory Lifecycle
-
-The lifecycle engine runs automatically (configurable schedule) and handles:
-
-- **Promotion**: Important working memories → Core
-- **Merging**: Duplicate/similar Core memories → single enriched entry
-- **Archival**: Decayed Core memories → Archive
-- **Compression**: Old Archive entries → compressed Core summaries
-- **Profile Synthesis**: Auto-generates user profiles from Core memories
 
 ---
 
