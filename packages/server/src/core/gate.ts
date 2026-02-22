@@ -2,6 +2,7 @@ import { createLogger } from '../utils/logger.js';
 import { HybridSearchEngine, type SearchResult } from '../search/index.js';
 import { isSmallTalk } from '../signals/index.js';
 import { expandQuery } from '../search/query-expansion.js';
+import type { Reranker } from '../search/reranker.js';
 import type { CortexConfig } from '../utils/config.js';
 import type { LLMProvider } from '../llm/interface.js';
 
@@ -48,6 +49,7 @@ export class MemoryGate {
     private searchEngine: HybridSearchEngine,
     private config: CortexConfig['gate'],
     private llm?: LLMProvider,
+    private reranker?: Reranker,
   ) {}
 
   async recall(req: RecallRequest): Promise<RecallResponse> {
@@ -97,9 +99,15 @@ export class MemoryGate {
       }
     }
 
-    const results = Array.from(resultMap.values())
-      .sort((a, b) => b.finalScore - a.finalScore)
-      .slice(0, 15);
+    // Merge, then rerank once with the unified result set
+    let results = Array.from(resultMap.values())
+      .sort((a, b) => b.finalScore - a.finalScore);
+
+    if (this.reranker && results.length > 0) {
+      results = await this.reranker.rerank(query, results, 15);
+    } else {
+      results = results.slice(0, 15);
+    }
 
     // Format for injection
     const context = this.searchEngine.formatForInjection(results, maxTokens);
