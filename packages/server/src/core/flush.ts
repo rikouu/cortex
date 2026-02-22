@@ -1,56 +1,17 @@
 import { createLogger } from '../utils/logger.js';
-import { insertMemory, getMemoryById, updateMemory, upsertRelation, type Memory, type MemoryCategory } from '../db/index.js';
+import { insertMemory, upsertRelation, type Memory, type MemoryCategory } from '../db/index.js';
 import { parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { CortexConfig } from '../utils/config.js';
-import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, SMART_UPDATE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
-import { type ExtractedMemory, type ExtractedRelation, type ExtractionLogData, type SimilarMemory, type SmartUpdateDecision } from './sieve.js';
+import { FLUSH_HIGHLIGHTS_SYSTEM_PROMPT, FLUSH_CORE_ITEMS_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
+import { stripInjectedContent, stripCodeFences } from '../utils/sanitize.js';
+import { MemoryWriter, type ExtractedMemory } from './memory-writer.js';
+import { type ExtractedRelation, type ExtractionLogData } from './sieve.js';
 import { parseRelations } from './relation-utils.js';
 
 const log = createLogger('flush');
-
-/** Legacy fallback threshold when smartUpdate is disabled */
-const LEGACY_DEDUP_THRESHOLD = 0.15;
-
-/** Strip markdown code fences (```json ... ```) from LLM output */
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const match = trimmed.match(/^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```$/);
-  return match ? match[1]!.trim() : trimmed;
-}
-
-/** Regex to strip injected <cortex_memory> tags and other system metadata */
-const INJECTED_TAG_RE = /<cortex_memory>[\s\S]*?<\/cortex_memory>/g;
-const SYSTEM_TAG_RE = /<(?:system|context|memory|tool_result|tool_use|function_call|function_result|instructions|artifact|thinking|antThinking)[\s\S]*?<\/(?:system|context|memory|tool_result|tool_use|function_call|function_result|instructions|artifact|thinking|antThinking)>/g;
-
-/** Plain-text metadata prefixes injected by some frameworks */
-const PLAIN_META_RE = /^Conversation info \(untrusted metadata\):.*$/gm;
-const SYSTEM_PREFIX_RE = /^(?:System (?:info|context|metadata|prompt|instruction)|Conversation (?:info|context|metadata)|Memory context|Previous context|Tool (?:description|instructions)|Image (?:analysis|description) instructions?)[\s(:\-][^\n]*$/gm;
-
-/** Chat-ML / special role markers */
-const ROLE_MARKER_RE = /^(?:<\|(?:system|im_start|im_end)\|>|\[(?:SYSTEM|INST|\/INST|SYS|\/SYS)\]|Human:|Assistant:|<<SYS>>|<<\/SYS>>)[^\n]*$/gm;
-
-/** Tool/capability instructions injected by frameworks (OpenClaw, etc.) */
-const TOOL_INSTRUCTION_RE = /^(?:To (?:send|upload|share|create|use|handle|process|generate|render|display|format|attach|include)\b[^\n]*\b(?:tool|function|method|API|endpoint|format|command|provider|message)\b[^\n]*|(?:Prefer|Use|Always use|When possible,? use)\b[^\n]*\b(?:tool|function|method|format)\b[^\n]*|(?:Note|Important|Warning|Tip):\s*(?:When|If|To|For)\s[^\n]*\b(?:tool|API|function|MCP|message|provider)\b[^\n]*)$/gmi;
-
-/** Capability description lines */
-const CAPABILITY_RE = /^(?:(?:I|This (?:tool|assistant|model|system)) (?:can|support|am able to|will|allow)\b[^\n]{10,}|(?:Supported|Available|Enabled) (?:features|capabilities|tools|formats|options)[:\s][^\n]*)$/gmi;
-
-/** Strip all injected system tags from text to prevent nested pollution */
-function stripInjectedContent(text: string): string {
-  return text
-    .replace(INJECTED_TAG_RE, '')
-    .replace(SYSTEM_TAG_RE, '')
-    .replace(PLAIN_META_RE, '')
-    .replace(SYSTEM_PREFIX_RE, '')
-    .replace(ROLE_MARKER_RE, '')
-    .replace(TOOL_INSTRUCTION_RE, '')
-    .replace(CAPABILITY_RE, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 export interface FlushRequest {
   messages: { role: string; content: string }[];
@@ -66,26 +27,30 @@ export interface FlushResponse {
 }
 
 export class MemoryFlush {
+  private writer: MemoryWriter;
+
   constructor(
     private llm: LLMProvider,
     private embeddingProvider: EmbeddingProvider,
     private vectorBackend: VectorBackend,
     private config: CortexConfig,
-  ) {}
+  ) {
+    this.writer = new MemoryWriter(llm, embeddingProvider, vectorBackend, config);
+  }
 
   async flush(req: FlushRequest): Promise<FlushResponse> {
     const agentId = req.agent_id || 'default';
     const flushed: Memory[] = [];
     let extractionLog: ExtractionLogData | undefined;
 
-    // 1. Build conversation text from messages — strip injected tags
+    // 1. Build conversation text
     const conversationText = req.messages
       .map(m => `${m.role}: ${stripInjectedContent(m.content)}`)
       .filter(line => line.length > 10)
       .join('\n')
       .slice(0, 5000);
 
-    // 2. LLM extraction of key highlights
+    // 2. Extract highlights (for API response, not stored as separate memory)
     let summary: string;
     try {
       summary = await this.extractHighlights(conversationText);
@@ -94,42 +59,7 @@ export class MemoryFlush {
       summary = conversationText.slice(0, 500);
     }
 
-    // 3. Write to Working Memory with flush tag
-    const ttlMs = parseDuration(this.config.layers.working.ttl);
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-
-    try {
-      const mem = insertMemory({
-        layer: 'working',
-        category: 'summary',
-        content: summary,
-        importance: 0.7,
-        confidence: 0.85,
-        agent_id: agentId,
-        source: req.session_id ? `flush:${req.session_id}` : 'flush',
-        expires_at: expiresAt,
-        metadata: JSON.stringify({
-          reason: req.reason || 'manual',
-          message_count: req.messages.length,
-          flushed_at: new Date().toISOString(),
-        }),
-      });
-      flushed.push(mem);
-
-      // Index vector
-      try {
-        const embedding = await this.embeddingProvider.embed(summary);
-        if (embedding.length > 0) {
-          await this.vectorBackend.upsert(mem.id, embedding);
-        }
-      } catch (e: any) {
-        log.warn({ error: e.message }, 'Vector indexing failed for flush');
-      }
-    } catch (e: any) {
-      log.error({ error: e.message }, 'Failed to write flush memory');
-    }
-
-    // 4. Try to extract high-priority items for Core (structured JSON, with smart dedup)
+    // 3. Structured extraction of core items (with smart dedup via MemoryWriter)
     let deduplicated = 0;
     let smartUpdated = 0;
     const deepStart = Date.now();
@@ -142,7 +72,7 @@ export class MemoryFlush {
       parsedExtractions = result.parsed;
 
       for (const item of parsedExtractions) {
-        const processResult = await this.processNewMemory(item, agentId, req.session_id);
+        const processResult = await this.writer.processNewMemory(item, agentId, req.session_id, undefined, 'flush');
         if (processResult.action === 'skipped') {
           deduplicated++;
           log.info({ category: item.category }, 'Core item deduplicated');
@@ -174,6 +104,42 @@ export class MemoryFlush {
       }
     } catch (e: any) {
       log.warn({ error: e.message }, 'Core item extraction failed');
+    }
+
+    // 4. Fallback: if no structured items were extracted, write summary to working memory
+    if (flushed.length === 0) {
+      const ttlMs = parseDuration(this.config.layers.working.ttl);
+      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+      try {
+        const mem = insertMemory({
+          layer: 'working',
+          category: 'summary',
+          content: summary,
+          importance: 0.7,
+          confidence: 0.85,
+          agent_id: agentId,
+          source: req.session_id ? `flush:${req.session_id}` : 'flush',
+          expires_at: expiresAt,
+          metadata: JSON.stringify({
+            reason: req.reason || 'manual',
+            message_count: req.messages.length,
+            flushed_at: new Date().toISOString(),
+            fallback: true,
+          }),
+        });
+        flushed.push(mem);
+
+        try {
+          const embedding = await this.embeddingProvider.embed(summary);
+          if (embedding.length > 0) {
+            await this.vectorBackend.upsert(mem.id, embedding);
+          }
+        } catch (e: any) {
+          log.warn({ error: e.message }, 'Vector indexing failed for flush fallback');
+        }
+      } catch (e: any) {
+        log.error({ error: e.message }, 'Failed to write flush fallback summary');
+      }
     }
 
     const deepLatency = Date.now() - deepStart;
@@ -222,20 +188,17 @@ export class MemoryFlush {
   }
 
   private parseStructuredOutput(raw: string): { memories: ExtractedMemory[]; relations: ExtractedRelation[] } {
-    // Strip markdown code fences first (LLMs often wrap JSON in ```json ... ```)
     const trimmed = stripCodeFences(raw);
 
     let obj: any;
     try {
       obj = JSON.parse(trimmed);
     } catch {
-      // Fallback: extract JSON from embedded text
       const jsonMatch = trimmed.match(/\{[\s\S]*"memories"[\s\S]*\}/);
       if (jsonMatch) {
         try {
           obj = JSON.parse(jsonMatch[0]);
         } catch {
-          // Legacy fallback: try to parse as plain JSON array
           return { memories: this.parseLegacyArray(trimmed), relations: [] };
         }
       } else {
@@ -245,20 +208,16 @@ export class MemoryFlush {
 
     const relations = parseRelations(obj);
 
-    // Handle new structured format
     if (obj.memories && Array.isArray(obj.memories)) {
       return { memories: this.validateExtractions(obj.memories), relations };
     }
 
-    // Handle legacy array format
     if (Array.isArray(obj)) {
       return { memories: this.validateExtractions(obj), relations };
     }
 
     return { memories: [], relations };
   }
-
-  // parseRelations is now imported from ./relation-utils.js
 
   private parseLegacyArray(raw: string): ExtractedMemory[] {
     try {
@@ -294,178 +253,5 @@ export class MemoryFlush {
           : 'user_implied') as ExtractedMemory['source'],
         reasoning: m.reasoning || '',
       }));
-  }
-
-  // ── Smart Update methods (mirrors sieve.ts logic) ──
-
-  private async findSimilar(content: string, agentId: string): Promise<SimilarMemory[]> {
-    try {
-      const embedding = await this.embeddingProvider.embed(content);
-      if (embedding.length === 0) return [];
-
-      const results = await this.vectorBackend.search(embedding, 3, { agent_id: agentId });
-      const similar: SimilarMemory[] = [];
-      for (const r of results) {
-        const mem = getMemoryById(r.id);
-        if (mem && !mem.superseded_by && !mem.is_pinned) {
-          similar.push({ memory: mem, distance: r.distance });
-        }
-      }
-      return similar;
-    } catch {
-      return [];
-    }
-  }
-
-  private async smartUpdateDecision(existing: Memory, newContent: string): Promise<SmartUpdateDecision> {
-    const prompt = `EXISTING MEMORY:\n${existing.content}\n\nNEW MEMORY:\n${newContent}`;
-    try {
-      const raw = await this.llm.complete(prompt, {
-        maxTokens: 300,
-        temperature: 0.1,
-        systemPrompt: SMART_UPDATE_SYSTEM_PROMPT,
-      });
-
-      const trimmed = stripCodeFences(raw);
-      let obj: any;
-      try {
-        obj = JSON.parse(trimmed);
-      } catch {
-        const jsonMatch = trimmed.match(/\{[\s\S]*"action"[\s\S]*\}/);
-        if (jsonMatch) obj = JSON.parse(jsonMatch[0]);
-        else return { action: 'replace', reasoning: 'Failed to parse LLM response' };
-      }
-
-      const action = ['keep', 'replace', 'merge'].includes(obj.action) ? obj.action : 'replace';
-      return {
-        action: action as SmartUpdateDecision['action'],
-        merged_content: obj.merged_content,
-        reasoning: obj.reasoning || '',
-      };
-    } catch (e: any) {
-      log.warn({ error: e.message }, 'Flush smart update LLM call failed, defaulting to replace');
-      return { action: 'replace', reasoning: 'LLM call failed' };
-    }
-  }
-
-  private async executeSmartUpdate(
-    decision: SmartUpdateDecision,
-    existing: Memory,
-    extraction: ExtractedMemory,
-    agentId: string,
-    sessionId?: string,
-  ): Promise<Memory> {
-    const content = decision.action === 'merge' && decision.merged_content
-      ? decision.merged_content
-      : extraction.content;
-
-    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
-    const ttlMs = parseDuration(this.config.layers.working.ttl);
-    const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
-
-    const metadata: Record<string, any> = {
-      extraction_source: extraction.source,
-      reasoning: extraction.reasoning,
-      smart_update_type: decision.action,
-      update_reasoning: decision.reasoning,
-      supersedes: existing.id,
-    };
-
-    const newMem = insertMemory({
-      layer,
-      category: extraction.category,
-      content,
-      importance: extraction.importance,
-      confidence: 0.8,
-      agent_id: agentId,
-      source: sessionId ? `flush:${sessionId}` : 'flush',
-      expires_at: expiresAt,
-      metadata: JSON.stringify(metadata),
-    });
-
-    updateMemory(existing.id, { superseded_by: newMem.id });
-
-    try {
-      const embedding = await this.embeddingProvider.embed(content);
-      if (embedding.length > 0) {
-        await this.vectorBackend.upsert(newMem.id, embedding);
-      }
-    } catch { /* best-effort */ }
-
-    log.info({ action: decision.action, old_id: existing.id, new_id: newMem.id }, 'Flush smart update executed');
-    return newMem;
-  }
-
-  private async processNewMemory(
-    extraction: ExtractedMemory,
-    agentId: string,
-    sessionId?: string,
-  ): Promise<{ action: 'inserted' | 'skipped' | 'smart_updated'; memory?: Memory }> {
-    const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
-
-    // Corrections get a wider similarity window (1.5x) to better find the memory they're correcting
-    const effectiveThreshold = extraction.category === 'correction'
-      ? Math.min(similarityThreshold * 1.5, 0.6)
-      : similarityThreshold;
-
-    const similar = await this.findSimilar(extraction.content, agentId);
-
-    if (!smartUpdate) {
-      if (similar.length > 0 && similar[0]!.distance < LEGACY_DEDUP_THRESHOLD) {
-        return { action: 'skipped' };
-      }
-      return { action: 'inserted', memory: await this.insertNewMemory(extraction, agentId, sessionId) };
-    }
-
-    if (similar.length > 0) {
-      const closest = similar[0]!;
-
-      // Cross-family check: agent_* categories and user categories represent different perspectives
-      // and should be allowed to coexist even when semantically similar
-      const newIsAgent = extraction.category.startsWith('agent_');
-      const existingIsAgent = closest.memory.category.startsWith('agent_');
-      const crossFamily = newIsAgent !== existingIsAgent;
-
-      if (!crossFamily && closest.distance < exactDupThreshold) {
-        return { action: 'skipped' };
-      }
-
-      if (!crossFamily && closest.distance < effectiveThreshold) {
-        const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
-        if (decision.action === 'keep') return { action: 'skipped' };
-        const newMem = await this.executeSmartUpdate(decision, closest.memory, extraction, agentId, sessionId);
-        return { action: 'smart_updated', memory: newMem };
-      }
-    }
-
-    return { action: 'inserted', memory: await this.insertNewMemory(extraction, agentId, sessionId) };
-  }
-
-  private async insertNewMemory(extraction: ExtractedMemory, agentId: string, sessionId?: string): Promise<Memory> {
-    const layer = extraction.importance >= 0.8 ? 'core' : 'working';
-    const ttlMs = parseDuration(this.config.layers.working.ttl);
-    const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
-
-    const mem = insertMemory({
-      layer,
-      category: extraction.category,
-      content: extraction.content,
-      importance: extraction.importance,
-      confidence: 0.8,
-      agent_id: agentId,
-      source: sessionId ? `flush:${sessionId}` : 'flush',
-      expires_at: expiresAt,
-      metadata: JSON.stringify({ extraction_source: extraction.source, reasoning: extraction.reasoning }),
-    });
-
-    // Index vector
-    try {
-      const embedding = await this.embeddingProvider.embed(extraction.content);
-      if (embedding.length > 0) {
-        await this.vectorBackend.upsert(mem.id, embedding);
-      }
-    } catch { /* best-effort */ }
-
-    return mem;
   }
 }

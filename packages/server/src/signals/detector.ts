@@ -8,6 +8,53 @@ export interface DetectedSignal {
   pattern: string;
 }
 
+/** Sentence boundary characters for CJK and Western text */
+const SENTENCE_BOUNDARIES = /[。！？\n.!?]/;
+
+/**
+ * Extract context at sentence boundaries around a match position.
+ * Falls back to character-level slicing if the sentence is too long (>300 chars).
+ */
+function extractSentenceContext(text: string, matchIdx: number, matchLen: number): string {
+  const maxLen = 300;
+
+  // Find sentence start: search backward for sentence boundary
+  let start = matchIdx;
+  for (let i = matchIdx - 1; i >= Math.max(0, matchIdx - 200); i--) {
+    if (SENTENCE_BOUNDARIES.test(text[i]!)) {
+      start = i + 1;
+      break;
+    }
+    if (i === Math.max(0, matchIdx - 200)) {
+      start = i;
+    }
+  }
+
+  // Find sentence end: search forward for sentence boundary
+  const matchEnd = matchIdx + matchLen;
+  let end = matchEnd;
+  for (let i = matchEnd; i < Math.min(text.length, matchEnd + 200); i++) {
+    if (SENTENCE_BOUNDARIES.test(text[i]!)) {
+      end = i + 1;
+      break;
+    }
+    if (i === Math.min(text.length, matchEnd + 200) - 1) {
+      end = i + 1;
+    }
+  }
+
+  let context = text.slice(start, end).trim();
+
+  // Fallback: if extracted sentence is too long, truncate around match
+  if (context.length > maxLen) {
+    const fallbackStart = Math.max(0, matchIdx - 50);
+    const fallbackEnd = Math.min(text.length, matchIdx + matchLen + 200);
+    context = text.slice(fallbackStart, fallbackEnd).trim();
+  }
+
+  return context;
+}
+
 /**
  * High signal patterns for Chinese, English, and Japanese.
  * These detect important information without requiring LLM calls.
@@ -243,11 +290,9 @@ export function detectHighSignals(exchange: { user: string; assistant: string })
     for (const pattern of rule.patterns) {
       const match = text.match(pattern);
       if (match) {
-        // Extract surrounding context (up to 200 chars around match)
+        // Extract surrounding context at sentence boundaries
         const idx = match.index || 0;
-        const start = Math.max(0, idx - 50);
-        const end = Math.min(text.length, idx + match[0].length + 150);
-        const context = text.slice(start, end).trim();
+        const context = extractSentenceContext(text, idx, match[0].length);
 
         signals.push({
           category: rule.category,
