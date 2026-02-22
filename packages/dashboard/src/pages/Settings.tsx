@@ -288,8 +288,9 @@ export default function Settings() {
         archive: { ttl: config.layers?.archive?.ttl ?? '90d', compressBackToCore: config.layers?.archive?.compressBackToCore ?? false },
       }),
       gate: () => ({
-        maxInjectionTokens: config.gate?.maxInjectionTokens ?? 3000,
+        maxInjectionTokens: config.gate?.maxInjectionTokens ?? 4000,
         skipSmallTalk: config.gate?.skipSmallTalk ?? false,
+        searchLimit: config.gate?.searchLimit ?? 30,
         queryExpansion: {
           enabled: config.gate?.queryExpansion?.enabled ?? false,
           maxVariants: config.gate?.queryExpansion?.maxVariants ?? 3,
@@ -298,7 +299,7 @@ export default function Settings() {
       sieve: () => ({
         fastChannelEnabled: config.sieve?.fastChannelEnabled ?? true,
         contextMessages: config.sieve?.contextMessages ?? 4,
-        maxConversationChars: config.sieve?.maxConversationChars ?? 4000,
+        maxConversationChars: config.sieve?.maxConversationChars ?? 6000,
         smartUpdate: config.sieve?.smartUpdate ?? true,
         similarityThreshold: config.sieve?.similarityThreshold ?? 0.35,
         exactDupThreshold: config.sieve?.exactDupThreshold ?? 0.08,
@@ -446,6 +447,7 @@ export default function Settings() {
         payload.gate = {
           maxInjectionTokens: Number(draft.maxInjectionTokens),
           skipSmallTalk: draft.skipSmallTalk,
+          searchLimit: Number(draft.searchLimit),
           queryExpansion: {
             enabled: draft.queryExpansion?.enabled ?? false,
             maxVariants: Number(draft.queryExpansion?.maxVariants ?? 3),
@@ -1055,7 +1057,7 @@ export default function Settings() {
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
               <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔍 Search Enhancement</label>
 
-              {renderToggleField('Reranker', 'Re-score results using LLM or Cohere for better relevance', 'reranker.enabled')}
+              {renderToggleField('🎯 Reranker', 'After search, LLM re-scores all results for query-specific relevance. Final score = reranker × weight + original × (1-weight). Adds ~2-3s latency, 1 LLM call.', 'reranker.enabled')}
 
               {draft?.reranker?.enabled && (
                 <div style={{ marginLeft: 16 }}>
@@ -1184,12 +1186,13 @@ export default function Settings() {
         {sectionHeader(t('settings.gateTitle'), 'gate')}
         {isEditing('gate') ? (
           <div style={{ padding: '4px 0' }}>
-            {renderNumberField(t('settings.maxInjectionTokens'), t('settings.maxInjectionTokensDesc'), 'maxInjectionTokens', 100, 50000)}
+            {renderNumberField('💉 Injection Budget (tokens)', 'Max tokens injected into AI context. Determines how many memories the AI can see. Recommended: 3000-5000. Too low = AI forgets, too high = wastes context window.', 'maxInjectionTokens', 500, 50000)}
+            {renderNumberField('🔍 Search Candidates', 'How many memories to retrieve per search query before reranking. Should be > Reranker Top N to give reranker room to filter. Recommended: 20-30.', 'searchLimit', 5, 50)}
             {renderToggleField(t('settings.skipSmallTalk'), t('settings.skipSmallTalkDesc'), 'skipSmallTalk')}
 
             <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
               <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔄 Query Expansion</label>
-              {renderToggleField('Query Expansion', 'Use LLM to generate search query variants for better recall', 'queryExpansion.enabled')}
+              {renderToggleField('Query Expansion', 'LLM generates 2-3 variant queries (synonyms, rephrasings) to expand the candidate pool. Adds ~2s latency but significantly improves recall for vague queries. Uses 1 LLM call.', 'queryExpansion.enabled')}
               {draft?.queryExpansion?.enabled && (
                 <div style={{ marginLeft: 16 }}>
                   <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Max Variants</label>
@@ -1207,7 +1210,8 @@ export default function Settings() {
         ) : (
           <table>
             <tbody>
-              {displayRow(t('settings.maxInjectionTokens'), config.gate?.maxInjectionTokens, t('settings.maxInjectionTokensDesc'))}
+              {displayRow('💉 Injection Budget', `${config.gate?.maxInjectionTokens} tokens`, 'Max tokens injected into AI context')}
+              {displayRow('🔍 Search Candidates', config.gate?.searchLimit ?? 30, 'Memories retrieved per query')}
               {displayRow(t('settings.skipSmallTalk'), config.gate?.skipSmallTalk ? t('common.on') : t('common.off'), t('settings.skipSmallTalkDesc'))}
               {displayRow('Query Expansion', config.gate?.queryExpansion?.enabled ? `On (${config.gate.queryExpansion.maxVariants} variants)` : 'Off')}
             </tbody>

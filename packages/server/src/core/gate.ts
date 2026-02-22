@@ -95,7 +95,7 @@ export class MemoryGate {
         query: q,
         layers: req.layers,
         agent_id: req.agent_id,
-        limit: 15,
+        limit: this.config.searchLimit || 30,
       });
       for (const r of qResults) {
         hitCount.set(r.id, (hitCount.get(r.id) ?? 0) + 1);
