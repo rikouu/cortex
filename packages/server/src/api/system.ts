@@ -79,18 +79,64 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     };
   });
 
-  // Trigger self-update
-  // Requires: docker socket + project source mounted (see docker-compose.yml)
+  // Trigger self-update via Docker socket
+  // Pulls latest image and recreates the container.
+  // Requires: /var/run/docker.sock mounted into the container.
   app.post('/api/v1/update', async () => {
-    const scriptPath = path.resolve('/app/scripts/update.sh');
-    if (!fs.existsSync(scriptPath)) {
-      return { ok: false, error: 'update.sh not found' };
+    // Check docker socket
+    if (!fs.existsSync('/var/run/docker.sock')) {
+      return { ok: false, error: 'Docker socket not mounted. Add /var/run/docker.sock volume to docker-compose.yml.' };
     }
+
     try {
+      const { exec } = await import('node:child_process');
+
+      // Detect our compose project + service from container labels
+      const hostname = (await import('node:os')).hostname();
       const { execSync } = await import('node:child_process');
-      // Run in background — the container will be replaced
-      execSync(`bash ${scriptPath} &`, { timeout: 10000, stdio: 'ignore' });
-      log.info('Update triggered via API');
+
+      let composeProjFlag = '';
+      try {
+        const project = execSync(
+          `cat /proc/1/cpuset 2>/dev/null | grep -oP 'docker-\\K[^.]+' || echo ""`,
+          { encoding: 'utf-8', timeout: 3000 }
+        ).trim();
+        // Fallback: inspect via docker socket using curl
+        if (!project) {
+          // Use the Docker Engine API directly via socket
+          const inspectRes = execSync(
+            `curl -s --unix-socket /var/run/docker.sock http://localhost/containers/${hostname}/json`,
+            { encoding: 'utf-8', timeout: 5000 }
+          );
+          const info = JSON.parse(inspectRes);
+          const proj = info?.Config?.Labels?.['com.docker.compose.project'] || '';
+          const svc = info?.Config?.Labels?.['com.docker.compose.service'] || '';
+          if (proj) composeProjFlag = `-p ${proj}`;
+          log.info({ project: proj, service: svc }, 'Detected compose context');
+        }
+      } catch { /* best effort */ }
+
+      // Pull latest image + recreate in background
+      // `docker compose pull && docker compose up -d` via socket
+      // We need docker CLI — check if available, otherwise use curl + Docker API
+      const hasDocker = (() => {
+        try { execSync('which docker', { stdio: 'ignore' }); return true; } catch { return false; }
+      })();
+
+      if (hasDocker) {
+        // Preferred: use docker compose CLI
+        const cmd = `docker compose ${composeProjFlag} pull && docker compose ${composeProjFlag} up -d`;
+        log.info({ cmd }, 'Triggering update via docker compose');
+        exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
+          if (err) log.error({ error: err.message, stderr }, 'Update exec failed');
+          else log.info({ stdout }, 'Update completed');
+        });
+      } else {
+        // Fallback: use Docker Engine API directly via socket to pull + recreate
+        // This is more complex; for now, require docker CLI
+        return { ok: false, error: 'Docker CLI not available in container. Install docker-ce-cli or mount it.' };
+      }
+
       return { ok: true, message: 'Update triggered. Server will restart shortly.' };
     } catch (e: any) {
       log.error({ error: e.message }, 'Failed to trigger update');

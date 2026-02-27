@@ -1,13 +1,11 @@
+# For local development — builds from source instead of pulling pre-built image
 services:
   cortex:
-    image: ghcr.io/rikouu/cortex:latest
-    # For local development, replace above with:
-    #   build: .
+    build: .
     ports:
       - "21100:21100"
     volumes:
       - cortex-data:/app/cortex
-      # Mount docker socket for one-click update from Dashboard
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - CORTEX_PORT=21100
