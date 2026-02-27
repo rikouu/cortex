@@ -5,7 +5,10 @@ services:
       - "21100:21100"
     volumes:
       - cortex-data:/app/cortex
-      - /opt/cortex/scripts:/scripts
+      # Self-update: mount docker socket + project source
+      # Remove these if you don't need one-click updates
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/opt/cortex-src
     environment:
       - CORTEX_PORT=21100
       - CORTEX_HOST=0.0.0.0

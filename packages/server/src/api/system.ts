@@ -79,11 +79,17 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     };
   });
 
-  // Trigger self-update (writes trigger file for host systemd to pick up)
+  // Trigger self-update
+  // Requires: docker socket + project source mounted (see docker-compose.yml)
   app.post('/api/v1/update', async () => {
-    const triggerPath = '/scripts/.update-trigger';
+    const scriptPath = path.resolve('/app/scripts/update.sh');
+    if (!fs.existsSync(scriptPath)) {
+      return { ok: false, error: 'update.sh not found' };
+    }
     try {
-      fs.writeFileSync(triggerPath, new Date().toISOString());
+      const { execSync } = await import('node:child_process');
+      // Run in background — the container will be replaced
+      execSync(`bash ${scriptPath} &`, { timeout: 10000, stdio: 'ignore' });
       log.info('Update triggered via API');
       return { ok: true, message: 'Update triggered. Server will restart shortly.' };
     } catch (e: any) {
