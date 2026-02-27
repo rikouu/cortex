@@ -81,6 +81,12 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
 
   // Trigger self-update: pull latest image + recreate container
   // Requires: docker socket + docker-compose.yml mounted (see docker-compose.yml)
+  //
+  // Strategy:
+  // 1. Pull latest image (safe, no effect on running container)
+  // 2. Spawn a helper container (`docker run -d`) that waits, then runs
+  //    `docker compose up -d --force-recreate` to replace us.
+  //    The helper is a separate container, so it survives our shutdown.
   app.post('/api/v1/update', async () => {
     if (!fs.existsSync('/var/run/docker.sock')) {
       return { ok: false, error: 'Docker socket not mounted.' };
@@ -93,25 +99,53 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
       const { exec, execSync } = await import('node:child_process');
       const hostname = (await import('node:os')).hostname();
 
-      // Detect compose project name from our container labels
-      let projFlag = '';
+      // Detect compose project name + config file path on host
+      let project = 'cortex';
+      let composeDir = '/opt/cortex'; // default
       try {
         const inspectRes = execSync(
           `curl -s --unix-socket /var/run/docker.sock http://localhost/containers/${hostname}/json`,
           { encoding: 'utf-8', timeout: 5000 }
         );
         const info = JSON.parse(inspectRes);
-        const proj = info?.Config?.Labels?.['com.docker.compose.project'] || '';
-        if (proj) projFlag = `-p ${proj}`;
-        log.info({ project: proj }, 'Detected compose project');
+        project = info?.Config?.Labels?.['com.docker.compose.project'] || 'cortex';
+        // Get the host path of docker-compose.yml from bind mounts
+        const mounts = info?.Mounts || [];
+        const composeMnt = mounts.find((m: any) => m.Destination === '/app/docker-compose.yml');
+        if (composeMnt?.Source) {
+          composeDir = composeMnt.Source.replace(/\/docker-compose\.yml$/, '');
+        }
+        log.info({ project, composeDir }, 'Detected compose context');
       } catch { /* best effort */ }
 
-      // Pull + recreate from /app where docker-compose.yml is mounted
-      const cmd = `cd /app && docker compose ${projFlag} pull && docker compose ${projFlag} up -d`;
-      log.info({ cmd }, 'Triggering update');
-      exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
-        if (err) log.error({ error: err.message, stderr }, 'Update failed');
-        else log.info({ stdout }, 'Update completed');
+      // Step 1: Pull latest image
+      const pullCmd = `cd /app && docker compose -p ${project} pull`;
+      log.info('Pulling latest image...');
+      try {
+        execSync(pullCmd, { timeout: 60000, encoding: 'utf-8', stdio: 'pipe' });
+      } catch (pullErr: any) {
+        return { ok: false, error: 'Pull failed: ' + (pullErr.stderr || pullErr.message) };
+      }
+      log.info('Pull complete.');
+
+      // Step 2: Spawn a helper container to recreate us
+      // The helper mounts docker socket + the host's compose directory,
+      // waits 2 seconds (for API response), then runs compose up.
+      const helperCmd = [
+        'docker run -d --rm',
+        '--name cortex-updater',
+        '-v /var/run/docker.sock:/var/run/docker.sock',
+        `-v "${composeDir}:/work:ro"`,
+        '-w /work',
+        'ghcr.io/rikouu/cortex:latest',
+        'sh', '-c',
+        `"sleep 2 && docker compose -p ${project} up -d --force-recreate --remove-orphans 2>&1"`,
+      ].join(' ');
+
+      log.info({ helperCmd }, 'Spawning updater container');
+      exec(helperCmd, { timeout: 10000 }, (err, stdout, stderr) => {
+        if (err) log.error({ error: err.message, stderr }, 'Failed to spawn updater');
+        else log.info({ stdout: stdout.trim() }, 'Updater container started');
       });
 
       return { ok: true, message: 'Update triggered. Server will restart shortly.' };
@@ -120,7 +154,6 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
       return { ok: false, error: e.message };
     }
   });
-
   // Stats
   app.get('/api/v1/stats', async (req) => {
     const q = req.query as any;

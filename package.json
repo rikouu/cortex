@@ -1,7 +1,7 @@
 {
   "name": "cortex",
   "private": true,
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Cortex - Universal AI Agent Memory Service",
   "scripts": {
     "dev": "pnpm --filter @cortex/server dev",
