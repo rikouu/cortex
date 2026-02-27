@@ -282,6 +282,63 @@ function AppContent() {
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-logo">🧠 <span>Cortex</span></div>
+        {/* Version & GitHub & Update — under logo */}
+        {versionInfo && (
+          <div style={{ padding: '2px 16px 6px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: 'monospace' }}>v{versionInfo.version}</span>
+              <a
+                href={versionInfo.github}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+                title="GitHub"
+              >
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              </a>
+            </div>
+            {versionInfo.latestRelease?.updateAvailable && (
+              <button
+                onClick={async () => {
+                  if (updating) return;
+                  if (!confirm(locale === 'zh' ? `确认更新到 v${versionInfo.latestRelease!.version}？服务器将短暂重启。` : `Update to v${versionInfo.latestRelease!.version}? Server will restart briefly.`)) return;
+                  setUpdating(true);
+                  try {
+                    await triggerUpdate();
+                  } catch {}
+                  const target = versionInfo.latestRelease!.version;
+                  let attempts = 0;
+                  const poll = setInterval(async () => {
+                    attempts++;
+                    try {
+                      const h = await getHealth();
+                      if (h.version === target || attempts > 60) {
+                        clearInterval(poll);
+                        setUpdating(false);
+                        setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
+                        if (h.version === target) window.location.reload();
+                      }
+                    } catch {}
+                    if (attempts > 60) { clearInterval(poll); setUpdating(false); }
+                  }, 3000);
+                }}
+                disabled={updating}
+                style={{
+                  display: 'block', width: '100%', fontSize: 11, padding: '3px 8px', marginTop: 4,
+                  background: updating ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.15)',
+                  color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)',
+                  borderRadius: 'var(--radius)', cursor: updating ? 'wait' : 'pointer',
+                  textAlign: 'center',
+                }}
+              >
+                {updating
+                  ? (locale === 'zh' ? '⏳ 更新中...' : '⏳ Updating...')
+                  : `🆕 v${versionInfo.latestRelease.version} ${locale === 'zh' ? '点击更新' : 'Click to update'}`
+                }
+              </button>
+            )}
+          </div>
+        )}
         <div style={{ padding: '8px 12px' }}>
           <GlobalSearch />
         </div>
@@ -296,66 +353,6 @@ function AppContent() {
           <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>⚙️ {t('nav.settings')}</NavLink>
         </nav>
         <div style={{ padding: '8px 12px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {/* Version & GitHub */}
-          {versionInfo && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 0', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ fontFamily: 'monospace' }}>v{versionInfo.version}</span>
-                <a
-                  href={versionInfo.github}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
-                  title="GitHub"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-                </a>
-              </div>
-              {versionInfo.latestRelease?.updateAvailable && (
-                <button
-                  onClick={async () => {
-                    if (updating) return;
-                    if (!confirm(locale === 'zh' ? `确认更新到 v${versionInfo.latestRelease!.version}？服务器将短暂重启。` : `Update to v${versionInfo.latestRelease!.version}? Server will restart briefly.`)) return;
-                    setUpdating(true);
-                    try {
-                      await triggerUpdate();
-                    } catch {}
-                    // Poll health until server comes back with new version (or timeout)
-                    const target = versionInfo.latestRelease!.version;
-                    let attempts = 0;
-                    const poll = setInterval(async () => {
-                      attempts++;
-                      try {
-                        const h = await getHealth();
-                        if (h.version === target || attempts > 60) {
-                          clearInterval(poll);
-                          setUpdating(false);
-                          setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
-                          if (h.version === target) window.location.reload();
-                        }
-                      } catch {
-                        // Server restarting, keep polling
-                      }
-                      if (attempts > 60) { clearInterval(poll); setUpdating(false); }
-                    }, 3000);
-                  }}
-                  disabled={updating}
-                  style={{
-                    display: 'block', width: '100%', fontSize: 11, padding: '4px 8px',
-                    background: updating ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.15)',
-                    color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)',
-                    borderRadius: 'var(--radius)', cursor: updating ? 'wait' : 'pointer',
-                    textAlign: 'center',
-                  }}
-                >
-                  {updating
-                    ? (locale === 'zh' ? '⏳ 更新中...' : '⏳ Updating...')
-                    : `🆕 v${versionInfo.latestRelease.version} ${locale === 'zh' ? '点击更新' : 'Click to update'}`
-                  }
-                </button>
-              )}
-            </div>
-          )}
           <select
             value={locale}
             onChange={e => setLocale(e.target.value as Locale)}
