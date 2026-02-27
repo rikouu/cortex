@@ -7,8 +7,9 @@ services:
       - "21100:21100"
     volumes:
       - cortex-data:/app/cortex
-      # Mount docker socket for one-click update from Dashboard
+      # Mount docker socket + compose file for one-click update
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
     environment:
       - CORTEX_PORT=21100
       - CORTEX_HOST=0.0.0.0
