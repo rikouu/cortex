@@ -147,8 +147,17 @@ function GlobalSearch() {
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleSearch(); if (e.key === 'Escape') setOpen(false); }}
           onFocus={() => { if (results.length > 0 || error) setOpen(true); }}
-          style={{ width: 200, fontSize: 13, padding: '6px 10px' }}
+          style={{ flex: 1, fontSize: 13, padding: '6px 10px' }}
         />
+        <button
+          onClick={handleSearch}
+          disabled={loading}
+          style={{
+            padding: '6px 10px', fontSize: 13, cursor: loading ? 'wait' : 'pointer',
+            background: 'var(--primary)', color: '#fff', border: 'none',
+            borderRadius: 'var(--radius)', whiteSpace: 'nowrap',
+          }}
+        >🔍</button>
       </div>
       {open && (error || results.length > 0) && (
         <>
