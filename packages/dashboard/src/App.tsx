@@ -216,6 +216,8 @@ function AppContent() {
     latestRelease?: { version: string; url: string; publishedAt: string; updateAvailable: boolean } | null;
   } | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [updateCountdown, setUpdateCountdown] = useState(0);
+  const [updateResult, setUpdateResult] = useState<'success'|'stale'|'down'|null>(null);
 
   useEffect(() => {
     // Check if auth is required
@@ -306,45 +308,105 @@ function AppContent() {
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               </a>
             </div>
-            {versionInfo.latestRelease?.updateAvailable && (
-              <button
-                onClick={async () => {
-                  if (updating) return;
-                  if (!confirm(locale === 'zh' ? `确认更新到 v${versionInfo.latestRelease!.version}？服务器将短暂重启。` : `Update to v${versionInfo.latestRelease!.version}? Server will restart briefly.`)) return;
-                  setUpdating(true);
-                  try {
-                    await triggerUpdate();
-                  } catch {}
-                  const target = versionInfo.latestRelease!.version;
-                  let attempts = 0;
-                  const poll = setInterval(async () => {
-                    attempts++;
-                    try {
-                      const h = await getHealth();
-                      if (h.version === target || attempts > 60) {
-                        clearInterval(poll);
-                        setUpdating(false);
-                        setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
-                        if (h.version === target) window.location.reload();
+            {versionInfo.latestRelease?.updateAvailable && !updating && !updateResult && (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                  <span>🆕 v{versionInfo.latestRelease.version}</span>
+                  <a
+                    href={versionInfo.latestRelease.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 10 }}
+                  >{locale === 'zh' ? '更新日志' : 'Changelog'}</a>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm(locale === 'zh' ? `确认更新到 v${versionInfo.latestRelease!.version}？服务器将短暂重启。` : `Update to v${versionInfo.latestRelease!.version}? Server will restart briefly.`)) return;
+                    setUpdating(true);
+                    setUpdateResult(null);
+                    setUpdateCountdown(20);
+                    try { await triggerUpdate(); } catch {}
+                    // Countdown
+                    let remaining = 20;
+                    const timer = setInterval(() => {
+                      remaining--;
+                      setUpdateCountdown(remaining);
+                      if (remaining <= 0) clearInterval(timer);
+                    }, 1000);
+                    // After countdown, check result
+                    setTimeout(async () => {
+                      clearInterval(timer);
+                      const target = versionInfo.latestRelease!.version;
+                      let found = false;
+                      for (let i = 0; i < 6; i++) {
+                        try {
+                          const h = await getHealth();
+                          if (h.version === target) {
+                            setUpdateResult('success');
+                            setUpdating(false);
+                            setTimeout(() => window.location.reload(), 1500);
+                            found = true;
+                            break;
+                          } else {
+                            setUpdateResult('stale');
+                            setUpdating(false);
+                            setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
+                            found = true;
+                            break;
+                          }
+                        } catch {
+                          await new Promise(r => setTimeout(r, 3000));
+                        }
                       }
-                    } catch {}
-                    if (attempts > 60) { clearInterval(poll); setUpdating(false); }
-                  }, 3000);
-                }}
-                disabled={updating}
-                style={{
-                  display: 'block', width: '100%', fontSize: 11, padding: '3px 8px', marginTop: 4,
-                  background: updating ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.15)',
-                  color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)',
-                  borderRadius: 'var(--radius)', cursor: updating ? 'wait' : 'pointer',
-                  textAlign: 'center',
-                }}
-              >
-                {updating
-                  ? (locale === 'zh' ? '⏳ 更新中...' : '⏳ Updating...')
-                  : `🆕 v${versionInfo.latestRelease.version} ${locale === 'zh' ? '点击更新' : 'Click to update'}`
-                }
-              </button>
+                      if (!found) {
+                        setUpdateResult('down');
+                        setUpdating(false);
+                      }
+                    }, 20000);
+                  }}
+                  style={{
+                    display: 'block', width: '100%', fontSize: 11, padding: '3px 8px',
+                    background: 'rgba(59,130,246,0.15)', color: 'var(--primary)',
+                    border: '1px solid rgba(59,130,246,0.3)', borderRadius: 'var(--radius)',
+                    cursor: 'pointer', textAlign: 'center',
+                  }}
+                >{locale === 'zh' ? '⬆️ 立即更新' : '⬆️ Update now'}</button>
+              </div>
+            )}
+            {updating && (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ fontSize: 11, marginBottom: 3, textAlign: 'center' }}>
+                  {locale === 'zh' ? `⏳ 更新中... ${updateCountdown}s` : `⏳ Updating... ${updateCountdown}s`}
+                </div>
+                <div style={{ height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', background: 'var(--primary)', borderRadius: 2,
+                    width: `${((20 - updateCountdown) / 20) * 100}%`,
+                    transition: 'width 1s linear',
+                  }} />
+                </div>
+              </div>
+            )}
+            {updateResult === 'success' && (
+              <div style={{ marginTop: 4, fontSize: 11, color: '#22c55e', textAlign: 'center' }}>
+                ✅ {locale === 'zh' ? '更新成功！正在刷新...' : 'Updated! Reloading...'}
+              </div>
+            )}
+            {updateResult === 'stale' && (
+              <div style={{ marginTop: 4, fontSize: 11, textAlign: 'center' }}>
+                <div style={{ color: '#f59e0b' }}>⚠️ {locale === 'zh' ? '版本未变化，可能更新未完成' : 'Version unchanged, update may not have completed'}</div>
+                <button onClick={() => { setUpdateResult(null); }} style={{ fontSize: 10, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 2 }}>
+                  {locale === 'zh' ? '重试' : 'Retry'}
+                </button>
+              </div>
+            )}
+            {updateResult === 'down' && (
+              <div style={{ marginTop: 4, fontSize: 11, textAlign: 'center' }}>
+                <div style={{ color: '#ef4444' }}>❌ {locale === 'zh' ? '服务器无响应，容器可能在重建中' : 'Server unreachable, container may be rebuilding'}</div>
+                <button onClick={() => window.location.reload()} style={{ fontSize: 10, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 2 }}>
+                  {locale === 'zh' ? '刷新页面' : 'Refresh'}
+                </button>
+              </div>
             )}
           </div>
         )}
