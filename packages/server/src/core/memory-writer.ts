@@ -37,7 +37,7 @@ export interface SimilarMemory {
 }
 
 export interface SmartUpdateDecision {
-  action: 'keep' | 'replace' | 'merge';
+  action: 'keep' | 'replace' | 'merge' | 'conflict';
   merged_content?: string;
   reasoning: string;
 }
@@ -139,7 +139,7 @@ export class MemoryWriter {
       }
 
       return arr.map((obj: any) => {
-        const action = ['keep', 'replace', 'merge'].includes(obj?.action) ? obj.action : 'replace';
+        const action = ['keep', 'replace', 'merge', 'conflict'].includes(obj?.action) ? obj.action : 'replace';
         return {
           action: action as SmartUpdateDecision['action'],
           merged_content: obj?.merged_content,
@@ -167,7 +167,7 @@ export class MemoryWriter {
       else return { action: 'replace', reasoning: 'Failed to parse LLM response, defaulting to replace' };
     }
 
-    const action = ['keep', 'replace', 'merge'].includes(obj.action) ? obj.action : 'replace';
+    const action = ['keep', 'replace', 'merge', 'conflict'].includes(obj.action) ? obj.action : 'replace';
     return {
       action: action as SmartUpdateDecision['action'],
       merged_content: obj.merged_content,
@@ -192,7 +192,12 @@ export class MemoryWriter {
       ? decision.merged_content
       : extraction.content;
 
-    const layer = forceLayer || (extraction.importance >= 0.8 ? 'core' : 'working');
+    // Importance merge strategy: merge takes max, replace/conflict uses new
+    const newImportance = decision.action === 'merge'
+      ? Math.max(existing.importance, extraction.importance)
+      : extraction.importance;
+
+    const layer = forceLayer || (newImportance >= 0.8 ? 'core' : 'working');
     const ttlMs = parseDuration(this.config.layers.working.ttl);
     const expiresAt = layer === 'working' ? new Date(Date.now() + ttlMs).toISOString() : undefined;
 
@@ -208,7 +213,7 @@ export class MemoryWriter {
       layer,
       category: extraction.category,
       content,
-      importance: extraction.importance,
+      importance: newImportance,
       confidence: confidenceOverride ?? 0.8,
       agent_id: agentId,
       source: sessionId ? `${sourcePrefix}:${sessionId}` : sourcePrefix,
@@ -217,6 +222,22 @@ export class MemoryWriter {
     });
 
     updateMemory(existing.id, { superseded_by: newMem.id });
+
+    // Conflict: mark old memory with expired metadata
+    if (decision.action === 'conflict') {
+      try {
+        const existingMeta = JSON.parse(existing.metadata || '{}');
+        updateMemory(existing.id, {
+          metadata: JSON.stringify({
+            ...existingMeta,
+            expired_reason: 'contradicted',
+            expired_by: newMem.id,
+            expired_at: new Date().toISOString(),
+          }),
+        });
+      } catch { /* best-effort */ }
+    }
+
     await this.indexVector(newMem.id, content);
 
     // Auto-log feedback when a correction replaces an existing memory
@@ -261,6 +282,20 @@ export class MemoryWriter {
     sourcePrefix = 'sieve',
     forceLayer?: 'working' | 'core',
   ): Promise<ProcessResult> {
+    // Gate: filter obvious noise before expensive operations
+    if (extraction.importance < 0.4) {
+      log.info({ content: extraction.content.slice(0, 50), importance: extraction.importance }, 'Below minimum threshold, skipping');
+      return { action: 'skipped' };
+    }
+    if (extraction.content.length < 8) {
+      log.info({ content: extraction.content }, 'Content too short, skipping');
+      return { action: 'skipped' };
+    }
+    if (extraction.content.length > 500) {
+      log.info({ content: extraction.content.slice(0, 50) }, 'Content too long (not refined), skipping');
+      return { action: 'skipped' };
+    }
+
     const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
 
     // Corrections get a wider similarity window (1.5x)
@@ -319,6 +354,13 @@ export class MemoryWriter {
           const decision = await this.smartUpdateDecision(closest.memory, extraction.content);
           if (decision.action === 'keep') {
             log.info({ existing_id: closest.memory.id, reasoning: decision.reasoning }, 'Smart update: keep existing');
+            // Refresh confirmation timestamp — memory is still accurate
+            try {
+              const existingMeta = JSON.parse(closest.memory.metadata || '{}');
+              updateMemory(closest.memory.id, {
+                metadata: JSON.stringify({ ...existingMeta, last_confirmed_at: new Date().toISOString() }),
+              });
+            } catch { /* best-effort */ }
             return { action: 'skipped' };
           }
           const newMem = await this.executeSmartUpdate(
@@ -349,6 +391,28 @@ export class MemoryWriter {
   ): Promise<ProcessResult[]> {
     if (extractions.length === 0) return [];
 
+    // Gate: filter obvious noise before expensive operations
+    const gatedExtractions = extractions.filter((ext, i) => {
+      if (ext.importance < 0.4) {
+        log.info({ content: ext.content.slice(0, 50), importance: ext.importance }, 'Batch gate: below threshold');
+        return false;
+      }
+      if (ext.content.length < 8 || ext.content.length > 500) {
+        log.info({ content: ext.content.slice(0, 50) }, 'Batch gate: content length out of range');
+        return false;
+      }
+      return true;
+    });
+    // Build result array with skipped entries for gated items
+    const gateResults: (ProcessResult | null)[] = extractions.map((ext) =>
+      (ext.importance < 0.4 || ext.content.length < 8 || ext.content.length > 500)
+        ? { action: 'skipped' as const }
+        : null,
+    );
+    if (gatedExtractions.length === 0) {
+      return gateResults.map(r => r || { action: 'skipped' });
+    }
+
     const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
 
     // Phase 1: find similar for each extraction, classify into tiers
@@ -360,9 +424,9 @@ export class MemoryWriter {
       closest?: SimilarMemory;
     }
 
-    // Phase 1: parallel findSimilar for all extractions
+    // Phase 1: parallel findSimilar for all gated extractions
     const similarResults = await Promise.all(
-      extractions.map(ext => {
+      gatedExtractions.map(ext => {
         const cats = ext.category === 'correction'
           ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
           : undefined;
@@ -373,8 +437,8 @@ export class MemoryWriter {
     );
 
     const pending: PendingItem[] = [];
-    for (let i = 0; i < extractions.length; i++) {
-      const extraction = extractions[i]!;
+    for (let i = 0; i < gatedExtractions.length; i++) {
+      const extraction = gatedExtractions[i]!;
       const similar = similarResults[i]!;
       const effectiveThreshold = extraction.category === 'correction'
         ? Math.min(similarityThreshold * 1.5, 0.6)
@@ -423,13 +487,13 @@ export class MemoryWriter {
     }
 
     // Phase 3: execute all decisions
-    const results: ProcessResult[] = new Array(extractions.length);
+    const batchResults: ProcessResult[] = new Array(gatedExtractions.length);
     let llmIdx = 0;
 
     for (const item of pending) {
       switch (item.tier) {
         case 'skip':
-          results[item.index] = { action: 'skipped' };
+          batchResults[item.index] = { action: 'skipped' };
           break;
 
         case 'near_exact': {
@@ -437,19 +501,19 @@ export class MemoryWriter {
             { action: 'replace', reasoning: 'Near-exact match, auto-replaced without LLM' },
             item.closest!.memory, item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix,
           );
-          results[item.index] = { action: 'smart_updated', memory: newMem };
+          batchResults[item.index] = { action: 'smart_updated', memory: newMem };
           break;
         }
 
         case 'needs_llm': {
           const decision = llmDecisions[llmIdx++]!;
           if (decision.action === 'keep') {
-            results[item.index] = { action: 'skipped' };
+            batchResults[item.index] = { action: 'skipped' };
           } else {
             const newMem = await this.executeSmartUpdate(
               decision, item.closest!.memory, item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix,
             );
-            results[item.index] = { action: 'smart_updated', memory: newMem };
+            batchResults[item.index] = { action: 'smart_updated', memory: newMem };
           }
           break;
         }
@@ -457,13 +521,18 @@ export class MemoryWriter {
         case 'insert': {
           const mem = this.insertNewMemory(item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix);
           await this.indexVector(mem.id, item.extraction.content);
-          results[item.index] = { action: 'inserted', memory: mem };
+          batchResults[item.index] = { action: 'inserted', memory: mem };
           break;
         }
       }
     }
 
-    return results;
+    // Merge gated (skipped) results with batch results
+    let batchIdx = 0;
+    return gateResults.map(r => {
+      if (r !== null) return r; // was gated out
+      return batchResults[batchIdx++] || { action: 'skipped' };
+    });
   }
 
   /**

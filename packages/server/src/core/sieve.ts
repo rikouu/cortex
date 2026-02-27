@@ -76,7 +76,10 @@ export class MemorySieve {
     // Build multi-turn messages if provided
     let cleanMessages: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
     if (req.messages && req.messages.length > 0) {
-      cleanMessages = req.messages
+      // Apply context window: only use recent messages to avoid re-extracting old content
+      const windowSize = this.config.sieve.contextMessages;
+      const recentMessages = req.messages.slice(-windowSize);
+      cleanMessages = recentMessages
         .map(m => ({ role: m.role, content: stripInjectedContent(m.content) }))
         .filter(m => m.content.length >= 3);
       if (cleanMessages.length === 0) cleanMessages = undefined;

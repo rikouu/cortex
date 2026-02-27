@@ -171,9 +171,18 @@ export class HybridSearchEngine {
 
       const layerWeight = LAYER_WEIGHTS[m.layer] || 0.5;
 
-      // Recency boost: exponential decay with half-life of ~14 days
-      const daysSinceCreation = (Date.now() - new Date(m.created_at).getTime()) / 86_400_000;
-      const recencyBoost = 1.0 + 0.1 * Math.exp(-daysSinceCreation / 14);
+      // Recency boost: use last_confirmed_at if available, else created_at
+      let recencyBase = new Date(m.created_at).getTime();
+      try {
+        if (m.metadata) {
+          const meta = JSON.parse(m.metadata);
+          if (meta.last_confirmed_at) {
+            recencyBase = new Date(meta.last_confirmed_at).getTime();
+          }
+        }
+      } catch { /* use created_at */ }
+      const daysSinceConfirmed = (Date.now() - recencyBase) / 86_400_000;
+      const recencyBoost = 1.0 + 0.1 * Math.exp(-daysSinceConfirmed / 14);
 
       // Access frequency boost
       const accessBoost = 1.0 + 0.05 * Math.min(m.access_count, this.config.accessBoostCap);
@@ -214,13 +223,14 @@ export class HybridSearchEngine {
     if (results.length === 0) return '';
 
     // Separate priority categories from regular results
-    const PRIORITY_CATEGORIES = new Set(['constraint', 'agent_persona']);
+    const PRIORITY_CATEGORIES = new Set(['constraint', 'agent_persona', 'correction', 'policy']);
     const priorityResults = results.filter(r => PRIORITY_CATEGORIES.has(r.category));
     const regularResults = results.filter(r => !PRIORITY_CATEGORIES.has(r.category));
 
     const lines: string[] = ['<cortex_memory>'];
     let tokens = estimateTokens(lines[0]!);
     const injectedIds = new Set<string>();
+    const seenPrefixes = new Set<string>(); // content dedup
 
     const layerLabels: Record<string, string> = {
       core: '核心记忆',
@@ -231,10 +241,14 @@ export class HybridSearchEngine {
     const categoryLabels: Record<string, string> = {
       constraint: '约束',
       agent_persona: '人设',
+      correction: '纠正',
+      policy: '策略',
     };
 
     // Phase 1: Inject priority categories first
     for (const r of priorityResults) {
+      const prefix = r.content.slice(0, 40).toLowerCase();
+      if (seenPrefixes.has(prefix)) continue;
       const label = categoryLabels[r.category] || layerLabels[r.layer] || r.layer;
       const line = `[${label}] ${r.content}`;
       const lineTokens = estimateTokens(line);
@@ -242,16 +256,20 @@ export class HybridSearchEngine {
       lines.push(line);
       tokens += lineTokens;
       injectedIds.add(r.id);
+      seenPrefixes.add(prefix);
     }
 
     // Phase 2: Fill remaining budget with regular results
     for (const r of regularResults) {
       if (injectedIds.has(r.id)) continue;
+      const prefix = r.content.slice(0, 40).toLowerCase();
+      if (seenPrefixes.has(prefix)) continue;
       const line = `[${layerLabels[r.layer] || r.layer}] ${r.content}`;
       const lineTokens = estimateTokens(line);
       if (tokens + lineTokens > maxTokens - 20) break;
       lines.push(line);
       tokens += lineTokens;
+      seenPrefixes.add(prefix);
     }
 
     lines.push('</cortex_memory>');

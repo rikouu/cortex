@@ -107,7 +107,14 @@ export class LLMReranker implements Reranker {
       const documents = candidates.map((r, i) => `[${i}] ${r.content}`).join('\n');
 
       const response = await this.llm.complete(
-        `Rate the relevance of each memory to the search query. Output ONLY a JSON array of objects with "index" and "score" (0.0 to 1.0), sorted by score descending.
+        `Rate how useful each memory would be if injected into an AI assistant's context to help answer the query. Output ONLY a JSON array of objects with "index" and "score" (0.0 to 1.0), sorted by score descending.
+
+Scoring guide:
+- 0.9-1.0: Directly answers or critically constrains the response
+- 0.6-0.8: Provides useful background context
+- 0.3-0.5: Tangentially related
+- 0.0-0.2: Irrelevant
+Consider: Would the assistant give a WORSE answer without this memory?
 
 Query: "${query}"
 
