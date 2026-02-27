@@ -5,6 +5,7 @@ services:
       - "21100:21100"
     volumes:
       - cortex-data:/app/cortex
+      - /opt/cortex/scripts:/scripts
     environment:
       - CORTEX_PORT=21100
       - CORTEX_HOST=0.0.0.0

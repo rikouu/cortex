@@ -145,6 +145,10 @@ export const triggerImport = (data: any) =>
 export const triggerReindex = () =>
   request('/reindex', { method: 'POST' });
 
+// Self-update
+export const triggerUpdate = () =>
+  request('/update', { method: 'POST' });
+
 // Agents
 export const listAgents = () => request('/agents');
 

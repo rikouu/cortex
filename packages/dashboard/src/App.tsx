@@ -9,7 +9,7 @@ import Settings from './pages/Settings.js';
 import Agents from './pages/Agents.js';
 import AgentDetail from './pages/AgentDetail.js';
 import ExtractionLogs from './pages/ExtractionLogs.js';
-import { search, checkAuth, verifyToken, setStoredToken, getStoredToken, clearStoredToken, getHealth } from './api/client.js';
+import { search, checkAuth, verifyToken, setStoredToken, getStoredToken, clearStoredToken, getHealth, triggerUpdate } from './api/client.js';
 import { I18nProvider, useI18n } from './i18n/index.js';
 import type { Locale } from './i18n/index.js';
 
@@ -206,6 +206,7 @@ function AppContent() {
     version: string; github: string;
     latestRelease?: { version: string; url: string; publishedAt: string; updateAvailable: boolean } | null;
   } | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     // Check if auth is required
@@ -311,18 +312,47 @@ function AppContent() {
                 </a>
               </div>
               {versionInfo.latestRelease?.updateAvailable && (
-                <a
-                  href={versionInfo.latestRelease.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={async () => {
+                    if (updating) return;
+                    if (!confirm(locale === 'zh' ? `确认更新到 v${versionInfo.latestRelease!.version}？服务器将短暂重启。` : `Update to v${versionInfo.latestRelease!.version}? Server will restart briefly.`)) return;
+                    setUpdating(true);
+                    try {
+                      await triggerUpdate();
+                    } catch {}
+                    // Poll health until server comes back with new version (or timeout)
+                    const target = versionInfo.latestRelease!.version;
+                    let attempts = 0;
+                    const poll = setInterval(async () => {
+                      attempts++;
+                      try {
+                        const h = await getHealth();
+                        if (h.version === target || attempts > 60) {
+                          clearInterval(poll);
+                          setUpdating(false);
+                          setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
+                          if (h.version === target) window.location.reload();
+                        }
+                      } catch {
+                        // Server restarting, keep polling
+                      }
+                      if (attempts > 60) { clearInterval(poll); setUpdating(false); }
+                    }, 3000);
+                  }}
+                  disabled={updating}
                   style={{
-                    display: 'block', fontSize: 11, padding: '4px 8px',
-                    background: 'rgba(59,130,246,0.15)', color: 'var(--primary)',
-                    borderRadius: 'var(--radius)', textDecoration: 'none',
+                    display: 'block', width: '100%', fontSize: 11, padding: '4px 8px',
+                    background: updating ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.15)',
+                    color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)',
+                    borderRadius: 'var(--radius)', cursor: updating ? 'wait' : 'pointer',
+                    textAlign: 'center',
                   }}
                 >
-                  🆕 v{versionInfo.latestRelease.version} {locale === 'zh' ? '可用' : 'available'}
-                </a>
+                  {updating
+                    ? (locale === 'zh' ? '⏳ 更新中...' : '⏳ Updating...')
+                    : `🆕 v${versionInfo.latestRelease.version} ${locale === 'zh' ? '点击更新' : 'Click to update'}`
+                  }
+                </button>
               )}
             </div>
           )}

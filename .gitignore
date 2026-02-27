@@ -8,3 +8,5 @@ dist/
 !.env.example
 *.tsbuildinfo
 cortex/
+node_modules/
+.pnpm-store/

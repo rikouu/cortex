@@ -79,6 +79,19 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     };
   });
 
+  // Trigger self-update (writes trigger file for host systemd to pick up)
+  app.post('/api/v1/update', async () => {
+    const triggerPath = '/scripts/.update-trigger';
+    try {
+      fs.writeFileSync(triggerPath, new Date().toISOString());
+      log.info('Update triggered via API');
+      return { ok: true, message: 'Update triggered. Server will restart shortly.' };
+    } catch (e: any) {
+      log.error({ error: e.message }, 'Failed to trigger update');
+      return { ok: false, error: e.message };
+    }
+  });
+
   // Stats
   app.get('/api/v1/stats', async (req) => {
     const q = req.query as any;
