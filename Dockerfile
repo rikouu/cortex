@@ -11,6 +11,9 @@ COPY packages/cortex-bridge/package.json packages/cortex-bridge/
 COPY packages/mcp-client/package.json packages/mcp-client/
 RUN pnpm install --frozen-lockfile || pnpm install
 
+# Cache bust for self-update (changed on every update trigger)
+ARG CACHE_BUST=0
+
 # Copy source
 COPY . .
 

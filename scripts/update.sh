@@ -44,6 +44,8 @@ fi
 
 # 5. Rebuild and restart (detached — the current container will be replaced)
 echo "Rebuilding..." >> "$LOG"
-docker compose up -d --build >> "$LOG" 2>&1 &
+# Use CACHE_BUST arg to invalidate Docker cache after git pull
+docker compose build --build-arg CACHE_BUST="$(date +%s)" >> "$LOG" 2>&1
+docker compose up -d >> "$LOG" 2>&1 &
 
 echo "{\"ok\":true,\"version\":\"$NEW_VERSION\"}"
