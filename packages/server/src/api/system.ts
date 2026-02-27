@@ -4,15 +4,76 @@ import { getConfig, updateConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 import type { CortexApp } from '../app.js';
 import type { Memory } from '../db/queries.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const log = createLogger('system');
+
+// Read version from root package.json at startup
+function getPackageVersion(): string {
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    // Try multiple possible locations (dev vs built)
+    for (const rel of ['../../../../package.json', '../../../package.json', '../../package.json']) {
+      const p = path.resolve(__dirname, rel);
+      if (fs.existsSync(p)) {
+        const pkg = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        if (pkg.name === 'cortex' || pkg.name === '@cortex/root') return pkg.version;
+        if (pkg.version) return pkg.version;
+      }
+    }
+  } catch {}
+  return '0.0.0';
+}
+
+const CURRENT_VERSION = getPackageVersion();
+const GITHUB_REPO = 'rikouu/cortex';
+const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
+
+// Cache latest release info (check at most every 30 min)
+let latestReleaseCache: { tag: string; url: string; publishedAt: string; checkedAt: number } | null = null;
+const RELEASE_CHECK_INTERVAL = 30 * 60 * 1000;
+
+async function getLatestRelease(): Promise<typeof latestReleaseCache> {
+  if (latestReleaseCache && Date.now() - latestReleaseCache.checkedAt < RELEASE_CHECK_INTERVAL) {
+    return latestReleaseCache;
+  }
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'cortex-server' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json() as any;
+      latestReleaseCache = {
+        tag: data.tag_name,
+        url: data.html_url,
+        publishedAt: data.published_at,
+        checkedAt: Date.now(),
+      };
+    }
+  } catch (e) {
+    log.debug({ error: (e as Error).message }, 'Failed to check latest release');
+  }
+  return latestReleaseCache;
+}
 
 export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): void {
   // Health check
   app.get('/api/v1/health', async () => {
+    const latest = await getLatestRelease();
+    const latestVersion = latest?.tag?.replace(/^v/, '') ?? null;
     return {
       status: 'ok',
-      version: '0.1.0',
+      version: CURRENT_VERSION,
+      github: GITHUB_URL,
+      latestRelease: latest ? {
+        version: latestVersion,
+        url: latest.url,
+        publishedAt: latest.publishedAt,
+        updateAvailable: latestVersion ? latestVersion !== CURRENT_VERSION : false,
+      } : null,
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     };

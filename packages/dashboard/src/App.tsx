@@ -9,7 +9,7 @@ import Settings from './pages/Settings.js';
 import Agents from './pages/Agents.js';
 import AgentDetail from './pages/AgentDetail.js';
 import ExtractionLogs from './pages/ExtractionLogs.js';
-import { search, checkAuth, verifyToken, setStoredToken, getStoredToken, clearStoredToken } from './api/client.js';
+import { search, checkAuth, verifyToken, setStoredToken, getStoredToken, clearStoredToken, getHealth } from './api/client.js';
 import { I18nProvider, useI18n } from './i18n/index.js';
 import type { Locale } from './i18n/index.js';
 
@@ -202,6 +202,10 @@ function AppContent() {
   const { t, locale, setLocale } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authState, setAuthState] = useState<'checking' | 'login' | 'authenticated'>('checking');
+  const [versionInfo, setVersionInfo] = useState<{
+    version: string; github: string;
+    latestRelease?: { version: string; url: string; publishedAt: string; updateAvailable: boolean } | null;
+  } | null>(null);
 
   useEffect(() => {
     // Check if auth is required
@@ -231,6 +235,21 @@ function AppContent() {
     window.addEventListener('cortex:auth-expired', handleExpired);
     return () => window.removeEventListener('cortex:auth-expired', handleExpired);
   }, []);
+
+  // Fetch version info
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+    getHealth().then((data: any) => {
+      setVersionInfo({ version: data.version, github: data.github, latestRelease: data.latestRelease });
+    }).catch(() => {});
+    // Re-check every 30 min
+    const iv = setInterval(() => {
+      getHealth().then((data: any) => {
+        setVersionInfo({ version: data.version, github: data.github, latestRelease: data.latestRelease });
+      }).catch(() => {});
+    }, 30 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, [authState]);
 
   const handleLogout = () => {
     clearStoredToken();
@@ -276,6 +295,37 @@ function AppContent() {
           <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>⚙️ {t('nav.settings')}</NavLink>
         </nav>
         <div style={{ padding: '8px 12px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {/* Version & GitHub */}
+          {versionInfo && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 0', borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontFamily: 'monospace' }}>v{versionInfo.version}</span>
+                <a
+                  href={versionInfo.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+                  title="GitHub"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                </a>
+              </div>
+              {versionInfo.latestRelease?.updateAvailable && (
+                <a
+                  href={versionInfo.latestRelease.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'block', fontSize: 11, padding: '4px 8px',
+                    background: 'rgba(59,130,246,0.15)', color: 'var(--primary)',
+                    borderRadius: 'var(--radius)', textDecoration: 'none',
+                  }}
+                >
+                  🆕 v{versionInfo.latestRelease.version} {locale === 'zh' ? '可用' : 'available'}
+                </a>
+              )}
+            </div>
+          )}
           <select
             value={locale}
             onChange={e => setLocale(e.target.value as Locale)}
