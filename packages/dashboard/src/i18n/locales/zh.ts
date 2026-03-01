@@ -381,6 +381,7 @@ export default {
     preview: '预览（干运行）',
     runNow: '立即运行',
     previewTitle: '预览（干运行）— {{count}} 个操作待执行',
+    previewAllGood: '✅ 当前没有需要处理的记忆。所有工作层记忆不足 24 小时或未达到升级条件。',
     wouldPromote: '将升级',
     wouldMerge: '将合并',
     wouldArchive: '将归档',

@@ -231,28 +231,44 @@ export default function LifecycleMonitor() {
       {preview && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ marginBottom: 12 }}>{t('lifecycle.previewTitle', { count: totalOps })}</h3>
-          <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
-            <div className="stat-card">
-              <div className="label">{t('lifecycle.wouldPromote')}</div>
-              <div className="value" style={{ color: 'var(--success)' }}>{preview.promoted}</div>
+          {totalOps === 0 ? (
+            <div style={{ padding: '16px 0', color: 'var(--text-muted)', textAlign: 'center' }}>
+              ✅ {t('lifecycle.previewAllGood') || '当前没有需要处理的记忆。所有工作层记忆不足 24 小时或未达到升级条件。'}
             </div>
-            <div className="stat-card">
-              <div className="label">{t('lifecycle.wouldMerge')}</div>
-              <div className="value" style={{ color: 'var(--info)' }}>{preview.merged}</div>
-            </div>
-            <div className="stat-card">
-              <div className="label">{t('lifecycle.wouldArchive')}</div>
-              <div className="value" style={{ color: 'var(--warning)' }}>{preview.archived}</div>
-            </div>
-            <div className="stat-card">
-              <div className="label">{t('lifecycle.wouldCompress')}</div>
-              <div className="value" style={{ color: 'var(--danger)' }}>{preview.compressedToCore}</div>
-            </div>
-            <div className="stat-card">
-              <div className="label">{t('lifecycle.expiredWorking')}</div>
-              <div className="value">{preview.expiredWorking}</div>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+                {preview.promoted > 0 && (
+                  <div className="stat-card">
+                    <div className="label">{t('lifecycle.wouldPromote')}</div>
+                    <div className="value" style={{ color: 'var(--success)' }}>{preview.promoted}</div>
+                  </div>
+                )}
+                {preview.merged > 0 && (
+                  <div className="stat-card">
+                    <div className="label">{t('lifecycle.wouldMerge')}</div>
+                    <div className="value" style={{ color: 'var(--info)' }}>{preview.merged}</div>
+                  </div>
+                )}
+                {preview.archived > 0 && (
+                  <div className="stat-card">
+                    <div className="label">{t('lifecycle.wouldArchive')}</div>
+                    <div className="value" style={{ color: 'var(--warning)' }}>{preview.archived}</div>
+                  </div>
+                )}
+                {preview.compressedToCore > 0 && (
+                  <div className="stat-card">
+                    <div className="label">{t('lifecycle.wouldCompress')}</div>
+                    <div className="value" style={{ color: 'var(--danger)' }}>{preview.compressedToCore}</div>
+                  </div>
+                )}
+                {preview.expiredWorking > 0 && (
+                  <div className="stat-card">
+                    <div className="label">{t('lifecycle.expiredWorking')}</div>
+                    <div className="value">{preview.expiredWorking}</div>
+                  </div>
+                )}
+              </div>
 
           {/* Show affected memories from backend dry run */}
           {affectedMemories.length > 0 && (
@@ -300,6 +316,8 @@ export default function LifecycleMonitor() {
                 </div>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
       )}

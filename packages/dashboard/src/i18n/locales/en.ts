@@ -381,6 +381,7 @@ export default {
     preview: 'Preview (dry-run)',
     runNow: 'Run Now',
     previewTitle: 'Preview (Dry Run) \u2014 {{count}} operations pending',
+    previewAllGood: 'All clear! No memories need processing right now. Working memories are either too young (<24h) or below promotion threshold.',
     wouldPromote: 'Would Promote',
     wouldMerge: 'Would Merge',
     wouldArchive: 'Would Archive',
