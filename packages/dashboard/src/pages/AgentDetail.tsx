@@ -3,6 +3,23 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getAgent, updateAgent, deleteAgent, getAgentConfig } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 
+function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text: string) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
 // ─── Provider & Model Presets (shared with Settings) ─────────────────────────
 
 interface ProviderPreset {
@@ -85,7 +102,7 @@ function CodeSnippet({ title, code }: { title: string; code: string }) {
   const { t } = useI18n();
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+    copyText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -118,7 +135,7 @@ function StepBlock({ step, title, description, code, children, isLast }: {
 
   const handleCopy = () => {
     if (!code) return;
-    navigator.clipboard.writeText(code);
+    copyText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
