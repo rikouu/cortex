@@ -394,6 +394,7 @@ export default {
     ageCol: 'Age',
     likelyAction: 'Likely Action',
     keep: 'Keep',
+    tooYoung: '⏳ < 24h',
     promote: 'Promote',
     expire: 'Expire',
     lastRunResult: 'Last Run Result',

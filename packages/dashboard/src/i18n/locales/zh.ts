@@ -394,6 +394,7 @@ export default {
     ageCol: '创建日期',
     likelyAction: '可能操作',
     keep: '保留',
+    tooYoung: '⏳ 不足24h',
     promote: '升级',
     expire: '过期',
     lastRunResult: '上次运行结果',

@@ -265,17 +265,33 @@ export default function LifecycleMonitor() {
                       {affectedMemories.map((m: any) => {
                         const importance = m.importance ?? 0;
                         const decay = m.decay_score ?? 1;
+                        const confidence = m.confidence ?? 0.5;
+                        const ageHours = (Date.now() - new Date(m.created_at).getTime()) / 3600000;
+                        const isExpired = m.expires_at && new Date(m.expires_at) < new Date();
+                        const promotionThreshold = config?.lifecycle?.promotionThreshold ?? 0.6;
+
                         let action = t('lifecycle.keep');
-                        if (importance >= (config?.lifecycle?.promotionThreshold ?? 0.6)) action = t('lifecycle.promote');
-                        else if (decay < (config?.lifecycle?.archiveThreshold ?? 0.2)) action = t('lifecycle.expire');
-                        const actionColor = action === t('lifecycle.promote') ? 'var(--success)' : action === t('lifecycle.expire') ? 'var(--danger)' : 'var(--text-muted)';
+                        let actionColor = 'var(--text-muted)';
+                        if (isExpired) {
+                          action = t('lifecycle.expire');
+                          actionColor = 'var(--danger)';
+                        } else if (ageHours >= 24 && importance >= 0.9 && confidence >= 0.3) {
+                          action = `${t('lifecycle.promote')} ⚡`;
+                          actionColor = 'var(--success)';
+                        } else if (ageHours >= 24 && importance >= promotionThreshold && confidence >= 0.3) {
+                          action = t('lifecycle.promote');
+                          actionColor = 'var(--success)';
+                        } else if (ageHours < 24) {
+                          action = t('lifecycle.tooYoung') || '⏳ 不足24h';
+                          actionColor = 'var(--text-muted)';
+                        }
                         return (
                           <tr key={m.id}>
                             <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.content}</td>
                             <td>{importance.toFixed(2)}</td>
                             <td>{decay.toFixed(3)}</td>
-                            <td>{toLocal(m.created_at, 'date')}</td>
-                            <td style={{ color: actionColor, fontWeight: 600 }}>{action}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{toLocal(m.created_at, 'date')}</td>
+                            <td style={{ color: actionColor, fontWeight: 600, whiteSpace: 'nowrap' }}>{action}</td>
                           </tr>
                         );
                       })}
