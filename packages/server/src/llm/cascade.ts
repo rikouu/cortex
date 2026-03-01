@@ -6,6 +6,7 @@ import { GoogleLLMProvider } from './google.js';
 import { OpenRouterLLMProvider } from './openrouter.js';
 import { DeepSeekLLMProvider } from './deepseek.js';
 import { createLogger } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 
 const log = createLogger('llm-cascade');
 
@@ -23,7 +24,10 @@ export class CascadeLLM implements LLMProvider {
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
     for (const provider of this.providers) {
       try {
+        const start = Date.now();
         const result = await provider.complete(prompt, opts);
+        metrics.inc('llm_calls_total', { provider: provider.name, purpose: opts?.purpose || 'unknown' });
+        metrics.observe('llm_latency_ms', Date.now() - start);
         return result;
       } catch (e: any) {
         log.warn({ provider: provider.name, error: e.message }, 'LLM provider failed, trying next');

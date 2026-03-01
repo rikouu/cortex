@@ -484,3 +484,28 @@ export function getExtractionFeedbackStats(agentId?: string): {
 
   return { total, ...counts, accuracy_rate };
 }
+
+/**
+ * Get per-category feedback bad rate for dynamic importance adjustment.
+ * Only considers feedback from the last 30 days.
+ */
+export function getCategoryFeedbackStats(agentId: string): Record<string, { total: number; badRate: number }> {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT category, COUNT(*) as total,
+           SUM(CASE WHEN feedback = 'bad' THEN 1 ELSE 0 END) as bad_count
+    FROM extraction_feedback
+    WHERE agent_id = ? AND category IS NOT NULL
+      AND created_at > datetime('now', '-30 days')
+    GROUP BY category
+  `).all(agentId) as { category: string; total: number; bad_count: number }[];
+
+  const stats: Record<string, { total: number; badRate: number }> = {};
+  for (const row of rows) {
+    stats[row.category] = {
+      total: row.total,
+      badRate: row.total > 0 ? row.bad_count / row.total : 0,
+    };
+  }
+  return stats;
+}

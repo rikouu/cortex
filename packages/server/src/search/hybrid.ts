@@ -1,6 +1,7 @@
 import { searchFTS, type Memory, type MemoryLayer, bumpAccessCount } from '../db/index.js';
 import { getDb } from '../db/connection.js';
 import { createLogger } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 import { estimateTokens } from '../utils/helpers.js';
 import type { VectorBackend } from '../vector/interface.js';
 import type { EmbeddingProvider } from '../embedding/interface.js';
@@ -109,6 +110,12 @@ export class HybridSearchEngine {
     }
 
     const totalMs = Date.now() - startTime;
+
+    // Metrics
+    metrics.inc('recall_total');
+    metrics.observe('recall_latency_ms', totalMs);
+    metrics.observe('search_results_count', finalResults.length);
+
     const debug: SearchDebug | undefined = opts.debug ? {
       textResultCount: textResults.length,
       vectorResultCount: vectorResults.length,

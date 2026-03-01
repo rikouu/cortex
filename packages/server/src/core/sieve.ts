@@ -1,4 +1,5 @@
 import { createLogger } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 import { upsertRelation, type Memory, type MemoryCategory } from '../db/index.js';
 import { detectHighSignals, isSmallTalk, type DetectedSignal } from '../signals/index.js';
 import type { LLMProvider } from '../llm/interface.js';
@@ -9,6 +10,7 @@ import { SIEVE_SYSTEM_PROMPT, EXTRACTABLE_CATEGORIES } from './prompts.js';
 import { stripInjectedContent, stripCodeFences } from '../utils/sanitize.js';
 import { MemoryWriter, type ExtractedMemory } from './memory-writer.js';
 import { parseRelations } from './relation-utils.js';
+import { getCategoryFeedbackStats } from '../db/index.js';
 
 const log = createLogger('sieve');
 
@@ -136,6 +138,14 @@ export class MemorySieve {
       smart_updated: smartUpdated,
     }, 'Ingest completed');
 
+    // Metrics
+    metrics.inc('ingest_total');
+    metrics.observe('ingest_extracted_count', extracted.length);
+    if (highSignals.length > 0) metrics.inc('ingest_fast_channel_total', undefined, highSignals.length);
+    if (deepExtractionCount > 0) metrics.inc('ingest_deep_channel_total', undefined, deepExtractionCount);
+    if (deduplicated > 0) metrics.inc('dedup_decisions', { action: 'skipped' }, deduplicated);
+    if (smartUpdated > 0) metrics.inc('dedup_decisions', { action: 'smart_updated' }, smartUpdated);
+
     return {
       extracted,
       high_signals: highSignals,
@@ -230,6 +240,22 @@ export class MemorySieve {
 
     let written = 0;
     if (structuredExtractions.length > 0) {
+      // Apply feedback-based importance adjustment
+      try {
+        const feedbackStats = getCategoryFeedbackStats(agentId);
+        for (const extraction of structuredExtractions) {
+          const catStats = feedbackStats[extraction.category];
+          if (catStats && catStats.total >= 5 && catStats.badRate > 0.3) {
+            const reduction = catStats.badRate * 0.5;
+            extraction.importance = Math.max(0.3, extraction.importance * (1 - reduction));
+            log.info({ category: extraction.category, badRate: catStats.badRate, newImportance: extraction.importance },
+              'Reduced importance based on feedback history');
+          }
+        }
+      } catch (e: any) {
+        log.warn({ error: e.message }, 'Failed to load feedback stats (continuing without adjustment)');
+      }
+
       try {
         const batchResults = await this.writer.processNewMemoryBatch(
           structuredExtractions, agentId, sessionId, undefined, 'sieve',

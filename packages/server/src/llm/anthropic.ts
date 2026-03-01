@@ -28,7 +28,10 @@ export class AnthropicLLMProvider implements LLMProvider {
       body: JSON.stringify({
         model: this.model,
         max_tokens: opts?.maxTokens || 500,
-        system: opts?.systemPrompt || undefined,
+        // Use structured system message with cache_control for prompt caching
+        system: opts?.systemPrompt
+          ? [{ type: 'text', text: opts.systemPrompt, cache_control: { type: 'ephemeral' } }]
+          : undefined,
         messages: [{ role: 'user', content: prompt }],
       }),
       signal: AbortSignal.timeout(30000),

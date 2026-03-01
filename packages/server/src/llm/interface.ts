@@ -7,4 +7,6 @@ export interface LLMCompletionOpts {
   maxTokens?: number;
   temperature?: number;
   systemPrompt?: string;
+  /** Tracking label for metrics (e.g. 'sieve', 'smart_update', 'flush') */
+  purpose?: string;
 }

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getStats, getDb } from '../db/index.js';
 import { getConfig, updateConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
+import { metrics } from '../utils/metrics.js';
 import type { CortexApp } from '../app.js';
 import type { Memory } from '../db/queries.js';
 import fs from 'node:fs';
@@ -60,6 +61,17 @@ async function getLatestRelease(): Promise<typeof latestReleaseCache> {
 }
 
 export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): void {
+  // Metrics endpoint (Prometheus text format)
+  app.get('/api/v1/metrics', async (req, reply) => {
+    reply.header('Content-Type', 'text/plain; version=0.0.4');
+    return metrics.toPrometheus();
+  });
+
+  // Metrics endpoint (JSON format for Dashboard)
+  app.get('/api/v1/metrics/json', async () => {
+    return metrics.toJSON();
+  });
+
   // Health check
   app.get('/api/v1/health', async () => {
     const latest = await getLatestRelease();
