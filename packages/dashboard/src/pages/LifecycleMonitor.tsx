@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getLifecycleLogs, runLifecycle, previewLifecycle, getConfig, listMemories } from '../api/client.js';
+import { getLifecycleLogs, runLifecycle, previewLifecycle, getConfig, listMemories, listAgents } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 import { toLocal } from '../utils/time.js';
 
@@ -41,11 +41,14 @@ export default function LifecycleMonitor() {
   const [layerStats, setLayerStats] = useState<{ working: number; core: number; archive: number }>({ working: 0, core: 0, archive: 0 });
   const [affectedMemories, setAffectedMemories] = useState<any[]>([]);
   const [showAffected, setShowAffected] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [agentId, setAgentId] = useState('');
   const { t } = useI18n();
 
   useEffect(() => {
     getLifecycleLogs(30).then(setLogs);
     getConfig().then(setConfig).catch(() => {});
+    listAgents().then((res: any) => setAgents(res.agents || res || [])).catch(() => {});
     // Get layer stats
     Promise.all([
       listMemories({ layer: 'working', limit: '1', offset: '0' }),
@@ -61,7 +64,7 @@ export default function LifecycleMonitor() {
   const handlePreview = async () => {
     setPreviewing(true);
     try {
-      const result = await previewLifecycle();
+      const result = await previewLifecycle(agentId || undefined);
       setPreview(result);
       setAffectedMemories(result.affectedMemories || []);
     } catch (e: any) {
@@ -74,7 +77,7 @@ export default function LifecycleMonitor() {
     if (!confirm(t('lifecycle.confirmRun'))) return;
     setRunning(true);
     try {
-      const result = await runLifecycle(false);
+      const result = await runLifecycle(false, agentId || undefined);
       setRunResult(result);
       getLifecycleLogs(30).then(setLogs);
       // Refresh layer stats
@@ -240,14 +243,23 @@ export default function LifecycleMonitor() {
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="toolbar">
+      {/* Agent selector + Actions */}
+      <div className="toolbar" style={{ flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Agent</label>
+          <select value={agentId} onChange={e => { setAgentId(e.target.value); setPreview(null); setRunResult(null); }} style={{ fontSize: 13, padding: '4px 8px' }}>
+            <option value="">{t('lifecycle.allAgents') || '全部 Agent'}</option>
+            {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn" onClick={handlePreview} disabled={previewing || running}>
           {previewing ? <><span className="spinner" /> {t('lifecycle.preview')}...</> : t('lifecycle.preview')}
         </button>
         <button className="btn primary" onClick={handleRun} disabled={running || previewing}>
           {running ? <><span className="spinner" /> {t('common.running')}...</> : t('lifecycle.runNow')}
         </button>
+        </div>
       </div>
       {(previewing || running) && <ElapsedTimer />}
 

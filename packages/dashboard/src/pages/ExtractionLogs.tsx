@@ -45,9 +45,6 @@ export default function ExtractionLogs() {
     listAgents().then((res: any) => {
       const list = res.agents || res || [];
       setAgents(list);
-      if (list.length > 0 && !agentId) {
-        setAgentId(list[0].id);
-      }
     }).catch(() => {});
   }, []);
 
@@ -57,10 +54,9 @@ export default function ExtractionLogs() {
   }, [agentId, channel]);
 
   const fetchLogs = async () => {
-    if (!agentId) return;
     setLoading(true);
     try {
-      const res = await getExtractionLogs(agentId, { limit: 100, channel: channel || undefined });
+      const res = await getExtractionLogs(agentId || undefined, { limit: 100, channel: channel || undefined });
       setLogs(res.items || []);
     } catch {
       setLogs([]);
@@ -84,6 +80,7 @@ export default function ExtractionLogs() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('extractionLogs.agent')}</label>
           <select value={agentId} onChange={e => setAgentId(e.target.value)} style={{ fontSize: 13, padding: '4px 8px' }}>
+            <option value="">{t('extractionLogs.allAgents') || '全部 Agent'}</option>
             {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
           </select>
         </div>

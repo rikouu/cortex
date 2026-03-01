@@ -112,13 +112,14 @@ export const deleteRelation = (id: string) =>
   request(`/relations/${id}`, { method: 'DELETE' });
 
 // Lifecycle
-export const runLifecycle = (dryRun = false) =>
-  request('/lifecycle/run', { method: 'POST', body: JSON.stringify({ dry_run: dryRun }) });
+export const runLifecycle = (dryRun = false, agentId?: string) =>
+  request('/lifecycle/run', { method: 'POST', body: JSON.stringify({ dry_run: dryRun, agent_id: agentId }) });
 
-export const previewLifecycle = () => request('/lifecycle/preview');
+export const previewLifecycle = (agentId?: string) =>
+  request(`/lifecycle/preview${agentId ? `?agent_id=${agentId}` : ''}`);
 
-export const getLifecycleLogs = (limit = 50) =>
-  request(`/lifecycle/log?limit=${limit}`);
+export const getLifecycleLogs = (limit = 50, agentId?: string) =>
+  request(`/lifecycle/log?limit=${limit}${agentId ? `&agent_id=${agentId}` : ''}`);
 
 // Config
 export const getConfig = () => request('/config');
@@ -166,8 +167,9 @@ export const deleteAgent = (id: string) =>
 export const getAgentConfig = (id: string) => request(`/agents/${id}/config`);
 
 // Extraction Logs
-export const getExtractionLogs = (agentId: string, opts?: { limit?: number; channel?: string }) => {
-  const params = new URLSearchParams({ agent_id: agentId });
+export const getExtractionLogs = (agentId?: string, opts?: { limit?: number; channel?: string }) => {
+  const params = new URLSearchParams();
+  if (agentId) params.set('agent_id', agentId);
   if (opts?.limit) params.set('limit', String(opts.limit));
   if (opts?.channel) params.set('channel', opts.channel);
   return request(`/extraction-logs?${params}`);

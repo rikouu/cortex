@@ -421,6 +421,7 @@ export default {
     archiveLabel: '📦 Archive',
     mergeLabel: '🔗 Merge',
     compressLabel: '📐 Compress',
+    allAgents: 'All Agents',
     action: 'Action',
     memoryIds: 'Memory IDs',
     details: 'Details',
@@ -436,6 +437,7 @@ export default {
   extractionLogs: {
     title: 'Extraction Logs',
     agent: 'Agent',
+    allAgents: 'All Agents',
     channel: 'Channel',
     allChannels: 'All Channels',
     totalLogs: 'Total Logs',

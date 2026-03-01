@@ -76,7 +76,7 @@ export class LifecycleEngine {
     private config: CortexConfig,
   ) {}
 
-  async run(dryRun = false, trigger: 'manual' | 'scheduled' | 'preview' = 'manual'): Promise<LifecycleReport> {
+  async run(dryRun = false, trigger: 'manual' | 'scheduled' | 'preview' = 'manual', agentId?: string): Promise<LifecycleReport> {
     if (this.running) {
       log.warn('Lifecycle already running, skipping');
       return {
@@ -109,11 +109,11 @@ export class LifecycleEngine {
     try {
       // Phase 1: Clean expired Working memories
       log.info('Phase 1: cleanExpiredWorking');
-      report.expiredWorking = await this.cleanExpiredWorking(dryRun, report.affectedMemories);
+      report.expiredWorking = await this.cleanExpiredWorking(dryRun, report.affectedMemories, agentId);
 
       // Phase 2: Working -> Core promotion
       log.info('Phase 2: promoteToCore');
-      report.promoted = await this.promoteToCore(dryRun, report.affectedMemories);
+      report.promoted = await this.promoteToCore(dryRun, report.affectedMemories, agentId);
 
       // Phase 3: Core dedup and merge
       log.info('Phase 3: deduplicateCore');
@@ -121,7 +121,7 @@ export class LifecycleEngine {
 
       // Phase 4: Core -> Archive demotion
       log.info('Phase 4: archiveStale');
-      report.archived = await this.archiveStale(dryRun, report.affectedMemories);
+      report.archived = await this.archiveStale(dryRun, report.affectedMemories, agentId);
 
       // Phase 5: Archive -> Core compression (never lose data)
       log.info('Phase 5: compressArchive');
@@ -155,7 +155,7 @@ export class LifecycleEngine {
     report.durationMs = Date.now() - start;
 
     if (!dryRun) {
-      insertLifecycleLog('lifecycle_run', [], { ...report, trigger } as any);
+      insertLifecycleLog('lifecycle_run', [], { ...report, trigger, agent_id: agentId || 'all' } as any);
     }
 
     log.info(report, 'Lifecycle run completed');
@@ -163,15 +163,17 @@ export class LifecycleEngine {
   }
 
   /** Preview what the next lifecycle run would do */
-  async preview(): Promise<LifecycleReport> {
-    return this.run(true, 'preview');
+  async preview(agentId?: string): Promise<LifecycleReport> {
+    return this.run(true, 'preview', agentId);
   }
 
-  private async cleanExpiredWorking(dryRun: boolean, affected?: AffectedMemory[]): Promise<number> {
+  private async cleanExpiredWorking(dryRun: boolean, affected?: AffectedMemory[], agentId?: string): Promise<number> {
     const db = getDb();
+    const agentFilter = agentId ? ' AND agent_id = ?' : '';
+    const params = agentId ? [agentId] : [];
     const expired = db.prepare(
-      "SELECT id, content, category, importance FROM memories WHERE layer = 'working' AND expires_at IS NOT NULL AND expires_at < datetime('now')"
-    ).all() as { id: string; content: string; category: string; importance: number }[];
+      `SELECT id, content, category, importance FROM memories WHERE layer = 'working' AND expires_at IS NOT NULL AND expires_at < datetime('now')${agentFilter}`
+    ).all(...params) as { id: string; content: string; category: string; importance: number }[];
 
     if (dryRun && affected) {
       for (const e of expired) {
@@ -201,9 +203,11 @@ export class LifecycleEngine {
     return expired.length;
   }
 
-  private async promoteToCore(dryRun: boolean, affected?: AffectedMemory[]): Promise<number> {
+  private async promoteToCore(dryRun: boolean, affected?: AffectedMemory[], agentId?: string): Promise<number> {
     const db = getDb();
     const threshold = this.config.lifecycle.promotionThreshold;
+    const agentFilter = agentId ? ' AND agent_id = ?' : '';
+    const params = agentId ? [agentId] : [];
 
     // Get Working memories older than 24h that haven't expired
     const candidates = db.prepare(`
@@ -211,8 +215,8 @@ export class LifecycleEngine {
       WHERE layer = 'working'
         AND created_at < datetime('now', '-24 hours')
         AND (expires_at IS NULL OR expires_at > datetime('now'))
-        AND superseded_by IS NULL
-    `).all() as Memory[];
+        AND superseded_by IS NULL${agentFilter}
+    `).all(...params) as Memory[];
 
     let promoted = 0;
     for (const entry of candidates) {
@@ -358,13 +362,15 @@ export class LifecycleEngine {
     return intersection / (trigramsA.size + trigramsB.size - intersection);
   }
 
-  private async archiveStale(dryRun: boolean, affected?: AffectedMemory[]): Promise<number> {
+  private async archiveStale(dryRun: boolean, affected?: AffectedMemory[], agentId?: string): Promise<number> {
     const db = getDb();
     const threshold = this.config.lifecycle.archiveThreshold;
+    const agentFilter = agentId ? ' AND agent_id = ?' : '';
+    const params = agentId ? [agentId] : [];
 
     const coreEntries = db.prepare(
-      "SELECT * FROM memories WHERE layer = 'core' AND superseded_by IS NULL"
-    ).all() as Memory[];
+      `SELECT * FROM memories WHERE layer = 'core' AND superseded_by IS NULL${agentFilter}`
+    ).all(...params) as Memory[];
 
     let archived = 0;
     for (const entry of coreEntries) {

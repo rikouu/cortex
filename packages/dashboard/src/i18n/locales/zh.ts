@@ -421,6 +421,7 @@ export default {
     archiveLabel: '📦 归档',
     mergeLabel: '🔗 合并',
     compressLabel: '📐 压缩',
+    allAgents: '全部 Agent',
     action: '操作',
     memoryIds: '记忆 ID',
     details: '详情',
@@ -436,6 +437,7 @@ export default {
   extractionLogs: {
     title: '提取日志',
     agent: '智能体',
+    allAgents: '全部 Agent',
     channel: '通道',
     allChannels: '所有通道',
     totalLogs: '日志总数',

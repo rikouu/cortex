@@ -46,12 +46,17 @@ export function insertExtractionLog(
 }
 
 export function getExtractionLogs(
-  agentId: string,
+  agentId?: string,
   opts?: { limit?: number; channel?: 'fast' | 'deep' | 'flush' | 'mcp' },
 ): ExtractionLogEntry[] {
   const db = getDb();
-  const conditions = ['agent_id = ?'];
-  const params: any[] = [agentId];
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (agentId) {
+    conditions.push('agent_id = ?');
+    params.push(agentId);
+  }
 
   if (opts?.channel) {
     conditions.push('channel = ?');
@@ -59,11 +64,11 @@ export function getExtractionLogs(
   }
 
   const limit = opts?.limit || 50;
-  const where = conditions.join(' AND ');
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const rows = db.prepare(`
     SELECT * FROM extraction_logs
-    WHERE ${where}
+    ${where}
     ORDER BY created_at DESC
     LIMIT ?
   `).all(...params, limit) as any[];

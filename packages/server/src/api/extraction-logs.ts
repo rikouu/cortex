@@ -6,7 +6,7 @@ export function registerExtractionLogRoutes(app: FastifyInstance): void {
     schema: {
       querystring: {
         type: 'object',
-        required: ['agent_id'],
+        required: [],
         properties: {
           agent_id: { type: 'string' },
           limit: { type: 'integer', default: 50 },
@@ -16,7 +16,7 @@ export function registerExtractionLogRoutes(app: FastifyInstance): void {
     },
   }, async (req) => {
     const query = req.query as any;
-    const logs = getExtractionLogs(query.agent_id, {
+    const logs = getExtractionLogs(query.agent_id || undefined, {
       limit: query.limit,
       channel: query.channel,
     });
