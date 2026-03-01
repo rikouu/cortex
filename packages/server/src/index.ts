@@ -9,7 +9,7 @@ import { loadConfig, createLogger } from './utils/index.js';
 import { initDatabase, closeDatabase } from './db/index.js';
 import { CortexApp } from './app.js';
 import { registerAllRoutes } from './api/router.js';
-import { registerAuthRoutes, registerAuthMiddleware, registerRateLimiting } from './api/security.js';
+import { registerAuthRoutes, registerAuthMiddleware, registerRateLimiting, registerInputLimits } from './api/security.js';
 
 const log = createLogger('server');
 
@@ -41,6 +41,7 @@ async function main() {
 
   // Security middleware
   registerAuthMiddleware(app, config.auth?.token);
+  registerInputLimits(app);
   if (config.rateLimit?.enabled !== false) {
     registerRateLimiting(app, {
       windowMs: config.rateLimit?.windowMs,

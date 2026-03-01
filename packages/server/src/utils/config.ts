@@ -37,7 +37,7 @@ const CortexConfigSchema = z.object({
     token: z.string().optional(),
   }).default({}),
   cors: z.object({
-    origin: z.union([z.string(), z.array(z.string()), z.boolean()]).default(true),
+    origin: z.union([z.string(), z.array(z.string()), z.boolean()]).default(false),
   }).default({}),
   rateLimit: z.object({
     enabled: z.boolean().default(true),

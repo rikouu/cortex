@@ -141,6 +141,10 @@ export class HybridSearchEngine {
     }
 
     // Vector results: already sorted by distance (best first)
+    // Collect missing IDs for batch query (avoid N+1)
+    const missingIds: string[] = [];
+    const vectorScores = new Map<string, number>();
+
     for (let i = 0; i < vectorResults.length; i++) {
       const r = vectorResults[i]!;
       const rrfScore = 1 / (RRF_K + i);
@@ -148,11 +152,25 @@ export class HybridSearchEngine {
       if (existing) {
         existing.vectorScore = rrfScore;
       } else {
-        const db = getDb();
-        const memory = db.prepare('SELECT * FROM memories WHERE id = ?').get(r.id) as Memory | undefined;
-        if (memory && !memory.superseded_by) {
-          scoreMap.set(r.id, { memory, textScore: 0, vectorScore: rrfScore });
-        }
+        missingIds.push(r.id);
+        vectorScores.set(r.id, rrfScore);
+      }
+    }
+
+    // Batch fetch all missing memories in one query
+    if (missingIds.length > 0) {
+      const db = getDb();
+      const placeholders = missingIds.map(() => '?').join(',');
+      const memories = db.prepare(
+        `SELECT * FROM memories WHERE id IN (${placeholders}) AND superseded_by IS NULL`
+      ).all(...missingIds) as Memory[];
+
+      for (const memory of memories) {
+        scoreMap.set(memory.id, {
+          memory,
+          textScore: 0,
+          vectorScore: vectorScores.get(memory.id) || 0,
+        });
       }
     }
 

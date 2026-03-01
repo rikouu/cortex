@@ -1,7 +1,14 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('security');
+
+/** Timing-safe string comparison to prevent timing attacks */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 // ============ Auth Routes ============
 
@@ -18,7 +25,7 @@ export function registerAuthRoutes(app: FastifyInstance, token?: string): void {
     }
     const body = req.body as any;
     const provided = body?.token;
-    if (provided && provided === token) {
+    if (provided && safeCompare(provided, token)) {
       return { valid: true };
     }
     return { valid: false };
@@ -49,9 +56,45 @@ export function registerAuthMiddleware(app: FastifyInstance, token?: string): vo
     }
 
     const provided = authHeader.slice(7);
-    if (provided !== token) {
+    if (!safeCompare(provided, token)) {
       log.warn({ ip: req.ip, url: req.url }, 'Invalid auth token');
       reply.code(403).send({ error: 'Forbidden', message: 'Invalid token' });
+      return;
+    }
+  });
+}
+
+// ============ Rate Limiting ============
+
+// ============ Input Size Limits ============
+
+const MAX_MESSAGE_LENGTH = 50_000;
+const MAX_CONTENT_LENGTH = 10_000;
+
+export function registerInputLimits(app: FastifyInstance): void {
+  app.addHook('preHandler', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!req.body || typeof req.body !== 'object') return;
+    const body = req.body as Record<string, unknown>;
+
+    if (typeof body.user_message === 'string' && body.user_message.length > MAX_MESSAGE_LENGTH) {
+      reply.code(413).send({
+        error: 'Payload Too Large',
+        message: `user_message exceeds max length of ${MAX_MESSAGE_LENGTH} characters`,
+      });
+      return;
+    }
+    if (typeof body.assistant_message === 'string' && body.assistant_message.length > MAX_MESSAGE_LENGTH) {
+      reply.code(413).send({
+        error: 'Payload Too Large',
+        message: `assistant_message exceeds max length of ${MAX_MESSAGE_LENGTH} characters`,
+      });
+      return;
+    }
+    if (typeof body.content === 'string' && body.content.length > MAX_CONTENT_LENGTH) {
+      reply.code(413).send({
+        error: 'Payload Too Large',
+        message: `content exceeds max length of ${MAX_CONTENT_LENGTH} characters`,
+      });
       return;
     }
   });
