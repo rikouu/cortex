@@ -1,181 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { getConfig, updateConfig, triggerExport, triggerReindex, triggerImport, testLLM, testEmbedding } from '../api/client.js';
-import { useI18n } from '../i18n/index.js';
-
-type SectionKey = 'llm' | 'search' | 'lifecycle' | 'layers' | 'gate' | 'sieve';
-
-// ─── Provider & Model Presets ────────────────────────────────────────────────
-
-interface ProviderPreset {
-  label: string;
-  defaultBaseUrl: string;
-  models: string[];
-  envKey: string;
-}
-
-const LLM_PROVIDERS: Record<string, ProviderPreset> = {
-  openai: {
-    label: 'OpenAI',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    models: ['gpt-4o-mini', 'gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4o', 'o4-mini', 'o3-mini'],
-    envKey: 'OPENAI_API_KEY',
-  },
-  anthropic: {
-    label: 'Anthropic',
-    defaultBaseUrl: 'https://api.anthropic.com',
-    models: [
-      'claude-haiku-4-5-20251001',
-      'claude-sonnet-4-5-20250929',
-      'claude-opus-4-5-20251022',
-    ],
-    envKey: 'ANTHROPIC_API_KEY',
-  },
-  google: {
-    label: 'Google Gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com',
-    models: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash'],
-    envKey: 'GOOGLE_API_KEY',
-  },
-  deepseek: {
-    label: 'DeepSeek',
-    defaultBaseUrl: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
-    envKey: 'DEEPSEEK_API_KEY',
-  },
-  openrouter: {
-    label: 'OpenRouter',
-    defaultBaseUrl: 'https://openrouter.ai/api/v1',
-    models: [
-      'anthropic/claude-haiku-4-5',
-      'anthropic/claude-sonnet-4-5',
-      'google/gemini-2.5-flash',
-      'google/gemini-2.5-pro',
-      'openai/gpt-4o-mini',
-      'deepseek/deepseek-chat-v3',
-      'deepseek/deepseek-r1',
-      'meta-llama/llama-4-maverick',
-      'qwen/qwen3-235b-a22b',
-    ],
-    envKey: 'OPENROUTER_API_KEY',
-  },
-  ollama: {
-    label: 'Ollama (Local)',
-    defaultBaseUrl: 'http://localhost:11434',
-    models: [
-      'qwen2.5:3b', 'qwen2.5:7b', 'qwen2.5:14b',
-      'llama3.2:3b', 'llama3.2:8b',
-      'mistral:7b', 'mistral-nemo:12b',
-      'deepseek-r1:7b', 'deepseek-r1:14b',
-      'gemma2:9b', 'phi3:14b',
-    ],
-    envKey: '',
-  },
-  none: {
-    label: 'Disabled',
-    defaultBaseUrl: '',
-    models: [],
-    envKey: '',
-  },
-};
-
-const EMBEDDING_PROVIDERS: Record<string, ProviderPreset> = {
-  openai: {
-    label: 'OpenAI',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    models: [
-      'text-embedding-3-small',
-      'text-embedding-3-large',
-      'text-embedding-ada-002',
-    ],
-    envKey: 'OPENAI_API_KEY',
-  },
-  google: {
-    label: 'Google Gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com',
-    models: [
-      'gemini-embedding-001',
-      'text-embedding-004',
-    ],
-    envKey: 'GOOGLE_API_KEY',
-  },
-  voyage: {
-    label: 'Voyage AI',
-    defaultBaseUrl: 'https://api.voyageai.com/v1',
-    models: [
-      'voyage-3', 'voyage-3-lite',
-      'voyage-code-3',
-    ],
-    envKey: 'VOYAGE_API_KEY',
-  },
-  ollama: {
-    label: 'Ollama (Local)',
-    defaultBaseUrl: 'http://localhost:11434',
-    models: [
-      'bge-m3', 'nomic-embed-text',
-      'mxbai-embed-large', 'all-minilm',
-    ],
-    envKey: '',
-  },
-  none: {
-    label: 'Disabled',
-    defaultBaseUrl: '',
-    models: [],
-    envKey: '',
-  },
-};
-
-/** Recommended embedding dimensions per model */
-const EMBEDDING_DIMENSIONS: Record<string, number> = {
-  // OpenAI
-  'text-embedding-3-small': 1536,
-  'text-embedding-3-large': 3072,
-  'text-embedding-ada-002': 1536,
-  // Google
-  'gemini-embedding-001': 768,
-  'text-embedding-004': 768,
-  // Voyage
-  'voyage-3': 1024,
-  'voyage-3-lite': 512,
-  'voyage-code-3': 1024,
-  // Ollama
-  'bge-m3': 1024,
-  'nomic-embed-text': 768,
-  'mxbai-embed-large': 1024,
-  'all-minilm': 384,
-};
-
-const CUSTOM_MODEL = '__custom__';
-
-// ─── Schedule Presets ────────────────────────────────────────────────────────
-
-interface SchedulePreset {
-  value: string;
-  labelKey: string;
-}
-
-const SCHEDULE_PRESETS: SchedulePreset[] = [
-  { value: '', labelKey: 'settings.scheduleDisabled' },
-  { value: '0 * * * *', labelKey: 'settings.scheduleEveryHour' },
-  { value: '0 */6 * * *', labelKey: 'settings.scheduleEvery6Hours' },
-  { value: '0 */12 * * *', labelKey: 'settings.scheduleEvery12Hours' },
-  { value: '0 0 * * *', labelKey: 'settings.scheduleDailyMidnight' },
-  { value: '0 3 * * *', labelKey: 'settings.scheduleDailyAt3' },
-  { value: '0 6 * * *', labelKey: 'settings.scheduleDailyAt6' },
-];
-
-const SCHEDULE_CUSTOM = '__custom__';
-
-// ─── Duration Helpers ────────────────────────────────────────────────────────
-
-function parseDuration(s: string): { num: string; unit: string } {
-  if (!s) return { num: '', unit: 'h' };
-  const m = s.match(/^(\d+)\s*(m|h|d)$/i);
-  if (m) return { num: m[1], unit: m[2].toLowerCase() };
-  const numOnly = s.replace(/[^0-9]/g, '');
-  return { num: numOnly || '', unit: 'h' };
-}
-
-// ─── Component ───────────────────────────────────────────────────────────────
+import { getConfig, updateConfig, testLLM, testEmbedding } from '../../api/client.js';
+import { useI18n } from '../../i18n/index.js';
+import {
+  SectionKey,
+  LLM_PROVIDERS,
+  EMBEDDING_PROVIDERS,
+  EMBEDDING_DIMENSIONS,
+  CUSTOM_MODEL,
+  SCHEDULE_PRESETS,
+  SCHEDULE_CUSTOM,
+  ProviderPreset,
+  parseDuration,
+} from './types.js';
+import LlmSection from './sections/LlmSection.js';
+import SearchSection from './sections/SearchSection.js';
+import LifecycleSection from './sections/LifecycleSection.js';
+import LayersSection from './sections/LayersSection.js';
+import GateSection from './sections/GateSection.js';
+import SieveSection from './sections/SieveSection.js';
+import DataManagement from './sections/DataManagement.js';
 
 export default function Settings() {
   const [config, setConfig] = useState<any>(null);
@@ -187,7 +30,7 @@ export default function Settings() {
   const { t } = useI18n();
 
   useEffect(() => {
-    getConfig().then(setConfig).catch(e => setError(e.message));
+    getConfig().then(setConfig).catch((e: any) => setError(e.message));
   }, []);
 
   useEffect(() => {
@@ -214,15 +57,6 @@ export default function Settings() {
       if (p.value === s) return t(p.labelKey);
     }
     return s || '-';
-  };
-
-  const handleExport = async () => {
-    try {
-      await triggerExport();
-      setToast({ message: t('settings.toastMarkdownExported'), type: 'success' });
-    } catch (e: any) {
-      setToast({ message: e.message, type: 'error' });
-    }
   };
 
   // ─── Edit lifecycle ────────────────────────────────────────────────────────
@@ -737,7 +571,7 @@ export default function Settings() {
     }
   };
 
-  // ─── LLM Provider Row (reusable for extraction, lifecycle, embedding) ──────
+  // ─── LLM Provider Block ───────────────────────────────────────────────────
 
   const renderProviderBlock = (
     title: string,
@@ -967,390 +801,83 @@ export default function Settings() {
         </table>
       </div>
 
-      {/* ── LLM & Embedding ── */}
-      <div className="card">
-        {sectionHeader(t('settings.llmEmbedding'), 'llm')}
-        {isEditing('llm') ? (
-          <>
-            {renderProviderBlock(t('settings.extractionLlm'), 'extraction', LLM_PROVIDERS)}
-            {renderProviderBlock(t('settings.lifecycleLlm'), 'lifecycle', LLM_PROVIDERS)}
-            {renderProviderBlock(t('settings.embedding'), 'embedding', EMBEDDING_PROVIDERS)}
-          </>
-        ) : (
-          <table>
-            <tbody>
-              <tr>
-                <td>{t('settings.extractionLlm')}</td>
-                <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>{config.llm?.extraction?.provider} / {config.llm?.extraction?.model}</span>
-                  <button
-                    className="btn"
-                    style={{ fontSize: 11, padding: '2px 8px' }}
-                    disabled={testState['llm.extraction']?.status === 'testing'}
-                    onClick={() => handleTestLLM('extraction')}
-                  >
-                    {testState['llm.extraction']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
-                  </button>
-                  {testState['llm.extraction']?.status === 'success' && (
-                    <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['llm.extraction'].latency ?? 0 })}</span>
-                  )}
-                  {testState['llm.extraction']?.status === 'error' && (
-                    <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['llm.extraction'].message ?? '' })}</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td>{t('settings.lifecycleLlm')}</td>
-                <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>{config.llm?.lifecycle?.provider} / {config.llm?.lifecycle?.model}</span>
-                  <button
-                    className="btn"
-                    style={{ fontSize: 11, padding: '2px 8px' }}
-                    disabled={testState['llm.lifecycle']?.status === 'testing'}
-                    onClick={() => handleTestLLM('lifecycle')}
-                  >
-                    {testState['llm.lifecycle']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
-                  </button>
-                  {testState['llm.lifecycle']?.status === 'success' && (
-                    <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['llm.lifecycle'].latency ?? 0 })}</span>
-                  )}
-                  {testState['llm.lifecycle']?.status === 'error' && (
-                    <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['llm.lifecycle'].message ?? '' })}</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td>{t('settings.embedding')}</td>
-                <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>{config.embedding?.provider} / {config.embedding?.model}</span>
-                  <button
-                    className="btn"
-                    style={{ fontSize: 11, padding: '2px 8px' }}
-                    disabled={testState['embedding']?.status === 'testing'}
-                    onClick={() => handleTestEmbedding()}
-                  >
-                    {testState['embedding']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
-                  </button>
-                  {testState['embedding']?.status === 'success' && (
-                    <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['embedding'].latency ?? 0 })}</span>
-                  )}
-                  {testState['embedding']?.status === 'error' && (
-                    <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['embedding'].message ?? '' })}</span>
-                  )}
-                </td>
-              </tr>
-              <tr><td>{t('settings.embeddingDimensions')}</td><td>{config.embedding?.dimensions}</td></tr>
-            </tbody>
-          </table>
-        )}
-      </div>
+      <LlmSection
+        config={config}
+        editing={isEditing('llm')}
+        sectionHeader={sectionHeader}
+        renderProviderBlock={renderProviderBlock}
+        testState={testState}
+        handleTestLLM={handleTestLLM}
+        handleTestEmbedding={handleTestEmbedding}
+        t={t}
+      />
 
-      {/* ── Search ── */}
-      <div className="card">
-        {sectionHeader(t('settings.searchTitle'), 'search')}
-        {isEditing('search') ? (
-          <div style={{ padding: '4px 0' }}>
-            {renderToggleField(t('settings.hybridSearch'), t('settings.hybridSearchDesc'), 'hybrid')}
-            {renderLinkedWeights()}
-            {renderDuration(t('settings.recencyBoostWindow'), t('settings.recencyBoostWindowDesc'), 'recencyBoostWindow')}
+      <SearchSection
+        config={config}
+        editing={isEditing('search')}
+        draft={draft}
+        setDraft={setDraft}
+        sectionHeader={sectionHeader}
+        displayRow={displayRow}
+        renderToggleField={renderToggleField}
+        renderLinkedWeights={renderLinkedWeights}
+        renderDuration={renderDuration}
+        humanizeDuration={humanizeDuration}
+        t={t}
+      />
 
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
-              <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔍 Search Enhancement</label>
+      <LifecycleSection
+        config={config}
+        editing={isEditing('lifecycle')}
+        sectionHeader={sectionHeader}
+        displayRow={displayRow}
+        renderSchedule={renderSchedule}
+        renderSlider={renderSlider}
+        humanizeCron={humanizeCron}
+        t={t}
+      />
 
-              {renderToggleField('🎯 Reranker', 'After search, LLM re-scores all results for query-specific relevance. Final score = reranker × weight + original × (1-weight). Adds ~2-3s latency, 1 LLM call.', 'reranker.enabled')}
+      <LayersSection
+        config={config}
+        editing={isEditing('layers')}
+        sectionHeader={sectionHeader}
+        displayRow={displayRow}
+        renderDuration={renderDuration}
+        renderNumberField={renderNumberField}
+        renderToggleField={renderToggleField}
+        humanizeDuration={humanizeDuration}
+        t={t}
+      />
 
-              {draft?.reranker?.enabled && (
-                <div style={{ marginLeft: 16 }}>
-                  <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Provider</label>
-                  <select
-                    value={draft?.reranker?.provider ?? 'none'}
-                    onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, provider: e.target.value } }))}
-                    style={{ width: '100%', marginBottom: 8 }}
-                  >
-                    <option value="llm">LLM (uses extraction model)</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="none">Disabled</option>
-                  </select>
+      <GateSection
+        config={config}
+        editing={isEditing('gate')}
+        draft={draft}
+        setDraft={setDraft}
+        sectionHeader={sectionHeader}
+        displayRow={displayRow}
+        renderNumberField={renderNumberField}
+        renderToggleField={renderToggleField}
+        t={t}
+      />
 
-                  {draft?.reranker?.provider === 'cohere' && (
-                    <div style={{ marginBottom: 8 }}>
-                      <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Cohere API Key</label>
-                      <input
-                        type="password"
-                        value={draft?.reranker?.apiKey ?? ''}
-                        onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, apiKey: e.target.value } }))}
-                        placeholder="Enter Cohere API key"
-                        style={{ width: '100%' }}
-                      />
-                    </div>
-                  )}
+      <SieveSection
+        config={config}
+        editing={isEditing('sieve')}
+        sectionHeader={sectionHeader}
+        displayRow={displayRow}
+        renderToggleField={renderToggleField}
+        renderNumberField={renderNumberField}
+        renderSlider={renderSlider}
+        t={t}
+      />
 
-                  <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Top N results</label>
-                  <input
-                    type="number"
-                    value={draft?.reranker?.topN ?? 10}
-                    onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, topN: Number(e.target.value) } }))}
-                    min={3} max={20} style={{ width: 80 }}
-                  />
-
-                  <div style={{ marginTop: 12 }}>
-                    <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
-                      Score Fusion — Reranker : Original = {((draft?.reranker?.weight ?? 0.5) * 100).toFixed(0)}% : {((1 - (draft?.reranker?.weight ?? 0.5)) * 100).toFixed(0)}%
-                    </label>
-                    <input
-                      type="range"
-                      value={draft?.reranker?.weight ?? 0.5}
-                      onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, weight: Number(e.target.value) } }))}
-                      min={0} max={1} step={0.05} style={{ width: '100%' }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
-                      <span>← 信任原始分数</span>
-                      <span>信任 Reranker →</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <table>
-            <tbody>
-              {displayRow(t('settings.hybridSearch'), config.search?.hybrid ? t('common.on') : t('common.off'), t('settings.hybridSearchDesc'))}
-              {displayRow(t('settings.vectorWeight'), config.search?.vectorWeight?.toFixed(2))}
-              {displayRow(t('settings.textWeight'), config.search?.textWeight?.toFixed(2))}
-              {displayRow(t('settings.recencyBoostWindow'), humanizeDuration(config.search?.recencyBoostWindow), t('settings.recencyBoostWindowDesc'))}
-              {displayRow('Reranker', config.search?.reranker?.enabled ? `${config.search.reranker.provider} (top ${config.search.reranker.topN}, weight ${((config.search.reranker.weight ?? 0.5) * 100).toFixed(0)}%)` : 'Off')}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ── Lifecycle ── */}
-      <div className="card">
-        {sectionHeader(t('settings.lifecycleTitle'), 'lifecycle')}
-        {isEditing('lifecycle') ? (
-          <div style={{ padding: '4px 0' }}>
-            {renderSchedule()}
-            {renderSlider(
-              t('settings.promotionThreshold'),
-              t('settings.promotionThresholdDesc'),
-              'promotionThreshold', 0, 1, 0.05,
-            )}
-            {renderSlider(
-              t('settings.archiveThreshold'),
-              t('settings.archiveThresholdDesc'),
-              'archiveThreshold', 0, 1, 0.05,
-            )}
-            {renderSlider(
-              t('settings.decayLambda'),
-              t('settings.decayLambdaDesc'),
-              'decayLambda', 0.001, 0.2, 0.001,
-            )}
-          </div>
-        ) : (
-          <table>
-            <tbody>
-              {displayRow(t('settings.scheduleLabel'), humanizeCron(config.lifecycle?.schedule), t('settings.scheduleDesc'))}
-              {displayRow(t('settings.promotionThreshold'), config.lifecycle?.promotionThreshold?.toFixed(2), t('settings.promotionThresholdDesc'))}
-              {displayRow(t('settings.archiveThreshold'), config.lifecycle?.archiveThreshold?.toFixed(2), t('settings.archiveThresholdDesc'))}
-              {displayRow(t('settings.decayLambda'), config.lifecycle?.decayLambda?.toFixed(3), t('settings.decayLambdaDesc'))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ── Layers ── */}
-      <div className="card">
-        {sectionHeader(t('settings.layersTitle'), 'layers')}
-        {isEditing('layers') ? (
-          <div style={{ padding: '4px 0' }}>
-            {renderDuration(t('settings.workingTtl'), t('settings.workingTtlDesc'), 'working.ttl')}
-            {renderNumberField(t('settings.coreMaxEntries'), t('settings.coreMaxEntriesDesc'), 'core.maxEntries', 1, 100000)}
-            {renderDuration(t('settings.archiveTtl'), t('settings.archiveTtlDesc'), 'archive.ttl')}
-            {renderToggleField(t('settings.archiveCompressBack'), t('settings.archiveCompressBackDesc'), 'archive.compressBackToCore')}
-          </div>
-        ) : (
-          <table>
-            <tbody>
-              {displayRow(t('settings.workingTtl'), humanizeDuration(config.layers?.working?.ttl), t('settings.workingTtlDesc'))}
-              {displayRow(t('settings.coreMaxEntries'), config.layers?.core?.maxEntries, t('settings.coreMaxEntriesDesc'))}
-              {displayRow(t('settings.archiveTtl'), humanizeDuration(config.layers?.archive?.ttl), t('settings.archiveTtlDesc'))}
-              {displayRow(t('settings.archiveCompressBack'), config.layers?.archive?.compressBackToCore ? t('common.on') : t('common.off'), t('settings.archiveCompressBackDesc'))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ── Gate ── */}
-      <div className="card">
-        {sectionHeader(t('settings.gateTitle'), 'gate')}
-        {isEditing('gate') ? (
-          <div style={{ padding: '4px 0' }}>
-            {renderNumberField('💉 Injection Budget (tokens)', 'Max tokens injected into AI context. Determines how many memories the AI can see. Recommended: 3000-5000. Too low = AI forgets, too high = wastes context window.', 'maxInjectionTokens', 500, 50000)}
-            {renderNumberField('🔍 Search Candidates', 'How many memories to retrieve per search query before reranking. Should be > Reranker Top N to give reranker room to filter. Recommended: 20-30.', 'searchLimit', 5, 50)}
-            {renderToggleField(t('settings.skipSmallTalk'), t('settings.skipSmallTalkDesc'), 'skipSmallTalk')}
-
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
-              <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔄 Query Expansion</label>
-              {renderToggleField('Query Expansion', 'LLM generates 2-3 variant queries (synonyms, rephrasings) to expand the candidate pool. Adds ~2s latency but significantly improves recall for vague queries. Uses 1 LLM call.', 'queryExpansion.enabled')}
-              {draft?.queryExpansion?.enabled && (
-                <div style={{ marginLeft: 16 }}>
-                  <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Max Variants</label>
-                  <input
-                    type="number"
-                    value={draft?.queryExpansion?.maxVariants ?? 3}
-                    onChange={e => setDraft((d: any) => ({ ...d, queryExpansion: { ...d.queryExpansion, maxVariants: Number(e.target.value) } }))}
-                    min={2} max={5} style={{ width: 80 }}
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>Including original query</span>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <table>
-            <tbody>
-              {displayRow('💉 Injection Budget', `${config.gate?.maxInjectionTokens} tokens`, 'Max tokens injected into AI context')}
-              {displayRow('🔍 Search Candidates', config.gate?.searchLimit ?? 30, 'Memories retrieved per query')}
-              {displayRow(t('settings.skipSmallTalk'), config.gate?.skipSmallTalk ? t('common.on') : t('common.off'), t('settings.skipSmallTalkDesc'))}
-              {displayRow('Query Expansion', config.gate?.queryExpansion?.enabled ? `On (${config.gate.queryExpansion.maxVariants} variants)` : 'Off')}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ── Sieve (Extraction) ── */}
-      <div className="card">
-        {sectionHeader(t('settings.contextMessages').replace(/ ?\(.*$/, '').split(' ').slice(0, 2).join(' ') || 'Sieve', 'sieve')}
-        {isEditing('sieve') ? (
-          <div style={{ padding: '4px 0' }}>
-            {renderToggleField(t('settings.fastChannelEnabled'), t('settings.fastChannelEnabledDesc'), 'fastChannelEnabled')}
-            {renderNumberField(t('settings.contextMessages'), t('settings.contextMessagesDesc'), 'contextMessages', 2, 20)}
-            {renderNumberField(t('settings.maxConversationChars'), t('settings.maxConversationCharsDesc'), 'maxConversationChars', 2000, 16000)}
-            {renderToggleField(t('settings.smartUpdate'), t('settings.smartUpdateDesc'), 'smartUpdate')}
-            {renderSlider(t('settings.similarityThreshold'), t('settings.similarityThresholdDesc'), 'similarityThreshold', 0.1, 0.8, 0.01)}
-            {renderSlider(t('settings.exactDupThreshold'), t('settings.exactDupThresholdDesc'), 'exactDupThreshold', 0.01, 0.2, 0.01)}
-            {renderToggleField(t('settings.relationExtraction'), t('settings.relationExtractionDesc'), 'relationExtraction')}
-          </div>
-        ) : (
-          <table>
-            <tbody>
-              {displayRow(t('settings.fastChannelEnabled'), (config.sieve?.fastChannelEnabled ?? true) ? t('common.on') : t('common.off'), t('settings.fastChannelEnabledDesc'))}
-              {displayRow(t('settings.contextMessages'), config.sieve?.contextMessages ?? 4, t('settings.contextMessagesDesc'))}
-              {displayRow(t('settings.maxConversationChars'), config.sieve?.maxConversationChars ?? 4000, t('settings.maxConversationCharsDesc'))}
-              {displayRow(t('settings.smartUpdate'), (config.sieve?.smartUpdate ?? true) ? t('common.on') : t('common.off'), t('settings.smartUpdateDesc'))}
-              {displayRow(t('settings.similarityThreshold'), (config.sieve?.similarityThreshold ?? 0.35).toFixed(2), t('settings.similarityThresholdDesc'))}
-              {displayRow(t('settings.exactDupThreshold'), (config.sieve?.exactDupThreshold ?? 0.08).toFixed(2), t('settings.exactDupThresholdDesc'))}
-              {displayRow(t('settings.relationExtraction'), (config.sieve?.relationExtraction ?? true) ? t('common.on') : t('common.off'), t('settings.relationExtractionDesc'))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* ── Data Management ── */}
-      <div className="card">
-        <h3 style={{ marginBottom: 12 }}>{t('settings.dataManagement')}</h3>
-
-        {/* Export */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.exportLabel')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={async () => {
-              try {
-                const data = await triggerExport('json');
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `cortex-export-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-                URL.revokeObjectURL(url);
-                setToast({ message: t('settings.toastJsonExported'), type: 'success' });
-              } catch (e: any) { setToast({ message: e.message, type: 'error' }); }
-            }}>{t('settings.exportJson')}</button>
-            <button className="btn" onClick={async () => {
-              try {
-                const data = await triggerExport('markdown');
-                const blob = new Blob([data.content], { type: 'text/markdown' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `cortex-export-${new Date().toISOString().slice(0, 10)}.md`; a.click();
-                URL.revokeObjectURL(url);
-                setToast({ message: t('settings.toastMarkdownExported'), type: 'success' });
-              } catch (e: any) { setToast({ message: e.message, type: 'error' }); }
-            }}>{t('settings.exportMarkdown')}</button>
-          </div>
-        </div>
-
-        {/* Reindex */}
-        <div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.maintenance')}</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn" onClick={async () => {
-              if (!confirm(t('settings.confirmReindex'))) return;
-              try {
-                setToast({ message: t('settings.toastReindexStarted'), type: 'success' });
-                const result = await triggerReindex();
-                setToast({ message: t('settings.toastReindexComplete', { indexed: result.indexed, total: result.total, errors: result.errors }), type: result.errors > 0 ? 'error' : 'success' });
-              } catch (e: any) { setToast({ message: t('settings.toastReindexFailed', { message: e.message }), type: 'error' }); }
-            }}>{t('settings.rebuildIndex')}</button>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.rebuildHint')}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Full Config JSON ── */}
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3>{t('settings.fullConfig')}</h3>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn" onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = '.json';
-              input.onchange = async (e: any) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  const text = await file.text();
-                  const parsed = JSON.parse(text);
-                  // Strip read-only / sensitive fields that shouldn't be imported
-                  delete parsed.port;
-                  delete parsed.host;
-                  delete parsed.storage;
-                  delete parsed.auth;
-                  delete parsed.cors;
-                  delete parsed.rateLimit;
-                  delete parsed.vectorBackend;
-                  // Strip masked apiKey fields (hasApiKey: true but no real key)
-                  for (const key of ['extraction', 'lifecycle']) {
-                    if (parsed.llm?.[key]?.hasApiKey !== undefined) {
-                      delete parsed.llm[key].hasApiKey;
-                      if (!parsed.llm[key].apiKey) delete parsed.llm[key].apiKey;
-                    }
-                  }
-                  if (parsed.embedding?.hasApiKey !== undefined) {
-                    delete parsed.embedding.hasApiKey;
-                    if (!parsed.embedding.apiKey) delete parsed.embedding.apiKey;
-                  }
-                  if (!confirm(t('settings.confirmImportConfig'))) return;
-                  await updateConfig(parsed);
-                  const refreshed = await getConfig();
-                  setConfig(refreshed);
-                  setToast({ message: t('settings.toastConfigImported'), type: 'success' });
-                } catch (e: any) {
-                  setToast({ message: t('settings.toastConfigImportFailed', { message: e.message }), type: 'error' });
-                }
-              };
-              input.click();
-            }}>{t('settings.importConfig')}</button>
-            <button className="btn" onClick={() => {
-              const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a'); a.href = url; a.download = `cortex-config-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-              URL.revokeObjectURL(url);
-              setToast({ message: t('settings.toastJsonExported'), type: 'success' });
-            }}>{t('settings.exportJson')}</button>
-          </div>
-        </div>
-        <pre className="json-debug">{JSON.stringify(config, null, 2)}</pre>
-      </div>
+      <DataManagement
+        config={config}
+        setConfig={setConfig}
+        setToast={setToast}
+        t={t}
+      />
     </div>
   );
 }

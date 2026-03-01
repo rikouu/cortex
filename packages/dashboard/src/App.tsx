@@ -5,7 +5,7 @@ import MemoryBrowser from './pages/MemoryBrowser.js';
 import SearchDebug from './pages/SearchDebug.js';
 import RelationGraph from './pages/RelationGraph.js';
 import LifecycleMonitor from './pages/LifecycleMonitor.js';
-import Settings from './pages/Settings.js';
+import Settings from './pages/Settings/index.js';
 import Agents from './pages/Agents.js';
 import AgentDetail from './pages/AgentDetail.js';
 import ExtractionLogs from './pages/ExtractionLogs.js';
