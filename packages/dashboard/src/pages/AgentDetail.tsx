@@ -150,7 +150,7 @@ function StepBlock({ step, title, description, code, children, isLast }: {
           </p>
         )}
         {code && (
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', overflow: 'hidden' }}>
             <button
               className="btn"
               style={{ position: 'absolute', top: 8, right: 8, fontSize: 11, padding: '3px 10px', zIndex: 1 }}
