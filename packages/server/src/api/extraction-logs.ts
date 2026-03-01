@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getExtractionLogs } from '../core/extraction-log.js';
+import { getExtractionLogs, countExtractionLogs } from '../core/extraction-log.js';
 
 export function registerExtractionLogRoutes(app: FastifyInstance): void {
   app.get('/api/v1/extraction-logs', {
@@ -20,6 +20,7 @@ export function registerExtractionLogRoutes(app: FastifyInstance): void {
       limit: query.limit,
       channel: query.channel,
     });
-    return { items: logs, total: logs.length };
+    const total = countExtractionLogs(query.agent_id || undefined, { channel: query.channel });
+    return { items: logs, total };
   });
 }

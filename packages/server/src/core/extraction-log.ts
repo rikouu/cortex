@@ -88,3 +88,17 @@ export function getExtractionLogs(
     created_at: r.created_at,
   }));
 }
+
+export function countExtractionLogs(
+  agentId?: string,
+  opts?: { channel?: string },
+): number {
+  const db = getDb();
+  const conditions: string[] = [];
+  const params: any[] = [];
+  if (agentId) { conditions.push('agent_id = ?'); params.push(agentId); }
+  if (opts?.channel) { conditions.push('channel = ?'); params.push(opts.channel); }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const row = db.prepare(`SELECT count(*) as c FROM extraction_logs ${where}`).get(...params) as { c: number };
+  return row.c;
+}
