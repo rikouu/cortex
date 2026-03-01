@@ -10,6 +10,7 @@ export function registerExtractionLogRoutes(app: FastifyInstance): void {
         properties: {
           agent_id: { type: 'string' },
           limit: { type: 'integer', default: 50 },
+          offset: { type: 'integer', default: 0 },
           channel: { type: 'string', enum: ['fast', 'deep', 'flush'] },
         },
       },
@@ -18,6 +19,7 @@ export function registerExtractionLogRoutes(app: FastifyInstance): void {
     const query = req.query as any;
     const logs = getExtractionLogs(query.agent_id || undefined, {
       limit: query.limit,
+      offset: query.offset,
       channel: query.channel,
     });
     const total = countExtractionLogs(query.agent_id || undefined, { channel: query.channel });

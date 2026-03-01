@@ -47,7 +47,7 @@ export function insertExtractionLog(
 
 export function getExtractionLogs(
   agentId?: string,
-  opts?: { limit?: number; channel?: 'fast' | 'deep' | 'flush' | 'mcp' },
+  opts?: { limit?: number; offset?: number; channel?: 'fast' | 'deep' | 'flush' | 'mcp' },
 ): ExtractionLogEntry[] {
   const db = getDb();
   const conditions: string[] = [];
@@ -64,14 +64,15 @@ export function getExtractionLogs(
   }
 
   const limit = opts?.limit || 50;
+  const offset = opts?.offset || 0;
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const rows = db.prepare(`
     SELECT * FROM extraction_logs
     ${where}
     ORDER BY created_at DESC
-    LIMIT ?
-  `).all(...params, limit) as any[];
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as any[];
 
   return rows.map((r) => ({
     id: r.id,

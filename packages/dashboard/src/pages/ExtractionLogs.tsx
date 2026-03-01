@@ -40,6 +40,8 @@ export default function ExtractionLogs() {
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const limit = 20;
   const { t } = useI18n();
 
   useEffect(() => {
@@ -51,12 +53,12 @@ export default function ExtractionLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [agentId, channel]);
+  }, [agentId, channel, page]);
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await getExtractionLogs(agentId || undefined, { limit: 100, channel: channel || undefined });
+      const res = await getExtractionLogs(agentId || undefined, { limit, offset: page * limit, channel: channel || undefined });
       setLogs(res.items || []);
       setTotalCount(res.total ?? res.items?.length ?? 0);
     } catch {
@@ -80,14 +82,14 @@ export default function ExtractionLogs() {
       <div className="toolbar" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('extractionLogs.agent')}</label>
-          <select value={agentId} onChange={e => { setAgentId(e.target.value); setLogs([]); setTotalCount(0); }} style={{ fontSize: 13, padding: '4px 8px' }}>
+          <select value={agentId} onChange={e => { setAgentId(e.target.value); setPage(0); setLogs([]); setTotalCount(0); }} style={{ fontSize: 13, padding: '4px 8px' }}>
             <option value="">{t('extractionLogs.allAgents') || '全部 Agent'}</option>
             {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
           </select>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('extractionLogs.channel')}</label>
-          <select value={channel} onChange={e => setChannel(e.target.value)} style={{ fontSize: 13, padding: '4px 8px' }}>
+          <select value={channel} onChange={e => { setChannel(e.target.value); setPage(0); }} style={{ fontSize: 13, padding: '4px 8px' }}>
             <option value="">{t('extractionLogs.allChannels')}</option>
             <option value="fast">Fast</option>
             <option value="deep">Deep</option>
@@ -216,6 +218,15 @@ export default function ExtractionLogs() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalCount > limit && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 16, gap: 8 }}>
+          <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>{t('common.prev')}</button>
+          <span style={{ padding: '8px 16px', color: 'var(--text-muted)' }}>{t('common.page', { current: page + 1, total: Math.ceil(totalCount / limit) })}</span>
+          <button className="btn" disabled={(page + 1) * limit >= totalCount} onClick={() => setPage(p => p + 1)}>{t('common.next')}</button>
         </div>
       )}
     </div>

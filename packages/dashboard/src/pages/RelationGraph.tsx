@@ -41,6 +41,8 @@ export default function RelationGraph() {
   const [nodeMemories, setNodeMemories] = useState<any[]>([]);
   const [loadingMemories, setLoadingMemories] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [tablePage, setTablePage] = useState(0);
+  const tableLimit = 20;
   const [tooMany, setTooMany] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -684,7 +686,7 @@ export default function RelationGraph() {
       {/* Toolbar */}
       <div className="toolbar">
         {predicates.length > 0 && (
-          <select value={predicateFilter} onChange={e => setPredicateFilter(e.target.value)}>
+          <select value={predicateFilter} onChange={e => { setPredicateFilter(e.target.value); setTablePage(0); }}>
             <option value="">{t('relations.allPredicates', { count: predicates.length })}</option>
             {predicates.map(p => (
               <option key={p} value={p}>{p} ({relations.filter(r => r.predicate === p).length})</option>
@@ -792,7 +794,7 @@ export default function RelationGraph() {
               <tr><th>{t('relations.subject')}</th><th>{t('relations.predicate')}</th><th>{t('relations.object')}</th><th>{t('relations.confidence')}</th><th style={{ whiteSpace: 'nowrap' }}>{t('relations.extractionCount')}</th><th style={{ whiteSpace: 'nowrap' }}>{t('relations.source')}</th><th style={{ whiteSpace: 'nowrap' }}>{t('relations.created')}</th><th></th></tr>
             </thead>
             <tbody>
-              {filteredRelations.map(r => (
+              {filteredRelations.slice(tablePage * tableLimit, (tablePage + 1) * tableLimit).map(r => (
                 <tr key={r.id} style={{ background: selectedNode && (r.subject === selectedNode || r.object === selectedNode) ? 'rgba(99,102,241,0.1)' : undefined }}>
                   <td style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => { setSelectedNode(r.subject); loadNodeMemories(r.subject); }}>{r.subject}</td>
                   <td>{r.predicate}</td>
@@ -816,6 +818,13 @@ export default function RelationGraph() {
               ))}
             </tbody>
           </table>
+          {filteredRelations.length > tableLimit && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 12, gap: 8 }}>
+              <button className="btn" disabled={tablePage === 0} onClick={() => setTablePage(p => p - 1)}>{t('common.prev')}</button>
+              <span style={{ padding: '8px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('common.page', { current: tablePage + 1, total: Math.ceil(filteredRelations.length / tableLimit) })}</span>
+              <button className="btn" disabled={(tablePage + 1) * tableLimit >= filteredRelations.length} onClick={() => setTablePage(p => p + 1)}>{t('common.next')}</button>
+            </div>
+          )}
         </div>
       )}
 

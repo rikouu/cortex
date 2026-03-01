@@ -118,8 +118,8 @@ export const runLifecycle = (dryRun = false, agentId?: string) =>
 export const previewLifecycle = (agentId?: string) =>
   request(`/lifecycle/preview${agentId ? `?agent_id=${agentId}` : ''}`);
 
-export const getLifecycleLogs = (limit = 50, agentId?: string) =>
-  request(`/lifecycle/log?limit=${limit}${agentId ? `&agent_id=${agentId}` : ''}`);
+export const getLifecycleLogs = (limit = 50, agentId?: string, offset = 0) =>
+  request(`/lifecycle/log?limit=${limit}&offset=${offset}${agentId ? `&agent_id=${agentId}` : ''}`);
 
 // Config
 export const getConfig = () => request('/config');
@@ -167,10 +167,11 @@ export const deleteAgent = (id: string) =>
 export const getAgentConfig = (id: string) => request(`/agents/${id}/config`);
 
 // Extraction Logs
-export const getExtractionLogs = (agentId?: string, opts?: { limit?: number; channel?: string }) => {
+export const getExtractionLogs = (agentId?: string, opts?: { limit?: number; offset?: number; channel?: string }) => {
   const params = new URLSearchParams();
   if (agentId) params.set('agent_id', agentId);
   if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.offset) params.set('offset', String(opts.offset));
   if (opts?.channel) params.set('channel', opts.channel);
   return request(`/extraction-logs?${params}`);
 };

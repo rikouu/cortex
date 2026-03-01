@@ -346,9 +346,14 @@ export function insertLifecycleLog(action: string, memoryIds: string[], details?
   ).run(action, JSON.stringify(memoryIds), details ? JSON.stringify(details) : null);
 }
 
-export function getLifecycleLogs(limit = 50): LifecycleLogEntry[] {
+export function getLifecycleLogs(limit = 50, offset = 0): LifecycleLogEntry[] {
   const db = getDb();
-  return db.prepare('SELECT * FROM lifecycle_log ORDER BY executed_at DESC LIMIT ?').all(limit) as LifecycleLogEntry[];
+  return db.prepare('SELECT * FROM lifecycle_log ORDER BY executed_at DESC LIMIT ? OFFSET ?').all(limit, offset) as LifecycleLogEntry[];
+}
+
+export function countLifecycleLogs(): number {
+  const db = getDb();
+  return (db.prepare('SELECT COUNT(*) as c FROM lifecycle_log').get() as any).c;
 }
 
 // ============ Version Chain ============

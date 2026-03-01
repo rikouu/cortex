@@ -34,6 +34,9 @@ interface PreviewDetail {
 
 export default function LifecycleMonitor() {
   const [logs, setLogs] = useState<any[]>([]);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logPage, setLogPage] = useState(0);
+  const logLimit = 20;
   const [preview, setPreview] = useState<PreviewDetail | null>(null);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<any>(null);
@@ -52,7 +55,10 @@ export default function LifecycleMonitor() {
 
   // Reload logs + layer stats when agent changes
   const refreshData = () => {
-    getLifecycleLogs(30, agentId || undefined).then(setLogs);
+    getLifecycleLogs(logLimit, agentId || undefined, logPage * logLimit).then((res: any) => {
+      setLogs(res.items || res);
+      setLogTotal(res.total || 0);
+    });
     const agentParam: Record<string, string> = agentId ? { agent_id: agentId } : {};
     Promise.all([
       listMemories({ layer: 'working', limit: '1', offset: '0', ...agentParam }),
@@ -65,7 +71,7 @@ export default function LifecycleMonitor() {
 
   useEffect(() => {
     refreshData();
-  }, [agentId]);
+  }, [agentId, logPage]);
 
   const [previewing, setPreviewing] = useState(false);
 
@@ -247,7 +253,7 @@ export default function LifecycleMonitor() {
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Agent</label>
-          <select value={agentId} onChange={e => { setAgentId(e.target.value); setPreview(null); setRunResult(null); setLogs([]); setLayerStats({ working: 0, core: 0, archive: 0 }); setShowAffected(false); }} style={{ fontSize: 13, padding: '4px 8px' }}>
+          <select value={agentId} onChange={e => { setAgentId(e.target.value); setLogPage(0); setPreview(null); setRunResult(null); setLogs([]); setLayerStats({ working: 0, core: 0, archive: 0 }); setShowAffected(false); }} style={{ fontSize: 13, padding: '4px 8px' }}>
             <option value="">{t('lifecycle.allAgents') || '全部 Agent'}</option>
             {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
           </select>
@@ -419,6 +425,13 @@ export default function LifecycleMonitor() {
               ))}
             </tbody>
           </table>
+          </div>
+        )}
+        {logTotal > logLimit && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 12, gap: 8 }}>
+            <button className="btn" disabled={logPage === 0} onClick={() => setLogPage(p => p - 1)}>{t('common.prev')}</button>
+            <span style={{ padding: '8px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('common.page', { current: logPage + 1, total: Math.ceil(logTotal / logLimit) })}</span>
+            <button className="btn" disabled={(logPage + 1) * logLimit >= logTotal} onClick={() => setLogPage(p => p + 1)}>{t('common.next')}</button>
           </div>
         )}
       </div>
