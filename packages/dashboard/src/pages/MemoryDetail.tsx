@@ -221,7 +221,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
             {memory.agent_id && <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.agent')}</td><td>{memory.agent_id}</td></tr>}
             {memory.source && <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.source')}</td><td>{memory.source}</td></tr>}
             {memory.metadata && (
-              <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.metadata')}</td><td><pre style={{ fontSize: 11, margin: 0 }}>{JSON.stringify(JSON.parse(memory.metadata), null, 2)}</pre></td></tr>
+              <tr><td style={{ color: 'var(--text-muted)' }}>{t('memoryDetail.metadata')}</td><td><pre style={{ fontSize: 11, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxWidth: '100%' }}>{JSON.stringify(JSON.parse(memory.metadata), null, 2)}</pre></td></tr>
             )}
           </tbody>
         </table>
