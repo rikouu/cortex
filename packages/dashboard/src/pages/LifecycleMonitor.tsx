@@ -184,7 +184,13 @@ export default function LifecycleMonitor() {
         return parts.join(' · ');
       }
       if (d.score) return `分数 ${Number(d.score).toFixed(2)}`;
+      if (d.decay_score) return `衰减 ${Number(d.decay_score).toFixed(2)}`;
+      if (d.distance) return `距离 ${Number(d.distance).toFixed(3)}`;
+      if (d.compressed_count) return `压缩 ${d.compressed_count} 条 → ${d.groups} 组`;
       if (d.reason) return d.reason;
+      // Hide agent_id-only details
+      const keys = Object.keys(d).filter(k => k !== 'agent_id');
+      if (keys.length === 0) return '\u2014';
       return raw.length > 60 ? raw.slice(0, 60) + '…' : raw;
     } catch { return raw.length > 60 ? raw.slice(0, 60) + '…' : raw; }
   };
@@ -390,7 +396,7 @@ export default function LifecycleMonitor() {
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {Object.entries(actionCounts).map(([action, count]) => (
               <div key={action} className="stat-card" style={{ padding: 12, minWidth: 100 }}>
-                <div className="label">{action}</div>
+                <div className="label">{actionLabel(action)}</div>
                 <div className="value" style={{ fontSize: 20 }}>{count}</div>
               </div>
             ))}
