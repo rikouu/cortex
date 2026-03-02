@@ -186,6 +186,8 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     // 1. Extraction LLM
     try {
       const last = db.prepare(`SELECT channel, created_at, latency_ms, memories_written, memories_deduped FROM extraction_logs ORDER BY created_at DESC LIMIT 1`).get() as any;
+      // Ensure UTC timestamp has Z suffix for correct client-side parsing
+      if (last?.created_at && !last.created_at.endsWith('Z')) last.created_at = last.created_at + 'Z';
       const errorCount = (db.prepare(`SELECT COUNT(*) as c FROM extraction_logs WHERE error IS NOT NULL AND created_at > datetime('now', '-24 hours')`).get() as any)?.c || 0;
       const totalLast24h = (db.prepare(`SELECT COUNT(*) as c FROM extraction_logs WHERE created_at > datetime('now', '-24 hours')`).get() as any)?.c || 0;
       components.push({
@@ -206,6 +208,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     // 2. Lifecycle Engine
     try {
       const last = db.prepare(`SELECT action, executed_at, details FROM lifecycle_log WHERE action = 'lifecycle_run' ORDER BY executed_at DESC LIMIT 1`).get() as any;
+      if (last?.executed_at && !last.executed_at.endsWith('Z')) last.executed_at = last.executed_at + 'Z';
       let details: any = {};
       try { details = last?.details ? JSON.parse(last.details) : {}; } catch {}
       const hasErrors = details.errors && details.errors.length > 0;
@@ -230,6 +233,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
       // Check if embedding is configured
       const hasEmbedding = !!(config.embedding?.baseUrl || config.embedding?.apiKey || process.env.OPENAI_API_KEY);
       const lastAccess = db.prepare(`SELECT accessed_at FROM access_log ORDER BY accessed_at DESC LIMIT 1`).get() as any;
+      if (lastAccess?.accessed_at && !lastAccess.accessed_at.endsWith('Z')) lastAccess.accessed_at = lastAccess.accessed_at + 'Z';
       components.push({
         id: 'embedding',
         name: 'Embedding',
