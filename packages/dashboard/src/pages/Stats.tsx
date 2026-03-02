@@ -2,6 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { getStats, getHealth, listMemories } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 
+function fmtNum(n: number): string {
+  if (n >= 100_000_000) return (n / 100_000_000).toFixed(1).replace(/\.0$/, '') + '亿';
+  if (n >= 10_000) return (n / 10_000).toFixed(1).replace(/\.0$/, '') + '万';
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
 // ─── Mini Canvas Bar Chart ──────────────────────────────────────────────────
 
 function BarChart({ data, colors, height = 220 }: { data: { label: string; value: number }[]; colors: string[]; height?: number }) {
@@ -229,7 +236,7 @@ export default function Stats() {
       <div className="card-grid">
         <div className="stat-card">
           <div className="label">{t('stats.totalMemories')}</div>
-          <div className="value">{stats.total_memories}</div>
+          <div className="value">{fmtNum(stats.total_memories || 0)}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.core')}</div>
@@ -245,11 +252,11 @@ export default function Stats() {
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.relations')}</div>
-          <div className="value">{stats.total_relations}</div>
+          <div className="value">{fmtNum(stats.total_relations || 0)}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.accessLogs')}</div>
-          <div className="value">{stats.total_access_logs}</div>
+          <div className="value">{fmtNum(stats.total_access_logs || 0)}</div>
         </div>
       </div>
 
