@@ -176,7 +176,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     // 1. Extraction LLM
     try {
       const last = db.prepare(`SELECT channel, created_at, latency_ms, memories_written, memories_deduped FROM extraction_logs ORDER BY created_at DESC LIMIT 1`).get() as any;
-      const errorCount = (db.prepare(`SELECT COUNT(*) as c FROM extraction_logs WHERE memories_written = 0 AND created_at > datetime('now', '-24 hours')`).get() as any)?.c || 0;
+      const errorCount = (db.prepare(`SELECT COUNT(*) as c FROM extraction_logs WHERE error IS NOT NULL AND created_at > datetime('now', '-24 hours')`).get() as any)?.c || 0;
       const totalLast24h = (db.prepare(`SELECT COUNT(*) as c FROM extraction_logs WHERE created_at > datetime('now', '-24 hours')`).get() as any)?.c || 0;
       components.push({
         id: 'extraction_llm',
@@ -259,17 +259,8 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     // Test LLM
     try {
       const start = Date.now();
-      const { default: Anthropic } = await import('@anthropic-ai/sdk');
-      const client = new Anthropic({
-        apiKey: config.llm.apiKey || process.env.ANTHROPIC_API_KEY,
-        baseURL: config.llm.baseUrl || undefined,
-      });
-      await client.messages.create({
-        model: config.llm.model || 'claude-sonnet-4-20250514',
-        max_tokens: 10,
-        messages: [{ role: 'user', content: 'ping' }],
-      });
-      results.llm = { ok: true, latencyMs: Date.now() - start };
+      const response = await cortex.llmExtraction.complete('Reply with exactly: pong', { maxTokens: 10 });
+      results.llm = { ok: response.length > 0, latencyMs: Date.now() - start };
     } catch (e: any) {
       results.llm = { ok: false, latencyMs: 0, error: e.message?.slice(0, 200) };
     }
