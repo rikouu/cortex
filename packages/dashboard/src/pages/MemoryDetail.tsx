@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getMemory, updateMemory, search, getMemoryChain } from '../api/client.js';
+import { getMemory, updateMemory, search, getMemoryChain, rollbackMemory } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 import { toLocal } from '../utils/time.js';
 
@@ -29,6 +29,41 @@ function parseMeta(m: Memory): Record<string, any> | null {
   try { return JSON.parse(m.metadata); } catch { return null; }
 }
 
+/** Simple word-level diff for two strings */
+function computeDiff(oldText: string, newText: string): { type: 'same' | 'add' | 'remove'; text: string }[] {
+  const oldWords = oldText.split(/(\s+)/);
+  const newWords = newText.split(/(\s+)/);
+  const result: { type: 'same' | 'add' | 'remove'; text: string }[] = [];
+
+  // Simple LCS-based diff
+  const m = oldWords.length;
+  const n = newWords.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i]![j] = oldWords[i - 1] === newWords[j - 1]
+        ? dp[i - 1]![j - 1]! + 1
+        : Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
+    }
+  }
+
+  let i = m, j = n;
+  const ops: { type: 'same' | 'add' | 'remove'; text: string }[] = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldWords[i - 1] === newWords[j - 1]) {
+      ops.unshift({ type: 'same', text: oldWords[i - 1]! });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i]![j - 1]! >= dp[i - 1]![j]!)) {
+      ops.unshift({ type: 'add', text: newWords[j - 1]! });
+      j--;
+    } else {
+      ops.unshift({ type: 'remove', text: oldWords[i - 1]! });
+      i--;
+    }
+  }
+  return ops;
+}
+
 export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; onBack: () => void }) {
   const [memory, setMemory] = useState<Memory | null>(null);
   const [chain, setChain] = useState<Memory[]>([]);
@@ -36,6 +71,7 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<{ content: string; category: string; importance: number; is_pinned: boolean }>({ content: '', category: '', importance: 0, is_pinned: false });
+  const [diffPair, setDiffPair] = useState<[Memory, Memory] | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const { t } = useI18n();
 
@@ -87,6 +123,20 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
       setToast({ message: t('memoryDetail.toastUpdated'), type: 'success' });
     } catch (e: any) {
       setToast({ message: t('memoryDetail.toastSaveFailed', { message: e.message }), type: 'error' });
+    }
+  };
+
+  const handleRollback = async (targetId: string) => {
+    if (!memory) return;
+    if (!confirm(t('memoryDetail.rollbackConfirm'))) return;
+    try {
+      const res = await rollbackMemory(memory.id, targetId);
+      if (res.ok) {
+        setToast({ message: t('memoryDetail.rollbackSuccess'), type: 'success' });
+        loadMemoryData(res.restored.id);
+      }
+    } catch (e: any) {
+      setToast({ message: e.message, type: 'error' });
     }
   };
 
@@ -349,11 +399,51 @@ export default function MemoryDetail({ memoryId, onBack }: { memoryId: string; o
                         {t('memoryDetail.updateReason')}: {updateReasoning}
                       </div>
                     )}
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'monospace' }}>{m.id}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{m.id}</span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {i > 0 && (
+                          <button className="btn" style={{ fontSize: 10, padding: '2px 8px' }}
+                            onClick={(e) => { e.stopPropagation(); setDiffPair([chain[i - 1]!, m]); }}>
+                            {t('memoryDetail.diff')}
+                          </button>
+                        )}
+                        {!isLatestVersion && (
+                          <button className="btn" style={{ fontSize: 10, padding: '2px 8px', background: 'rgba(249,115,22,0.2)', color: '#f97316' }}
+                            onClick={(e) => { e.stopPropagation(); handleRollback(m.id); }}>
+                            {t('memoryDetail.rollback')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Diff Modal */}
+      {diffPair && (
+        <div className="modal-overlay" onClick={() => setDiffPair(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '80vh', overflow: 'auto' }}>
+            <h3 style={{ marginBottom: 12 }}>{t('memoryDetail.diffTitle')}</h3>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+              <span>v{chain.indexOf(diffPair[0]) + 1} → v{chain.indexOf(diffPair[1]) + 1}</span>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 8, fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+              {computeDiff(diffPair[0].content, diffPair[1].content).map((part, i) => (
+                <span key={i} style={{
+                  background: part.type === 'add' ? 'rgba(34,197,94,0.3)' : part.type === 'remove' ? 'rgba(239,68,68,0.3)' : 'transparent',
+                  textDecoration: part.type === 'remove' ? 'line-through' : 'none',
+                  color: part.type === 'add' ? '#4ade80' : part.type === 'remove' ? '#f87171' : 'var(--text)',
+                }}>{part.text}</span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn" onClick={() => setDiffPair(null)}>{t('common.close')}</button>
+            </div>
           </div>
         </div>
       )}

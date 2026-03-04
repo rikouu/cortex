@@ -32,6 +32,7 @@ export default function MemoryBrowser() {
   const [category, setCategory] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [agents, setAgents] = useState<any[]>([]);
+  const [versionFilter, setVersionFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [sortField, setSortField] = useState<SortField>('created_at');
@@ -81,6 +82,12 @@ export default function MemoryBrowser() {
       if (layer) params.layer = layer;
       if (category) params.category = category;
       if (agentFilter) params.agent_id = agentFilter;
+      if (versionFilter === 'has_versions') {
+        params.has_versions = 'true';
+        params.include_superseded = 'true';
+      } else if (versionFilter === 'superseded') {
+        params.include_superseded = 'true';
+      }
       listMemories(params).then((r: any) => {
         let items = r.items as Memory[];
         if (sortField !== 'created_at' || sortDir !== 'desc') {
@@ -95,7 +102,7 @@ export default function MemoryBrowser() {
         setTotal(r.total);
       });
     }
-  }, [layer, category, agentFilter, page, searchQuery, isSearchMode, sortField, sortDir]);
+  }, [layer, category, agentFilter, versionFilter, page, searchQuery, isSearchMode, sortField, sortDir]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { listAgents().then((res: any) => setAgents(res.agents || [])).catch(() => {}); }, []);
@@ -290,6 +297,11 @@ export default function MemoryBrowser() {
         <select value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(0); }}>
           <option value="">All Agents</option>
           {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+        </select>
+        <select value={versionFilter} onChange={e => { setVersionFilter(e.target.value); setPage(0); }}>
+          <option value="">{t('memories.allMemories')}</option>
+          <option value="has_versions">{t('memories.hasVersions')}</option>
+          <option value="superseded">{t('memories.includeSuperseded')}</option>
         </select>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
           {(['created_at', 'importance', 'decay_score', 'access_count'] as SortField[]).map(f => (

@@ -78,6 +78,8 @@ export const listMemories = (params?: Record<string, string>) => {
 export const getMemory = (id: string) => request(`/memories/${id}`);
 
 export const getMemoryChain = (id: string) => request(`/memories/${id}/chain`);
+export const rollbackMemory = (id: string, targetId: string) =>
+  request(`/memories/${id}/rollback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_id: targetId }) });
 
 export const createMemory = (data: any) =>
   request('/memories', { method: 'POST', body: JSON.stringify(data) });

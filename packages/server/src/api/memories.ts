@@ -15,6 +15,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
       orderBy: q.order_by,
       orderDir: q.order_dir,
       include_superseded: q.include_superseded === 'true',
+      has_versions: q.has_versions === 'true',
     });
   });
 
@@ -98,6 +99,40 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
     }
 
     return mem;
+  });
+
+  // Rollback memory to a previous version
+  app.post('/api/v1/memories/:id/rollback', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { target_id } = req.body as { target_id: string };
+
+    // target_id = the old version we want to restore
+    const target = getMemoryById(target_id);
+    if (!target) { reply.code(404); return { error: 'Target version not found' }; }
+
+    // Find the current active version in this chain
+    const chain = getMemoryVersionChain(id);
+    const current = chain.find(m => !m.superseded_by);
+    if (!current) { reply.code(404); return { error: 'No active version found in chain' }; }
+
+    // Update the current active version's content to match the target
+    const restored = updateMemory(current.id, {
+      content: target.content,
+      category: target.category,
+      importance: target.importance,
+      confidence: target.confidence,
+    });
+    if (!restored) { reply.code(500); return { error: 'Failed to update memory' }; }
+
+    // Re-index vector
+    try {
+      const embedding = await cortex.embeddingProvider.embed(restored.content);
+      if (embedding.length > 0) {
+        await cortex.vectorBackend.upsert(restored.id, embedding);
+      }
+    } catch { /* best effort */ }
+
+    return { ok: true, restored: restored };
   });
 
   // Delete memory

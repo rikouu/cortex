@@ -119,6 +119,7 @@ export function listMemories(opts: {
   orderBy?: string;
   orderDir?: 'asc' | 'desc';
   include_superseded?: boolean;
+  has_versions?: boolean;
 }): { items: Memory[]; total: number } {
   const db = getDb();
   const conditions: string[] = [];
@@ -128,6 +129,10 @@ export function listMemories(opts: {
   if (opts.category) { conditions.push('category = ?'); params.push(opts.category); }
   if (opts.agent_id) { conditions.push('agent_id = ?'); params.push(opts.agent_id); }
   if (!opts.include_superseded) { conditions.push('superseded_by IS NULL'); }
+  if (opts.has_versions) {
+    // Memories that have been superseded OR that supersede others
+    conditions.push('(superseded_by IS NOT NULL OR id IN (SELECT superseded_by FROM memories WHERE superseded_by IS NOT NULL))');
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const orderBy = opts.orderBy || 'created_at';
