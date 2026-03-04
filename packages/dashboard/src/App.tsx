@@ -9,6 +9,7 @@ import Settings from './pages/Settings/index.js';
 import Agents from './pages/Agents.js';
 import AgentDetail from './pages/AgentDetail.js';
 import ExtractionLogs from './pages/ExtractionLogs.js';
+import SystemLogs from './pages/SystemLogs.js';
 import { search, checkAuth, verifyToken, setStoredToken, getStoredToken, clearStoredToken, getHealth, triggerUpdate } from './api/client.js';
 import { I18nProvider, useI18n } from './i18n/index.js';
 import type { Locale } from './i18n/index.js';
@@ -418,6 +419,7 @@ function AppContent() {
           <NavLink to="/search" className={({ isActive }) => isActive ? 'active' : ''}>🔍 {t('nav.search')}</NavLink>
           <NavLink to="/relations" className={({ isActive }) => isActive ? 'active' : ''}>🕸️ {t('nav.relations')}</NavLink>
           <NavLink to="/extraction-logs" className={({ isActive }) => isActive ? 'active' : ''}>📋 {t('nav.extractionLogs')}</NavLink>
+          <NavLink to="/system-logs" className={({ isActive }) => isActive ? 'active' : ''}>🖥️ {t('nav.systemLogs')}</NavLink>
           <NavLink to="/lifecycle" className={({ isActive }) => isActive ? 'active' : ''}>♻️ {t('nav.lifecycle')}</NavLink>
           <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>⚙️ {t('nav.settings')}</NavLink>
         </nav>
@@ -454,6 +456,7 @@ function AppContent() {
           <Route path="/search" element={<SearchDebug />} />
           <Route path="/relations" element={<RelationGraph />} />
           <Route path="/extraction-logs" element={<ExtractionLogs />} />
+          <Route path="/system-logs" element={<SystemLogs />} />
           <Route path="/lifecycle" element={<LifecycleMonitor />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

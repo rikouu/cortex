@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { getStats, getDb } from '../db/index.js';
 import { getConfig, updateConfig } from '../utils/config.js';
 import { restartLifecycleScheduler } from '../core/scheduler.js';
-import { createLogger } from '../utils/logger.js';
+import { createLogger, getLogLevel as _getLogLevel, setLogLevel as _setLogLevel, getLogBuffer } from '../utils/logger.js';
 import { metrics } from '../utils/metrics.js';
 import type { CortexApp } from '../app.js';
 import type { Memory } from '../db/queries.js';
@@ -81,6 +81,29 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
   // Metrics endpoint (JSON format for Dashboard)
   app.get('/api/v1/metrics/json', async () => {
     return metrics.toJSON();
+  });
+
+  // Log level
+  app.get('/api/v1/log-level', async () => {
+    return { level: _getLogLevel() };
+  });
+
+  app.patch('/api/v1/log-level', async (req) => {
+    const { level } = req.body as any;
+    const valid = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+    if (!valid.includes(level)) {
+      return { ok: false, error: `Invalid level. Use: ${valid.join(', ')}` };
+    }
+    _setLogLevel(level);
+    return { ok: true, level };
+  });
+
+  // System logs (ring buffer)
+  app.get('/api/v1/logs', async (req) => {
+    const query = req.query as any;
+    const limit = Math.min(Number(query.limit) || 100, 500);
+    const level = query.level || undefined;
+    return { logs: getLogBuffer(limit, level) };
   });
 
   // Health check

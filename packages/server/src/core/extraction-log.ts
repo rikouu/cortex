@@ -46,11 +46,16 @@ export function insertExtractionLog(
   }
 }
 
-export function getExtractionLogs(
-  agentId?: string,
-  opts?: { limit?: number; offset?: number; channel?: 'fast' | 'deep' | 'flush' | 'mcp' },
-): ExtractionLogEntry[] {
-  const db = getDb();
+interface LogFilterOpts {
+  limit?: number;
+  offset?: number;
+  channel?: 'fast' | 'deep' | 'flush' | 'mcp';
+  status?: 'written' | 'deduped' | 'empty';
+  from?: string;
+  to?: string;
+}
+
+function buildConditions(agentId?: string, opts?: LogFilterOpts): { conditions: string[]; params: any[] } {
   const conditions: string[] = [];
   const params: any[] = [];
 
@@ -58,11 +63,34 @@ export function getExtractionLogs(
     conditions.push('agent_id = ?');
     params.push(agentId);
   }
-
   if (opts?.channel) {
     conditions.push('channel = ?');
     params.push(opts.channel);
   }
+  if (opts?.status === 'written') {
+    conditions.push('memories_written > 0');
+  } else if (opts?.status === 'deduped') {
+    conditions.push('memories_deduped > 0');
+  } else if (opts?.status === 'empty') {
+    conditions.push('memories_written = 0 AND memories_deduped = 0');
+  }
+  if (opts?.from) {
+    conditions.push('created_at >= ?');
+    params.push(opts.from);
+  }
+  if (opts?.to) {
+    conditions.push('created_at <= ?');
+    params.push(opts.to);
+  }
+  return { conditions, params };
+}
+
+export function getExtractionLogs(
+  agentId?: string,
+  opts?: LogFilterOpts,
+): ExtractionLogEntry[] {
+  const db = getDb();
+  const { conditions, params } = buildConditions(agentId, opts);
 
   const limit = opts?.limit || 50;
   const offset = opts?.offset || 0;
@@ -93,14 +121,53 @@ export function getExtractionLogs(
 
 export function countExtractionLogs(
   agentId?: string,
-  opts?: { channel?: string },
+  opts?: LogFilterOpts,
 ): number {
   const db = getDb();
-  const conditions: string[] = [];
-  const params: any[] = [];
-  if (agentId) { conditions.push('agent_id = ?'); params.push(agentId); }
-  if (opts?.channel) { conditions.push('channel = ?'); params.push(opts.channel); }
+  const { conditions, params } = buildConditions(agentId, opts);
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const row = db.prepare(`SELECT count(*) as c FROM extraction_logs ${where}`).get(...params) as { c: number };
   return row.c;
+}
+
+export interface LogAggregateStats {
+  totalWritten: number;
+  totalDeduped: number;
+  avgLatency: number;
+  channelCounts: Record<string, number>;
+}
+
+export function getExtractionLogStats(
+  agentId?: string,
+  opts?: LogFilterOpts,
+): LogAggregateStats {
+  const db = getDb();
+  const { conditions, params } = buildConditions(agentId, opts);
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const row = db.prepare(`
+    SELECT
+      COALESCE(SUM(memories_written), 0) as total_written,
+      COALESCE(SUM(memories_deduped), 0) as total_deduped,
+      COALESCE(AVG(latency_ms), 0) as avg_latency
+    FROM extraction_logs ${where}
+  `).get(...params) as any;
+
+  const channels = db.prepare(`
+    SELECT channel, COUNT(*) as cnt
+    FROM extraction_logs ${where}
+    GROUP BY channel
+  `).all(...params) as any[];
+
+  const channelCounts: Record<string, number> = { fast: 0, deep: 0, flush: 0, mcp: 0 };
+  for (const ch of channels) {
+    channelCounts[ch.channel] = ch.cnt;
+  }
+
+  return {
+    totalWritten: row.total_written,
+    totalDeduped: row.total_deduped,
+    avgLatency: Math.round(row.avg_latency),
+    channelCounts,
+  };
 }

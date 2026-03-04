@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getConfig, updateConfig, testLLM, testEmbedding } from '../../api/client.js';
+import { getConfig, updateConfig, testLLM, testEmbedding, getLogLevel, setLogLevel as apiSetLogLevel } from '../../api/client.js';
 import { useI18n } from '../../i18n/index.js';
 import {
   SectionKey,
@@ -37,10 +37,12 @@ export default function Settings() {
   const [draft, setDraft] = useState<any>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [testState, setTestState] = useState<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string; latency?: number }>>({});
+  const [logLevel, setLogLevelState] = useState('info');
   const { t } = useI18n();
 
   useEffect(() => {
     getConfig().then(setConfig).catch((e: any) => setError(e.message));
+    getLogLevel().then((res: any) => setLogLevelState(res.level)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -827,6 +829,41 @@ export default function Settings() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Debug Mode ── */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3>{t('settings.debugMode')}</h3>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('settings.logLevel')}</label>
+          <select
+            value={logLevel}
+            onChange={async (e) => {
+              const level = e.target.value;
+              try {
+                await apiSetLogLevel(level);
+                setLogLevelState(level);
+                setToast({ message: `Log level → ${level}`, type: 'success' });
+              } catch (err: any) {
+                setToast({ message: err.message, type: 'error' });
+              }
+            }}
+            style={{ fontSize: 13, padding: '4px 8px' }}
+          >
+            <option value="error">Error</option>
+            <option value="warn">Warn</option>
+            <option value="info">Info</option>
+            <option value="debug">Debug</option>
+            <option value="trace">Trace</option>
+          </select>
+          {(logLevel === 'debug' || logLevel === 'trace') && (
+            <span style={{ fontSize: 12, color: 'var(--warning)', fontStyle: 'italic' }}>
+              ⚠️ {t('settings.debugWarning')}
+            </span>
+          )}
+        </div>
       </div>
 
       <LlmSection

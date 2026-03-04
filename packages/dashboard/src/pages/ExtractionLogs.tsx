@@ -38,9 +38,14 @@ export default function ExtractionLogs() {
   const [agents, setAgents] = useState<any[]>([]);
   const [agentId, setAgentId] = useState('');
   const [channel, setChannel] = useState('');
+  const [status, setStatus] = useState('');
+  const [timeRange, setTimeRange] = useState('');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState<any>({});
   const [page, setPage] = useState(0);
   const limit = 20;
   const { t } = useI18n();
@@ -54,26 +59,52 @@ export default function ExtractionLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [agentId, channel, page]);
+  }, [agentId, channel, status, timeRange, customFrom, customTo, page]);
+
+  const getTimeFilters = () => {
+    const now = new Date();
+    if (timeRange === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      return { from: start };
+    } else if (timeRange === '7d') {
+      const start = new Date(now.getTime() - 7 * 86400000).toISOString();
+      return { from: start };
+    } else if (timeRange === '30d') {
+      const start = new Date(now.getTime() - 30 * 86400000).toISOString();
+      return { from: start };
+    } else if (timeRange === 'custom') {
+      return {
+        from: customFrom ? new Date(customFrom).toISOString() : undefined,
+        to: customTo ? new Date(customTo + 'T23:59:59').toISOString() : undefined,
+      };
+    }
+    return {};
+  };
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await getExtractionLogs(agentId || undefined, { limit, offset: page * limit, channel: channel || undefined });
+      const timeFilters = getTimeFilters();
+      const res = await getExtractionLogs(agentId || undefined, {
+        limit, offset: page * limit,
+        channel: channel || undefined,
+        status: status || undefined,
+        ...timeFilters,
+      });
       setLogs(res.items || []);
       setTotalCount(res.total ?? res.items?.length ?? 0);
+      setStats(res.stats || {});
     } catch {
       setLogs([]);
     }
     setLoading(false);
   };
 
-  // Stats
-  const totalWritten = logs.reduce((s, l) => s + l.memories_written, 0);
-  const totalDeduped = logs.reduce((s, l) => s + l.memories_deduped, 0);
-  const avgLatency = logs.length > 0 ? Math.round(logs.reduce((s, l) => s + l.latency_ms, 0) / logs.length) : 0;
-  const channelCounts: Record<string, number> = { fast: 0, deep: 0, flush: 0, mcp: 0 };
-  for (const l of logs) channelCounts[l.channel] = (channelCounts[l.channel] || 0) + 1;
+  // Stats from server (aggregated over full filtered set)
+  const totalWritten = stats.totalWritten ?? 0;
+  const totalDeduped = stats.totalDeduped ?? 0;
+  const avgLatency = stats.avgLatency ?? 0;
+  const channelCounts = stats.channelCounts ?? { fast: 0, deep: 0, flush: 0, mcp: 0 };
 
   return (
     <div>
@@ -98,6 +129,32 @@ export default function ExtractionLogs() {
             <option value="mcp">MCP</option>
           </select>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('extractionLogs.status')}</label>
+          <select value={status} onChange={e => { setStatus(e.target.value); setPage(0); }} style={{ fontSize: 13, padding: '4px 8px' }}>
+            <option value="">{t('extractionLogs.allStatus')}</option>
+            <option value="written">{t('extractionLogs.statusWritten')}</option>
+            <option value="deduped">{t('extractionLogs.statusDeduped')}</option>
+            <option value="empty">{t('extractionLogs.statusEmpty')}</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('extractionLogs.timeRange')}</label>
+          <select value={timeRange} onChange={e => { setTimeRange(e.target.value); setPage(0); }} style={{ fontSize: 13, padding: '4px 8px' }}>
+            <option value="">{t('extractionLogs.timeAll')}</option>
+            <option value="today">{t('extractionLogs.timeToday')}</option>
+            <option value="7d">{t('extractionLogs.timeLast7d')}</option>
+            <option value="30d">{t('extractionLogs.timeLast30d')}</option>
+            <option value="custom">{t('extractionLogs.timeCustom')}</option>
+          </select>
+        </div>
+        {timeRange === 'custom' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="date" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(0); }} style={{ fontSize: 12, padding: '3px 6px' }} />
+            <span style={{ color: 'var(--text-muted)' }}>—</span>
+            <input type="date" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(0); }} style={{ fontSize: 12, padding: '3px 6px' }} />
+          </div>
+        )}
       </div>
 
       {/* Stats */}

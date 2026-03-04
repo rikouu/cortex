@@ -1,8 +1,10 @@
 import { getDb } from '../db/connection.js';
 import { createLogger } from '../utils/logger.js';
 import type { VectorBackend, VectorSearchResult, VectorFilter } from './interface.js';
+import { createRequire } from 'node:module';
 
 const log = createLogger('sqlite-vec');
+const require = createRequire(import.meta.url);
 
 /**
  * SQLite vec0 vector backend — zero external dependencies.
@@ -17,14 +19,22 @@ export class SqliteVecBackend implements VectorBackend {
     this.dimensions = dimensions;
     const db = getDb();
 
-    // Try loading sqlite-vec extension
+    // Try loading sqlite-vec extension via npm package
     try {
-      db.loadExtension('vec0');
+      const sqliteVec = require('sqlite-vec');
+      sqliteVec.load(db);
       this.useVec0 = true;
-      log.info('sqlite-vec extension loaded');
-    } catch {
-      log.warn('sqlite-vec extension not available, using fallback cosine similarity table');
-      this.useVec0 = false;
+      log.info('sqlite-vec extension loaded via npm package');
+    } catch (e1: any) {
+      // Fallback: try bare loadExtension('vec0')
+      try {
+        db.loadExtension('vec0');
+        this.useVec0 = true;
+        log.info('sqlite-vec extension loaded from system path');
+      } catch {
+        log.warn('sqlite-vec extension not available, using fallback cosine similarity table');
+        this.useVec0 = false;
+      }
     }
 
     if (this.useVec0) {

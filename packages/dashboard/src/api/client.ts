@@ -168,13 +168,27 @@ export const deleteAgent = (id: string) =>
 export const getAgentConfig = (id: string) => request(`/agents/${id}/config`);
 
 // Extraction Logs
-export const getExtractionLogs = (agentId?: string, opts?: { limit?: number; offset?: number; channel?: string }) => {
+export const getExtractionLogs = (agentId?: string, opts?: { limit?: number; offset?: number; channel?: string; status?: string; from?: string; to?: string }) => {
   const params = new URLSearchParams();
   if (agentId) params.set('agent_id', agentId);
   if (opts?.limit) params.set('limit', String(opts.limit));
   if (opts?.offset) params.set('offset', String(opts.offset));
   if (opts?.channel) params.set('channel', opts.channel);
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
   return request(`/extraction-logs?${params}`);
+};
+
+// Log Level
+export const getLogLevel = () => request('/log-level');
+export const setLogLevel = (level: string) =>
+  request('/log-level', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level }) });
+export const getSystemLogs = (limit = 100, level?: string) => {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (level) params.set('level', level);
+  return request(`/logs?${params}`);
 };
 
 // Test connections
