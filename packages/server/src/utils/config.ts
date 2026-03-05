@@ -83,6 +83,7 @@ const CortexConfigSchema = z.object({
       enabled: z.boolean().default(false),
       maxVariants: z.number().min(2).max(5).default(3),
     }).default({}),
+    relationInjection: z.boolean().default(true),
   }).default({}),
   sieve: z.object({
     highSignalImmediate: z.boolean().default(true),

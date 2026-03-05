@@ -330,6 +330,33 @@ export function listRelations(opts?: { subject?: string; object?: string; agent_
   return db.prepare(`SELECT * FROM relations ${where} ORDER BY updated_at DESC LIMIT ?`).all(...params, opts?.limit || 100) as Relation[];
 }
 
+export function findRelatedRelations(entities: string[], agentId?: string): Relation[] {
+  if (entities.length === 0) return [];
+  const db = getDb();
+
+  const normalized = [...new Set(entities.map(e => normalizeEntity(e)).filter(e => e.length >= 2))];
+  if (normalized.length === 0) return [];
+
+  const conditions: string[] = ['expired = 0'];
+  const params: any[] = [];
+
+  if (agentId) {
+    conditions.push('agent_id = ?');
+    params.push(agentId);
+  }
+
+  const likeClauses = normalized.map(() => '(subject LIKE ? OR object LIKE ?)');
+  conditions.push(`(${likeClauses.join(' OR ')})`);
+  for (const e of normalized) {
+    params.push(`%${e}%`, `%${e}%`);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  return db.prepare(
+    `SELECT * FROM relations ${where} ORDER BY confidence DESC LIMIT 10`
+  ).all(...params) as Relation[];
+}
+
 export function getRelationEvidence(relationId: string): RelationEvidence[] {
   const db = getDb();
   return db.prepare(
