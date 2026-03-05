@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { getDb } from './connection.js';
-import { generateId, normalizeEntity } from '../utils/helpers.js';
+import { generateId, normalizeEntity, escapeLikePattern } from '../utils/helpers.js';
 
 // ============ Memory Types ============
 
@@ -345,10 +345,11 @@ export function findRelatedRelations(entities: string[], agentId?: string): Rela
     params.push(agentId);
   }
 
-  const likeClauses = normalized.map(() => '(subject LIKE ? OR object LIKE ?)');
+  const likeClauses = normalized.map(() => '(subject LIKE ? ESCAPE \'\\\' OR object LIKE ? ESCAPE \'\\\')');
   conditions.push(`(${likeClauses.join(' OR ')})`);
   for (const e of normalized) {
-    params.push(`%${e}%`, `%${e}%`);
+    const escaped = escapeLikePattern(e);
+    params.push(`%${escaped}%`, `%${escaped}%`);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;

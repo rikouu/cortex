@@ -1,7 +1,7 @@
 services:
   cortex:
-    # build: .
-    image: ghcr.io/rikouu/cortex:latest
+    build: .
+    # image: ghcr.io/rikouu/cortex:latest
     # For local development, replace above with:
     #   build: .
     ports:

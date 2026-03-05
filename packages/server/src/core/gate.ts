@@ -7,7 +7,7 @@ import type { Reranker } from '../search/reranker.js';
 import type { CortexConfig } from '../utils/config.js';
 import type { LLMProvider } from '../llm/interface.js';
 import { findRelatedRelations } from '../db/queries.js';
-import { normalizeEntity } from '../utils/helpers.js';
+import { extractEntityTokens } from '../utils/helpers.js';
 
 const log = createLogger('gate');
 
@@ -25,6 +25,7 @@ export interface RecallResponse {
     query: string;
     total_found: number;
     injected_count: number;
+    relations_count: number;
     skipped: boolean;
     reason?: string;
     latency_ms: number;
@@ -57,6 +58,7 @@ export class MemoryGate {
           query: req.query,
           total_found: 0,
           injected_count: 0,
+          relations_count: 0,
           skipped: true,
           reason: 'small_talk',
           latency_ms: Date.now() - start,
@@ -64,7 +66,7 @@ export class MemoryGate {
       };
     }
 
-    const RELATION_BUDGET = 300;
+    const RELATION_BUDGET = this.config.relationBudget ?? 300;
     const relationInjection = this.config.relationInjection !== false;
     const maxTokens = req.max_tokens || this.config.maxInjectionTokens;
 
@@ -129,26 +131,27 @@ export class MemoryGate {
     const injectedCount = context ? context.split('\n').length - 2 : 0; // minus tags
 
     // Inject relevant relations
+    let relationsCount = 0;
     if (relationInjection) {
-      // Collect entity tokens from query + top 5 memory contents
-      const tokenize = (text: string) =>
-        text.split(/\s+/).map(w => normalizeEntity(w)).filter(w => w.length >= 2);
-
-      const entitySet = new Set<string>(tokenize(query));
+      // Extract entity tokens from query + top 5 memory contents
+      const entityTokens = extractEntityTokens(query);
       for (const r of results.slice(0, 5)) {
-        for (const t of tokenize(r.content)) entitySet.add(t);
+        for (const t of extractEntityTokens(r.content)) entityTokens.push(t);
       }
+      const uniqueEntities = [...new Set(entityTokens)].slice(0, 20);
 
-      const relations = findRelatedRelations([...entitySet].slice(0, 20), req.agent_id);
+      const relations = findRelatedRelations(uniqueEntities, req.agent_id);
       if (relations.length > 0) {
+        relationsCount = relations.length;
         const lines = relations.map(r => `${r.subject} --${r.predicate}--> ${r.object} (${r.confidence.toFixed(2)})`);
-        context = `${context}\n<cortex_relations>\n${lines.join('\n')}\n</cortex_relations>`;
+        const relBlock = `<cortex_relations>\n${lines.join('\n')}\n</cortex_relations>`;
+        context = context ? `${context}\n${relBlock}` : relBlock;
         log.debug({ count: relations.length }, 'Relations injected');
       }
     }
 
     const latency = Date.now() - start;
-    log.info({ query: query.slice(0, 50), results: results.length, injected: injectedCount, latency_ms: latency }, 'Recall completed');
+    log.info({ query: query.slice(0, 50), results: results.length, injected: injectedCount, relations: relationsCount, latency_ms: latency }, 'Recall completed');
 
     return {
       context,
@@ -157,6 +160,7 @@ export class MemoryGate {
         query,
         total_found: results.length,
         injected_count: injectedCount,
+        relations_count: relationsCount,
         skipped: false,
         latency_ms: latency,
       },

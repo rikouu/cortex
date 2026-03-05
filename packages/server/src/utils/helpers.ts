@@ -34,6 +34,42 @@ export function parseDuration(s: string): number {
 }
 
 /**
+ * Extract entity tokens from text for relation matching.
+ * Handles CJK (no spaces) by extracting character bigrams + known patterns.
+ */
+export function extractEntityTokens(text: string): string[] {
+  const tokens = new Set<string>();
+
+  // Split on whitespace and punctuation
+  const words = text.split(/[\s,;:!?。，；：！？、·\-\(\)\[\]（）【】「」『』""'']+/)
+    .map(w => normalizeEntity(w))
+    .filter(w => w.length >= 2);
+
+  for (const w of words) {
+    tokens.add(w);
+    // For CJK-heavy tokens, also extract bigrams for fuzzy matching
+    const cjkChars = w.match(/[\u3000-\u9fff\uf900-\ufaff]/g);
+    if (cjkChars && cjkChars.length >= 2 && w.length >= 3) {
+      for (let i = 0; i < w.length - 1; i++) {
+        const bigram = w.slice(i, i + 2);
+        if (/[\u3000-\u9fff\uf900-\ufaff]{2}/.test(bigram)) {
+          tokens.add(bigram);
+        }
+      }
+    }
+  }
+
+  return [...tokens];
+}
+
+/**
+ * Escape SQL LIKE wildcards (% and _) in a string.
+ */
+export function escapeLikePattern(s: string): string {
+  return s.replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
  * Rough token count estimation (1 token ≈ 4 chars for English, ≈ 1.5 chars for CJK)
  */
 export function estimateTokens(text: string): number {
