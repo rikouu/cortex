@@ -698,9 +698,19 @@ export default function RelationGraph() {
             ✕ {selectedNode}
           </button>
         )}
-        <button className="btn" onClick={() => setAutoRefresh(!autoRefresh)} style={{ fontSize: 11, padding: '2px 8px' }}>
-          {autoRefresh ? '⏸' : '▶'} {t('relations.autoRefresh')}
-        </button>
+        <button
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          title={t('relations.autoRefresh')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: 11, padding: '3px 8px',
+            background: autoRefresh ? 'rgba(34,197,94,0.15)' : 'transparent',
+            color: autoRefresh ? '#22c55e' : 'var(--text-muted)',
+            border: `1px solid ${autoRefresh ? 'rgba(34,197,94,0.3)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius)', cursor: 'pointer',
+            whiteSpace: 'nowrap', transition: 'all 0.15s',
+          }}
+        >{autoRefresh ? '⏸' : '▶'} {t('relations.autoRefresh')}</button>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {t('relations.nodeEdgeCount', { nodes: nodeSet.size, edges: filteredRelations.length })}
         </span>

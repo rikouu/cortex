@@ -219,6 +219,8 @@ function AppContent() {
   const [updating, setUpdating] = useState(false);
   const [updateCountdown, setUpdateCountdown] = useState(0);
   const [updateResult, setUpdateResult] = useState<'success'|'stale'|'down'|null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkMsg, setCheckMsg] = useState<string|null>(null);
 
   useEffect(() => {
     // Check if auth is required
@@ -308,22 +310,57 @@ function AppContent() {
               >
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               </a>
+              {!versionInfo.latestRelease?.updateAvailable && !updating && !updateResult && !checkMsg && (
+                <button
+                  disabled={checking}
+                  onClick={async () => {
+                    setChecking(true);
+                    setCheckMsg(null);
+                    try {
+                      const h = await getHealth(true);
+                      setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
+                      if (!h.latestRelease?.updateAvailable) {
+                        setCheckMsg(locale === 'zh' ? '✅ 已是最新' : '✅ Up to date');
+                        setTimeout(() => setCheckMsg(null), 3000);
+                      }
+                    } catch {
+                      setCheckMsg(locale === 'zh' ? '❌ 检查失败' : '❌ Failed');
+                      setTimeout(() => setCheckMsg(null), 3000);
+                    }
+                    setChecking(false);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto',
+                    fontSize: 10, padding: '1px 5px',
+                    background: 'none', color: 'var(--text-muted)',
+                    border: '1px solid rgba(255,255,255,0.08)', borderRadius: 'var(--radius)',
+                    cursor: checking ? 'default' : 'pointer',
+                    opacity: checking ? 0.5 : 0.7, transition: 'opacity 0.2s',
+                  }}
+                  onMouseEnter={e => { if (!checking) (e.target as HTMLElement).style.opacity = '1'; }}
+                  onMouseLeave={e => { if (!checking) (e.target as HTMLElement).style.opacity = '0.7'; }}
+                  title={locale === 'zh' ? '检查新版本' : 'Check for updates'}
+                >
+                  {checking ? (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}>
+                      <path d="M21 12a9 9 0 11-6.219-8.56" />
+                    </svg>
+                  ) : (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M1 4v6h6M23 20v-6h-6" />
+                      <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              {checkMsg && (
+                <span style={{
+                  marginLeft: 'auto', fontSize: 10,
+                  color: checkMsg.startsWith('✅') ? '#22c55e' : '#ef4444',
+                  animation: 'fadeIn 0.2s ease',
+                }}>{checkMsg}</span>
+              )}
             </div>
-            {!versionInfo.latestRelease?.updateAvailable && !updating && !updateResult && (
-              <button
-                onClick={async () => {
-                  const h = await getHealth(true);
-                  setVersionInfo({ version: h.version, github: h.github, latestRelease: h.latestRelease });
-                }}
-                style={{
-                  marginTop: 4, fontSize: 10, padding: '2px 6px',
-                  background: 'none', color: 'var(--text-muted)',
-                  border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius)',
-                  cursor: 'pointer',
-                }}
-                title={locale === 'zh' ? '检查新版本' : 'Check for updates'}
-              >{locale === 'zh' ? '🔍 检查更新' : '🔍 Check update'}</button>
-            )}
             {versionInfo.latestRelease?.updateAvailable && !updating && !updateResult && (
               <div style={{ marginTop: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
@@ -433,30 +470,25 @@ function AppContent() {
           <NavLink to="/agents" className={({ isActive }) => isActive ? 'active' : ''}>🤖 {t('nav.agents')}</NavLink>
           <NavLink to="/search" className={({ isActive }) => isActive ? 'active' : ''}>🔍 {t('nav.search')}</NavLink>
           <NavLink to="/relations" className={({ isActive }) => isActive ? 'active' : ''}>🕸️ {t('nav.relations')}</NavLink>
+          <div className="nav-divider" />
+          <div className="nav-group-label">{locale === 'zh' ? '日志' : 'Logs'}</div>
           <NavLink to="/extraction-logs" className={({ isActive }) => isActive ? 'active' : ''}>📋 {t('nav.extractionLogs')}</NavLink>
           <NavLink to="/system-logs" className={({ isActive }) => isActive ? 'active' : ''}>🖥️ {t('nav.systemLogs')}</NavLink>
+          <div className="nav-divider" />
+          <div className="nav-group-label">{locale === 'zh' ? '系统' : 'System'}</div>
           <NavLink to="/lifecycle" className={({ isActive }) => isActive ? 'active' : ''}>♻️ {t('nav.lifecycle')}</NavLink>
           <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>⚙️ {t('nav.settings')}</NavLink>
         </nav>
-        <div style={{ padding: '8px 12px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="sidebar-footer">
           <select
             value={locale}
             onChange={e => setLocale(e.target.value as Locale)}
-            style={{ width: '100%', fontSize: 12, padding: '4px 8px' }}
           >
-            <option value="en">English</option>
+            <option value="en">EN</option>
             <option value="zh">中文</option>
           </select>
           {getStoredToken() && (
-            <button
-              onClick={handleLogout}
-              style={{
-                width: '100%', fontSize: 12, padding: '4px 8px',
-                background: 'transparent', border: '1px solid var(--border)',
-                color: 'var(--text-muted)', borderRadius: 'var(--radius)',
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={handleLogout}>
               {t('login.logout')}
             </button>
           )}

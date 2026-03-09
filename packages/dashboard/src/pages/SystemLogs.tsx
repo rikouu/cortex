@@ -54,7 +54,7 @@ export default function SystemLogs() {
     <div>
       <h1 className="page-title">{t('systemLogs.title')}</h1>
 
-      <div className="toolbar" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="toolbar" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('systemLogs.filterLevel')}</label>
           <select value={level} onChange={e => setLevel(e.target.value)} style={{ fontSize: 13, padding: '4px 8px' }}>
@@ -66,10 +66,19 @@ export default function SystemLogs() {
             <option value="trace">Trace</option>
           </select>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
-          {t('systemLogs.autoRefresh')}
-        </label>
+        <button
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          title={t('systemLogs.autoRefresh')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: 11, padding: '3px 8px',
+            background: autoRefresh ? 'rgba(34,197,94,0.15)' : 'transparent',
+            color: autoRefresh ? '#22c55e' : 'var(--text-muted)',
+            border: `1px solid ${autoRefresh ? 'rgba(34,197,94,0.3)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius)', cursor: 'pointer',
+            whiteSpace: 'nowrap', transition: 'all 0.15s',
+          }}
+        >{autoRefresh ? '⏸' : '▶'} {t('systemLogs.autoRefresh')}</button>
         <button className="btn" onClick={fetchLogs} style={{ fontSize: 12, padding: '4px 12px' }}>
           {t('systemLogs.refresh')}
         </button>
