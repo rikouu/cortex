@@ -62,7 +62,7 @@ async function request(path: string, opts?: RequestInit) {
 }
 
 // Health
-export const getHealth = () => request('/health');
+export const getHealth = (refresh = false) => request(`/health${refresh ? '?refresh=true' : ''}`);
 export const getComponentHealth = () => request('/health/components');
 
 // Stats

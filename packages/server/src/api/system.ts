@@ -47,8 +47,8 @@ const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
 let latestReleaseCache: { tag: string; url: string; publishedAt: string; checkedAt: number } | null = null;
 const RELEASE_CHECK_INTERVAL = 30 * 60 * 1000;
 
-async function getLatestRelease(): Promise<typeof latestReleaseCache> {
-  if (latestReleaseCache && Date.now() - latestReleaseCache.checkedAt < RELEASE_CHECK_INTERVAL) {
+async function getLatestRelease(forceRefresh = false): Promise<typeof latestReleaseCache> {
+  if (!forceRefresh && latestReleaseCache && Date.now() - latestReleaseCache.checkedAt < RELEASE_CHECK_INTERVAL) {
     return latestReleaseCache;
   }
   try {
@@ -106,9 +106,10 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     return { logs: getLogBuffer(limit, level) };
   });
 
-  // Health check
-  app.get('/api/v1/health', async () => {
-    const latest = await getLatestRelease();
+  // Health check (?refresh=true to bypass release cache)
+  app.get('/api/v1/health', async (req) => {
+    const query = req.query as any;
+    const latest = await getLatestRelease(query.refresh === 'true');
     const latestVersion = latest?.tag?.replace(/^v/, '') ?? null;
     return {
       status: 'ok',
