@@ -13,28 +13,38 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
+  <a href="#quick-start">Quick Start</a> •
   <a href="#connect-your-ai">Integrations</a> •
-  <a href="#dashboard">Dashboard</a> •
+  <a href="#key-features">Features</a> •
   <a href="#api-reference">API</a> •
   <a href="./README.zh-CN.md">中文</a>
 </p>
 
 ---
 
-Your AI forgets everything the moment a conversation ends. Cortex gives it a real memory — one that learns, organizes, and recalls what matters.
+Ever told your AI something important, only to have it completely forget by the next conversation?
+
+> "Hey, I switched to decaf last week."
+>
+> *...two days later...*
+>
+> "Want me to recommend some espresso drinks?"
+
+**Your AI has no memory.** Every conversation starts from zero. No matter how many times you explain your preferences, your projects, your constraints — it's gone the moment the chat window closes.
+
+**Cortex changes that.** It runs alongside your AI, quietly learning from every conversation. It knows your name, your preferences, your ongoing projects, the decisions you've made — and surfaces exactly the right context when it matters.
 
 ```
-You:    "My name is Alex. I'm a backend dev. I prefer Rust over Go."
-Cortex:  → extracts [identity] Alex, backend developer
-         → extracts [preference] Prefers Rust over Go
+Monday:    "I'm allergic to shellfish and I just moved to Tokyo."
 
-         ... 3 weeks later, new conversation ...
-
-You:    "What language should I use for this new service?"
-Agent:  "You've mentioned preferring Rust over Go for backend work."
+Wednesday: "Can you find me a good restaurant nearby?"
+    Agent:  Searches for Tokyo restaurants, automatically
+            excludes seafood-heavy options.
+            (Cortex recalled: allergy + location)
 ```
+
+No manual tagging. No "save this." It just works.
 
 ## Why Cortex?
 
@@ -133,6 +143,47 @@ Every memory, searchable. Every extraction, auditable.
 
 ---
 
+## How It Works
+
+### Write Path — every conversation turn
+```
+Conversation ──→ Fast Channel (regex) + Deep Channel (LLM)
+                          ↓
+                 Extracted memories (categorized into 20 types)
+                          ↓
+                 4-tier dedup (exact → skip / near-exact → replace / semantic → LLM judge / new → insert)
+                          ↓
+                 Store as Working (48h) or Core (permanent)
+                          ↓
+                 Extract entity relations → Neo4j knowledge graph
+```
+
+### Read Path — every conversation turn
+```
+User message ──→ Query Expansion (LLM generates 2-3 search variants)
+                          ↓
+                 BM25 (keywords) + Vector (semantics) → RRF Fusion
+                          ↓
+                 Multi-hit boost (memories found by multiple variants rank higher)
+                          ↓
+                 LLM Reranker (optional, re-scores for relevance)
+                          ↓
+                 Neo4j multi-hop traversal (discovers indirect associations)
+                          ↓
+                 Priority inject → AI context
+                 (constraints & persona first, then by relevance)
+```
+
+### Lifecycle — runs daily
+```
+Working Memory (48h) ──promote──→ Core Memory ──decay──→ Archive ──compress──→ back to Core
+                                        ↑
+                               read refreshes decay counter
+                               (nothing is ever truly lost)
+```
+
+---
+
 ## Quick Start
 
 ```bash
@@ -178,46 +229,6 @@ NEO4J_PASSWORD=your-password
 ```
 
 </details>
-
----
-
-## How It Works
-
-### Write Path (every conversation turn)
-```
-Conversation ──→ Fast Channel (regex) + Deep Channel (LLM)
-                          ↓
-                 Extracted memories (categorized)
-                          ↓
-                 4-tier dedup (exact/near-exact/semantic/new)
-                          ↓
-                 Store as Working (48h) or Core (permanent)
-                          ↓
-                 Extract entity relations → Neo4j
-```
-
-### Read Path (every conversation turn)
-```
-User message ──→ Query Expansion (2-3 LLM variants)
-                          ↓
-                 BM25 + Vector search (each variant)
-                          ↓
-                 RRF Fusion + multi-hit boost
-                          ↓
-                 LLM Reranker (optional)
-                          ↓
-                 Neo4j multi-hop traversal (2-hop)
-                          ↓
-                 Priority inject → AI context
-                 (constraints first, then by relevance)
-```
-
-### Lifecycle (daily scheduler)
-```
-Working ──promote──→ Core ──decay──→ Archive ──compress──→ back to Core
-                              ↑
-                     read refreshes decay counter
-```
 
 ---
 
