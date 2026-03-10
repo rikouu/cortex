@@ -3,7 +3,7 @@ services:
     # build: .
     image: ghcr.io/rikouu/cortex:latest
     # For local development, replace above with:
-    #   build: .
+    #   # build: .
     ports:
       - "21100:21100"
     volumes:

@@ -5,6 +5,40 @@
  */
 
 // Alias table: maps lowercase variants to canonical form
+/**
+ * Project-specific entity aliases.
+ * These are loaded dynamically per-agent in the future;
+ * for now, hard-coded for common patterns.
+ */
+const PROJECT_ALIAS_MAP = new Map<string, string>([
+  // Cortex variants → canonical
+  ['cortex', 'Cortex'], ['cortex 系统', 'Cortex'], ['cortex 项目', 'Cortex'],
+  ['cortex 记忆系统', 'Cortex'], ['cortex记忆系统', 'Cortex'], ['cortex项目', 'Cortex'],
+  ['cortex 智能体系统', 'Cortex'], ['cortex 记忆系统开发', 'Cortex'],
+
+  // User identity merging is done at ingest time via agentId
+]);
+
+/**
+ * Suffix patterns that should be stripped to normalize entity names.
+ * E.g. "cortex 关系存储" → check if "cortex" is a known entity → use that.
+ * "xxx 服务" / "xxx 插件" / "xxx 系统" / "xxx npm 包" etc.
+ */
+const STRIP_SUFFIXES = ['npm 包', 'npm包', '服务', '系统', '项目', '插件', '功能', '模块', '工具', '问题', '机器', '实例', '域名', '配置'];
+
+function tryStripSuffix(name: string): string | null {
+  const lower = name.toLowerCase().trim();
+  for (const suffix of STRIP_SUFFIXES) {
+    if (lower.endsWith(suffix) && lower.length > suffix.length + 1) {
+      const base = lower.slice(0, -suffix.length).trim();
+      // Check if the base is a known alias
+      const resolved = PROJECT_ALIAS_MAP.get(base) || ALIAS_MAP.get(base);
+      if (resolved) return resolved;
+    }
+  }
+  return null;
+}
+
 const ALIAS_MAP = new Map<string, string>([
   // Editors
   ['vscode', 'VS Code'], ['vs code', 'VS Code'], ['visual studio code', 'VS Code'],
@@ -87,8 +121,18 @@ export function normalizeEntity(raw: string): string {
 
   // Step 3: alias lookup (case-insensitive)
   const lower = s.toLowerCase();
+
+  // 3a: Project-specific aliases first
+  const projectAlias = PROJECT_ALIAS_MAP.get(lower);
+  if (projectAlias) return projectAlias;
+
+  // 3b: Generic tech aliases
   const alias = ALIAS_MAP.get(lower);
   if (alias) return alias;
+
+  // 3c: Try stripping common suffixes
+  const stripped = tryStripSuffix(s);
+  if (stripped) return stripped;
 
   // Step 4 & 5: CJK-aware casing
   if (CJK_RE.test(s)) {
