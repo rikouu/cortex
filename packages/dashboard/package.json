@@ -13,9 +13,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
+    "graphology-layout-forceatlas2": "^0.10.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.2.0"
+    "react-router-dom": "^7.2.0",
+    "sigma": "^3.0.2"
   },
   "devDependencies": {
     "@types/react": "^19.0.8",

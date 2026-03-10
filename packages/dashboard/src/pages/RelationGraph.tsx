@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { listRelations, createRelation, deleteRelation, search } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 import { toLocal } from '../utils/time.js';
+import Graph from 'graphology';
+import Sigma from 'sigma';
+import forceAtlas2 from 'graphology-layout-forceatlas2';
 
 interface Relation {
   id: string;
@@ -17,23 +20,28 @@ interface Relation {
   updated_at: string;
 }
 
-interface Node {
-  id: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+// Agent color palette
+const AGENT_COLORS = [
+  '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6',
+  '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4',
+  '#84cc16', '#e11d48', '#0ea5e9', '#a855f7', '#10b981',
+];
+
+function getAgentColor(agentId: string, agentMap: Map<string, number>): string {
+  if (!agentMap.has(agentId)) {
+    agentMap.set(agentId, agentMap.size);
+  }
+  return AGENT_COLORS[agentMap.get(agentId)! % AGENT_COLORS.length]!;
 }
 
-interface Transform {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
+function nodeSize(extractionCount: number): number {
+  // 1 → 5, 10+ → 20, linear in between
+  const clamped = Math.min(Math.max(extractionCount || 1, 1), 10);
+  return 5 + ((clamped - 1) / 9) * 15;
 }
 
 export default function RelationGraph() {
   const [relations, setRelations] = useState<Relation[]>([]);
-  const [filteredRelations, setFilteredRelations] = useState<Relation[]>([]);
   const [creating, setCreating] = useState(false);
   const [newRel, setNewRel] = useState({ subject: '', predicate: '', object: '', confidence: 0.8 });
   const [predicateFilter, setPredicateFilter] = useState('');
@@ -42,31 +50,19 @@ export default function RelationGraph() {
   const [loadingMemories, setLoadingMemories] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [tablePage, setTablePage] = useState(0);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.6);
   const tableLimit = 20;
   const [tooMany, setTooMany] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
-  const nodesRef = useRef<Map<string, Node>>(new Map());
-  const dragRef = useRef<{
-    nodeId: string | null;
-    offsetX: number;
-    offsetY: number;
-    isPanning: boolean;
-    startX: number;
-    startY: number;
-    startTx: number;
-    startTy: number;
-  }>({ nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 });
-  const transformRef = useRef<Transform>({ scale: 1, offsetX: 0, offsetY: 0 });
-  const alphaRef = useRef(1.0);
-  const selectedRef = useRef<string | null>(null);
-  const hasAutoFitRef = useRef(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<Sigma | null>(null);
+  const graphRef = useRef<Graph | null>(null);
   const { t } = useI18n();
 
   const load = () => {
-    listRelations({ limit: '200', include_expired: '1' }).then((data: Relation[]) => {
+    listRelations({ limit: '500', include_expired: '1' }).then((data: Relation[]) => {
       setRelations(data);
-      setTooMany(data.length >= 200);
+      setTooMany(data.length >= 500);
     });
   };
 
@@ -82,14 +78,14 @@ export default function RelationGraph() {
   // Derive unique predicates
   const predicates = [...new Set(relations.map(r => r.predicate))];
 
-  // Filter relations
-  useEffect(() => {
+  // Filter relations by predicate AND confidence threshold
+  const filteredRelations = useMemo(() => {
+    let result = relations.filter(r => (r.confidence ?? 1) >= confidenceThreshold);
     if (predicateFilter) {
-      setFilteredRelations(relations.filter(r => r.predicate === predicateFilter));
-    } else {
-      setFilteredRelations(relations);
+      result = result.filter(r => r.predicate === predicateFilter);
     }
-  }, [relations, predicateFilter]);
+    return result;
+  }, [relations, predicateFilter, confidenceThreshold]);
 
   const handleCreate = async () => {
     await createRelation(newRel);
@@ -133,546 +129,153 @@ export default function RelationGraph() {
     );
   };
 
-  // ── Coordinate helpers ──
+  // ── Sigma.js graph rendering ──
 
-  /** Convert mouse event to canvas pixel coordinates */
-  const getCanvasPixel = (e: React.MouseEvent<HTMLCanvasElement> | MouseEvent) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    return {
-      cx: (e.clientX - rect.left) * (canvas.width / rect.width) / dprRef.current,
-      cy: (e.clientY - rect.top) * (canvas.height / rect.height) / dprRef.current,
-    };
-  };
+  // Build agent color map from relations
+  const agentColorMap = useRef(new Map<string, number>());
 
-  /** Convert canvas pixel coords to world (graph) coords */
-  const canvasToWorld = (cx: number, cy: number) => {
-    const t = transformRef.current;
-    return {
-      wx: (cx - t.offsetX) / t.scale,
-      wy: (cy - t.offsetY) / t.scale,
-    };
-  };
+  // Build and render sigma graph when filteredRelations or selectedNode changes
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-  /** Convert world coords to canvas pixel coords */
-  const worldToCanvas = (wx: number, wy: number) => {
-    const t = transformRef.current;
-    return {
-      sx: wx * t.scale + t.offsetX,
-      sy: wy * t.scale + t.offsetY,
-    };
-  };
+    const graph = new Graph({ multi: true, type: 'directed' });
+    graphRef.current = graph;
 
-  // ── Fit to view ──
-
-  const fitToView = useCallback(() => {
-    const nodes = nodesRef.current;
-    const canvas = canvasRef.current;
-    if (!canvas || nodes.size === 0) return;
-
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const n of nodes.values()) {
-      minX = Math.min(minX, n.x);
-      maxX = Math.max(maxX, n.x);
-      minY = Math.min(minY, n.y);
-      maxY = Math.max(maxY, n.y);
-    }
-
-    const padding = 80;
-    const graphW = maxX - minX + padding * 2;
-    const graphH = maxY - minY + padding * 2;
-
-    const dpr = dprRef.current;
-    const cw = canvas.width / dpr;
-    const ch = canvas.height / dpr;
-    const scale = Math.min(cw / graphW, ch / graphH, 2.5);
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-
-    transformRef.current = {
-      scale,
-      offsetX: cw / 2 - centerX * scale,
-      offsetY: ch / 2 - centerY * scale,
-    };
-  }, []);
-
-  // ── Force-directed graph simulation ──
-
-  const simulate = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || filteredRelations.length === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = dprRef.current;
-    const W = canvas.width / dpr;
-    const H = canvas.height / dpr;
-    const nodes = nodesRef.current;
-    const sel = selectedRef.current;
-    const cam = transformRef.current;
-
-    // Build nodes from relations
-    const nodeIds = new Set<string>();
-    filteredRelations.forEach(r => { nodeIds.add(r.subject); nodeIds.add(r.object); });
-
-    for (const id of nodeIds) {
-      if (!nodes.has(id)) {
-        nodes.set(id, { id, x: (Math.random() - 0.5) * 400, y: (Math.random() - 0.5) * 300, vx: 0, vy: 0 });
-      }
-    }
-    for (const id of nodes.keys()) {
-      if (!nodeIds.has(id)) nodes.delete(id);
-    }
-
-    const nodeArr = Array.from(nodes.values());
-    const REPULSION = 5000;
-    const ATTRACTION = 0.005;
-    const DAMPING = 0.55;
-    const CENTER_GRAVITY = 0.01;
-    const IDEAL_DIST = 200;
-    const MAX_VELOCITY = 5;
-    const ALPHA_DECAY = 0.995;
-    const ALPHA_MIN = 0.001;
-
-    // Cool down over time
-    const alpha = alphaRef.current;
-    alphaRef.current = Math.max(alpha * ALPHA_DECAY, ALPHA_MIN);
-
-    for (const n of nodeArr) {
-      let fx = 0, fy = 0;
-
-      // Center gravity toward origin (world 0,0)
-      fx += (0 - n.x) * CENTER_GRAVITY;
-      fy += (0 - n.y) * CENTER_GRAVITY;
-
-      for (const m of nodeArr) {
-        if (m === n) continue;
-        const dx = n.x - m.x;
-        const dy = n.y - m.y;
-        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-        const force = REPULSION / (dist * dist);
-        fx += (dx / dist) * force;
-        fy += (dy / dist) * force;
-      }
-
-      for (const r of filteredRelations) {
-        let other: Node | undefined;
-        if (r.subject === n.id) other = nodes.get(r.object);
-        else if (r.object === n.id) other = nodes.get(r.subject);
-        if (!other) continue;
-        const dx = other.x - n.x;
-        const dy = other.y - n.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const force = (dist - IDEAL_DIST) * ATTRACTION;
-        fx += dx * force;
-        fy += dy * force;
-      }
-
-      if (dragRef.current.nodeId !== n.id) {
-        n.vx = (n.vx + fx * alpha) * DAMPING;
-        n.vy = (n.vy + fy * alpha) * DAMPING;
-
-        // Clamp velocity
-        const speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-        if (speed > MAX_VELOCITY) {
-          n.vx = (n.vx / speed) * MAX_VELOCITY;
-          n.vy = (n.vy / speed) * MAX_VELOCITY;
-        } else if (speed < 0.1) {
-          n.vx = 0;
-          n.vy = 0;
+    // Collect node info: max extraction count per entity, and agent color
+    const nodeInfo = new Map<string, { maxExtraction: number; agentId: string }>();
+    for (const r of filteredRelations) {
+      for (const entity of [r.subject, r.object]) {
+        const existing = nodeInfo.get(entity);
+        if (!existing) {
+          nodeInfo.set(entity, { maxExtraction: r.extraction_count || 1, agentId: r.agent_id || 'default' });
+        } else {
+          existing.maxExtraction = Math.max(existing.maxExtraction, r.extraction_count || 1);
         }
-
-        n.x += n.vx;
-        n.y += n.vy;
       }
-      // No boundary clamp — camera handles visibility
     }
 
-    // ── Draw ──
-    ctx.clearRect(0, 0, W, H);
-
-    // Build connected set for selected node
-    const connectedToSel = new Set<string>();
-    if (sel) {
-      connectedToSel.add(sel);
-      filteredRelations.forEach(r => {
-        if (r.subject === sel) connectedToSel.add(r.object);
-        if (r.object === sel) connectedToSel.add(r.subject);
+    // Add nodes
+    for (const [entity, info] of nodeInfo) {
+      const color = getAgentColor(info.agentId, agentColorMap.current);
+      const size = nodeSize(info.maxExtraction);
+      graph.addNode(entity, {
+        label: entity,
+        size,
+        color,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
       });
     }
 
-    // Edges — line width based on confidence
+    // Add edges
     for (const r of filteredRelations) {
-      const s = nodes.get(r.subject);
-      const o = nodes.get(r.object);
-      if (!s || !o) continue;
-
-      const { sx: sx1, sy: sy1 } = worldToCanvas(s.x, s.y);
-      const { sx: sx2, sy: sy2 } = worldToCanvas(o.x, o.y);
-
-      const isHighlighted = sel && (r.subject === sel || r.object === sel);
-      const baseWidth = 1 + (r.confidence ?? 0.5) * 3;
-
-      ctx.beginPath();
-      ctx.moveTo(sx1, sy1);
-      ctx.lineTo(sx2, sy2);
-      ctx.strokeStyle = isHighlighted ? 'rgba(99, 102, 241, 0.7)' : sel ? 'rgba(100, 100, 140, 0.15)' : 'rgba(100, 100, 140, 0.4)';
-      ctx.lineWidth = isHighlighted ? baseWidth + 1 : baseWidth;
-      ctx.stroke();
-
-      // Arrow at midpoint
-      const angle = Math.atan2(sy2 - sy1, sx2 - sx1);
-      const midX = (sx1 + sx2) / 2;
-      const midY = (sy1 + sy2) / 2;
-      ctx.beginPath();
-      ctx.moveTo(midX + 8 * Math.cos(angle), midY + 8 * Math.sin(angle));
-      ctx.lineTo(midX - 5 * Math.cos(angle - 0.5), midY - 5 * Math.sin(angle - 0.5));
-      ctx.lineTo(midX - 5 * Math.cos(angle + 0.5), midY - 5 * Math.sin(angle + 0.5));
-      ctx.fillStyle = isHighlighted ? 'rgba(99, 102, 241, 0.8)' : sel ? 'rgba(100, 100, 140, 0.2)' : 'rgba(100, 100, 140, 0.6)';
-      ctx.fill();
-
-      // Edge label
-      ctx.fillStyle = isHighlighted ? '#a5b4fc' : sel ? '#555' : '#888';
-      ctx.font = '10px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(r.predicate, midX, midY - 8);
+      const conf = r.confidence ?? 0.5;
+      const edgeSize = 1 + conf * 4; // 1..5
+      const alpha = Math.max(0.2, conf); // 0.2..1.0
+      // Color with alpha baked in
+      const edgeColor = `rgba(150, 150, 200, ${alpha})`;
+      graph.addEdge(r.subject, r.object, {
+        label: r.predicate,
+        size: edgeSize,
+        color: edgeColor,
+        type: 'arrow',
+        relationId: r.id,
+      });
     }
 
-    // Nodes — constant screen-space size
-    for (const n of nodeArr) {
-      const { sx, sy } = worldToCanvas(n.x, n.y);
-      const isSel = n.id === sel;
-      const isConnected = connectedToSel.has(n.id);
-      const dimmed = sel && !isConnected;
-
-      // Node degree for size
-      let degree = 0;
-      filteredRelations.forEach(r => { if (r.subject === n.id || r.object === n.id) degree++; });
-      const radius = Math.min(16 + degree * 2, 28);
-
-      ctx.beginPath();
-      ctx.arc(sx, sy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isSel ? '#818cf8' : dimmed ? '#2a2e3a' : dragRef.current.nodeId === n.id ? '#6366f1' : '#4f46e5';
-      ctx.fill();
-      ctx.strokeStyle = isSel ? '#c7d2fe' : dimmed ? '#3a3e4a' : '#818cf8';
-      ctx.lineWidth = isSel ? 3 : 2;
-      ctx.stroke();
-
-      ctx.fillStyle = dimmed ? '#555' : '#fff';
-      ctx.font = `bold ${radius > 20 ? 12 : 11}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const label = n.id.length > 10 ? n.id.slice(0, 9) + '.' : n.id;
-      ctx.fillText(label, sx, sy);
+    // Run ForceAtlas2 layout (synchronous)
+    if (graph.order > 0) {
+      forceAtlas2.assign(graph, {
+        iterations: 100,
+        settings: {
+          gravity: 1,
+          scalingRatio: 10,
+          barnesHutOptimize: graph.order > 50,
+          strongGravityMode: true,
+          slowDown: 5,
+        },
+      });
     }
 
-    // Zoom indicator
-    const zoomPct = Math.round(cam.scale * 100);
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '11px system-ui';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(`${zoomPct}%`, W - 10, H - 10);
-
-    animRef.current = requestAnimationFrame(simulate);
-  }, [filteredRelations]);
-
-  // Keep selectedRef in sync
-  useEffect(() => { selectedRef.current = selectedNode; }, [selectedNode]);
-
-  // Set up HiDPI canvas
-  const dprRef = useRef(1);
-  const canvasInitRef = useRef(false);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || canvasInitRef.current) return;
-    canvasInitRef.current = true;
-    const dpr = window.devicePixelRatio || 1;
-    dprRef.current = dpr;
-    const w = 900, h = 500;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = '100%';
-    canvas.style.height = 'auto';
-    const ctx = canvas.getContext('2d');
-    if (ctx) ctx.scale(dpr, dpr);
-  }, []);
-
-  useEffect(() => {
-    if (filteredRelations.length > 0) {
-      alphaRef.current = 1.0; // reheat on data change
-      animRef.current = requestAnimationFrame(simulate);
-    }
-    return () => cancelAnimationFrame(animRef.current);
-  }, [filteredRelations, simulate]);
-
-  // Auto-fit after initial physics settle
-  useEffect(() => {
-    if (filteredRelations.length > 0 && !hasAutoFitRef.current) {
-      const timer = setTimeout(() => {
-        fitToView();
-        hasAutoFitRef.current = true;
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [filteredRelations, fitToView]);
-
-  // Reset auto-fit flag when filter changes
-  useEffect(() => {
-    hasAutoFitRef.current = false;
-  }, [predicateFilter]);
-
-  // ── Mouse interaction ──
-
-  const getNodeAt = (wx: number, wy: number): string | null => {
-    // Hit test in world coords; use a generous radius
-    for (const [id, n] of nodesRef.current) {
-      const dx = wx - n.x;
-      const dy = wy - n.y;
-      // 30px radius in world space (roughly matches visual node size)
-      if (dx * dx + dy * dy < 900) return id;
-    }
-    return null;
-  };
-
-  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const { cx, cy } = getCanvasPixel(e);
-    const { wx, wy } = canvasToWorld(cx, cy);
-    const nodeId = getNodeAt(wx, wy);
-
-    if (nodeId) {
-      // Start dragging a node
-      const n = nodesRef.current.get(nodeId)!;
-      dragRef.current = {
-        nodeId,
-        offsetX: n.x - wx,
-        offsetY: n.y - wy,
-        isPanning: false,
-        startX: 0, startY: 0, startTx: 0, startTy: 0,
-      };
-    } else {
-      // Start panning
-      const t = transformRef.current;
-      dragRef.current = {
-        nodeId: null,
-        offsetX: 0, offsetY: 0,
-        isPanning: true,
-        startX: cx,
-        startY: cy,
-        startTx: t.offsetX,
-        startTy: t.offsetY,
-      };
-    }
-  };
-
-  const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const d = dragRef.current;
-    const { cx, cy } = getCanvasPixel(e);
-
-    if (d.nodeId) {
-      // Dragging a node
-      const { wx, wy } = canvasToWorld(cx, cy);
-      const n = nodesRef.current.get(d.nodeId);
-      if (n) {
-        n.x = wx + d.offsetX;
-        n.y = wy + d.offsetY;
-        n.vx = 0;
-        n.vy = 0;
-      }
-    } else if (d.isPanning) {
-      // Panning the camera
-      transformRef.current = {
-        ...transformRef.current,
-        offsetX: d.startTx + (cx - d.startX),
-        offsetY: d.startTy + (cy - d.startY),
-      };
-    }
-  };
-
-  const onMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const d = dragRef.current;
-
-    if (d.nodeId) {
-      // Check if it was a click (minimal movement)
-      const { cx, cy } = getCanvasPixel(e);
-      const { wx, wy } = canvasToWorld(cx, cy);
-      const n = nodesRef.current.get(d.nodeId);
-      if (n) {
-        const dx = n.x - (wx + d.offsetX);
-        const dy = n.y - (wy + d.offsetY);
-        if (Math.abs(dx) < 3 && Math.abs(dy) < 3) {
-          // Click — select/deselect
-          const clickedNode = d.nodeId;
-          if (selectedNode === clickedNode) {
-            setSelectedNode(null);
-            setNodeMemories([]);
+    // Create sigma renderer
+    const renderer = new Sigma(graph, containerRef.current, {
+      renderEdgeLabels: true,
+      defaultEdgeType: 'arrow',
+      labelRenderedSizeThreshold: 6,
+      labelSize: 12,
+      labelColor: { color: '#e2e8f0' },
+      edgeLabelColor: { color: '#94a3b8' },
+      edgeLabelSize: 10,
+      // Node/edge reducers for search highlight
+      nodeReducer: (node, data) => {
+        const res = { ...data };
+        if (selectedNode) {
+          if (node === selectedNode) {
+            res.highlighted = true;
+            res.zIndex = 1;
           } else {
-            setSelectedNode(clickedNode);
-            loadNodeMemories(clickedNode);
+            // Check if connected to selected
+            const connected = filteredRelations.some(
+              r => (r.subject === selectedNode && r.object === node) ||
+                   (r.object === selectedNode && r.subject === node)
+            );
+            if (!connected) {
+              res.color = '#2a2e3a';
+              res.label = '';
+            }
           }
         }
-      }
-      alphaRef.current = Math.max(alphaRef.current, 0.3); // reheat after drag
-    }
+        return res;
+      },
+      edgeReducer: (edge, data) => {
+        const res = { ...data };
+        if (selectedNode) {
+          const source = graph.source(edge);
+          const target = graph.target(edge);
+          if (source === selectedNode || target === selectedNode) {
+            res.color = 'rgba(99, 102, 241, 0.8)';
+            res.size = (data.size || 2) + 1;
+          } else {
+            res.color = 'rgba(100, 100, 140, 0.1)';
+            res.hidden = true;
+          }
+        }
+        return res;
+      },
+    });
+    rendererRef.current = renderer;
 
-    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
-  };
+    // Click handler
+    renderer.on('clickNode', ({ node }) => {
+      setSelectedNode(prev => {
+        if (prev === node) {
+          setNodeMemories([]);
+          return null;
+        }
+        loadNodeMemories(node);
+        return node;
+      });
+    });
 
-  const onMouseLeave = () => {
-    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
-  };
+    // Click stage to deselect
+    renderer.on('clickStage', () => {
+      setSelectedNode(null);
+      setNodeMemories([]);
+    });
 
-  // ── Wheel zoom ──
-
-  const onWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const cx = (e.clientX - rect.left) * (canvas.width / rect.width) / dprRef.current;
-    const cy = (e.clientY - rect.top) * (canvas.height / rect.height) / dprRef.current;
-
-    const t = transformRef.current;
-    const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    const newScale = Math.min(Math.max(t.scale * zoomFactor, 0.1), 8);
-
-    // Zoom centered on cursor: keep world point under cursor fixed
-    const wx = (cx - t.offsetX) / t.scale;
-    const wy = (cy - t.offsetY) / t.scale;
-
-    transformRef.current = {
-      scale: newScale,
-      offsetX: cx - wx * newScale,
-      offsetY: cy - wy * newScale,
+    return () => {
+      renderer.kill();
+      rendererRef.current = null;
+      graphRef.current = null;
     };
-  }, []);
-
-  // Attach wheel handler with passive:false to allow preventDefault
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const cx = (e.clientX - rect.left) * (canvas.width / rect.width) / (window.devicePixelRatio || 1);
-      const cy = (e.clientY - rect.top) * (canvas.height / rect.height) / (window.devicePixelRatio || 1);
-
-      const t = transformRef.current;
-      const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const newScale = Math.min(Math.max(t.scale * zoomFactor, 0.1), 8);
-
-      const wx = (cx - t.offsetX) / t.scale;
-      const wy = (cy - t.offsetY) / t.scale;
-
-      transformRef.current = {
-        scale: newScale,
-        offsetX: cx - wx * newScale,
-        offsetY: cy - wy * newScale,
-      };
-    };
-    canvas.addEventListener('wheel', handler, { passive: false });
-    return () => canvas.removeEventListener('wheel', handler);
-  }, [filteredRelations]);
-
-  // ── Touch interaction (pinch zoom + drag) ──
-
-  const touchRef = useRef<{ startDist: number; startScale: number; startX: number; startY: number; startTx: number; startTy: number; fingers: number }>({ startDist: 0, startScale: 1, startX: 0, startY: 0, startTx: 0, startTy: 0, fingers: 0 });
-
-  const getTouchDist = (touches: React.TouchList) => {
-    if (touches.length < 2) return 0;
-    const dx = touches[1]!.clientX - touches[0]!.clientX;
-    const dy = touches[1]!.clientY - touches[0]!.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
-  const getTouchCenter = (touches: React.TouchList) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const dpr = dprRef.current;
-    if (touches.length < 2) {
-      return {
-        cx: (touches[0]!.clientX - rect.left) * (canvas.width / rect.width) / dpr,
-        cy: (touches[0]!.clientY - rect.top) * (canvas.height / rect.height) / dpr,
-      };
-    }
-    return {
-      cx: ((touches[0]!.clientX + touches[1]!.clientX) / 2 - rect.left) * (canvas.width / rect.width) / dpr,
-      cy: ((touches[0]!.clientY + touches[1]!.clientY) / 2 - rect.top) * (canvas.height / rect.height) / dpr,
-    };
-  };
-
-  const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const t = transformRef.current;
-    const { cx, cy } = getTouchCenter(e.touches);
-    touchRef.current = {
-      startDist: getTouchDist(e.touches),
-      startScale: t.scale,
-      startX: cx, startY: cy,
-      startTx: t.offsetX, startTy: t.offsetY,
-      fingers: e.touches.length,
-    };
-
-    // Single finger: check node drag
-    if (e.touches.length === 1) {
-      const { wx, wy } = canvasToWorld(cx, cy);
-      const nodeId = getNodeAt(wx, wy);
-      if (nodeId) {
-        const n = nodesRef.current.get(nodeId)!;
-        dragRef.current = { nodeId, offsetX: n.x - wx, offsetY: n.y - wy, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
-      }
-    }
-  };
-
-  const onTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const tr = touchRef.current;
-    const { cx, cy } = getTouchCenter(e.touches);
-
-    if (e.touches.length >= 2) {
-      // Pinch zoom
-      const dist = getTouchDist(e.touches);
-      if (tr.startDist > 0) {
-        const ratio = dist / tr.startDist;
-        const newScale = Math.min(Math.max(tr.startScale * ratio, 0.1), 8);
-        const wx = (tr.startX - tr.startTx) / tr.startScale;
-        const wy = (tr.startY - tr.startTy) / tr.startScale;
-        transformRef.current = {
-          scale: newScale,
-          offsetX: cx - wx * newScale + (cx - tr.startX),
-          offsetY: cy - wy * newScale + (cy - tr.startY),
-        };
-      }
-    } else if (e.touches.length === 1) {
-      if (dragRef.current.nodeId) {
-        // Drag node
-        const { wx, wy } = canvasToWorld(cx, cy);
-        const n = nodesRef.current.get(dragRef.current.nodeId);
-        if (n) { n.x = wx + dragRef.current.offsetX; n.y = wy + dragRef.current.offsetY; n.vx = 0; n.vy = 0; }
-      } else {
-        // Pan
-        transformRef.current = {
-          ...transformRef.current,
-          offsetX: tr.startTx + (cx - tr.startX),
-          offsetY: tr.startTy + (cy - tr.startY),
-        };
-      }
-    }
-  };
-
-  const onTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    if (dragRef.current.nodeId) {
-      alphaRef.current = Math.max(alphaRef.current, 0.3);
-    }
-    dragRef.current = { nodeId: null, offsetX: 0, offsetY: 0, isPanning: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
-  };
+  }, [filteredRelations, selectedNode]);
 
   // Node stats
   const nodeSet = new Set<string>();
   filteredRelations.forEach(r => { nodeSet.add(r.subject); nodeSet.add(r.object); });
+
+  // Unique agents for legend
+  const agentIds = [...new Set(relations.map(r => r.agent_id || 'default'))];
 
   // Node connections for selected node
   const selectedRelations = selectedNode
@@ -711,6 +314,9 @@ export default function RelationGraph() {
             whiteSpace: 'nowrap', transition: 'all 0.15s',
           }}
         >{autoRefresh ? '⏸' : '▶'} {t('relations.autoRefresh')}</button>
+        <button className="btn" onClick={load} style={{ fontSize: 11, padding: '3px 8px' }}>
+          {t('common.refresh') || 'Refresh'}
+        </button>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {t('relations.nodeEdgeCount', { nodes: nodeSet.size, edges: filteredRelations.length })}
         </span>
@@ -718,32 +324,45 @@ export default function RelationGraph() {
         <button className="btn primary" onClick={() => setCreating(true)}>{t('relations.newRelation')}</button>
       </div>
 
-      {/* Force-directed graph */}
+      {/* Confidence threshold slider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '8px 0 12px', padding: '8px 12px', background: 'var(--bg-card, rgba(30,30,50,0.5))', borderRadius: 'var(--radius)', fontSize: 13 }}>
+        <label style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {t('relations.confidence') || 'Confidence'} ≥ {confidenceThreshold.toFixed(2)}
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={confidenceThreshold}
+          onChange={e => { setConfidenceThreshold(parseFloat(e.target.value)); setTablePage(0); }}
+          style={{ flex: 1, maxWidth: 300 }}
+        />
+        {/* Agent color legend */}
+        {agentIds.length > 1 && (
+          <div style={{ display: 'flex', gap: 8, marginLeft: 16, flexWrap: 'wrap' }}>
+            {agentIds.slice(0, 8).map(aid => (
+              <span key={aid} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: getAgentColor(aid, agentColorMap.current), display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-muted)' }}>{aid.length > 12 ? aid.slice(0, 11) + '…' : aid}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sigma.js graph container */}
       {filteredRelations.length > 0 && (
         <div className="card" style={{ marginBottom: 16, position: 'relative' }}>
-          <canvas
-            ref={canvasRef}
-            width={900}
-            height={500}
-            style={{ width: '100%', height: 'auto', background: '#0f0f1a', borderRadius: 8, cursor: dragRef.current.nodeId ? 'grabbing' : dragRef.current.isPanning ? 'grabbing' : 'grab', touchAction: 'none', imageRendering: 'auto' }}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseLeave}
-            onDoubleClick={() => { fitToView(); alphaRef.current = Math.max(alphaRef.current, 0.3); }}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
+          <div
+            ref={containerRef}
+            style={{
+              height: 'calc(100vh - 200px)',
+              minHeight: 400,
+              background: '#0f0f1a',
+              borderRadius: 8,
+            }}
           />
-          {/* Zoom controls - bottom right */}
-          <div style={{ position: 'absolute', bottom: 40, right: 16, display: 'flex', gap: 4, background: 'rgba(15,15,26,0.8)', borderRadius: 6, padding: 4 }}>
-            <button style={{ width: 28, height: 28, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.08)', color: '#ccc', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => { const t = transformRef.current; const cx = canvasRef.current!.width / 2 / dprRef.current; const cy = canvasRef.current!.height / 2 / dprRef.current; const wx = (cx - t.offsetX) / t.scale; const wy = (cy - t.offsetY) / t.scale; const ns = Math.min(t.scale * 1.3, 8); transformRef.current = { scale: ns, offsetX: cx - wx * ns, offsetY: cy - wy * ns }; }}>+</button>
-            <button style={{ width: 28, height: 28, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.08)', color: '#ccc', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => { const t = transformRef.current; const cx = canvasRef.current!.width / 2 / dprRef.current; const cy = canvasRef.current!.height / 2 / dprRef.current; const wx = (cx - t.offsetX) / t.scale; const wy = (cy - t.offsetY) / t.scale; const ns = Math.max(t.scale / 1.3, 0.1); transformRef.current = { scale: ns, offsetX: cx - wx * ns, offsetY: cy - wy * ns }; }}>−</button>
-            <button style={{ width: 28, height: 28, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, background: 'rgba(255,255,255,0.08)', color: '#ccc', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => { fitToView(); alphaRef.current = Math.max(alphaRef.current, 0.3); }}>Fit</button>
-          </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
             {t('relations.graphHint')} {t('relations.zoomHint')}
           </p>
