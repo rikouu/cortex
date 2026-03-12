@@ -90,7 +90,7 @@
 
 - **双通道**：关键词精确匹配 + 语义理解
 - **查询扩展**：LLM 生成搜索变体，多命中加权
-- **重排序**：LLM 或 Cohere 二次评分
+- **重排序**：LLM、Cohere、Voyage AI、Jina AI 或 SiliconFlow 二次评分
 - **智能注入**：约束和人设始终优先注入，永远不会被截断
 
 ### 🕸️ 知识图谱 (Neo4j)
@@ -503,11 +503,24 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | 提供商 | 推荐模型 | 备注 |
 |---|---|---|
 | **OpenAI** | text-embedding-3-small/large | 默认，最稳定 |
-| **Google Gemini** | gemini-embedding-001 | AI Studio 免费 |
-| **Voyage AI** | voyage-3, voyage-3-lite | 高质量 |
+| **Google Gemini** | gemini-embedding-2, gemini-embedding-001 | AI Studio 免费 |
+| **Voyage AI** | voyage-4-large, voyage-4-lite | 高质量（共享嵌入空间）|
+| **DashScope** | text-embedding-v3 | 通义千问，中文友好 |
 | **Ollama** | bge-m3, nomic-embed-text | 本地，零成本 |
 
 > ⚠️ **更换 embedding 模型**后需要重建所有向量索引。在面板 → 设置 → 重建向量索引。
+
+### 重排序（可选，提升搜索相关性）
+
+| 提供商 | 推荐模型 | 免费额度 | 备注 |
+|---|---|---|---|
+| **LLM** | （使用提取模型）| — | 质量最高，延迟 ~2-3s |
+| **Cohere** | rerank-v3.5 | 1000次/月 | 老牌稳定 |
+| **Voyage AI** | rerank-2.5 | 2亿 token | 免费额度最大 |
+| **Jina AI** | jina-reranker-v2 | 100万 token | 中文/多语言最佳 |
+| **SiliconFlow** | bge-reranker-v2-m3 | 有免费额度 | 开源模型，延迟低 |
+
+> 💡 专用重排序比 LLM 重排序快 **10-50 倍**（~100ms vs ~2s）。在面板 → 设置 → 搜索中配置。
 
 ---
 

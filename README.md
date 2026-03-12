@@ -89,7 +89,7 @@ Query → BM25 (keywords) + Vector (semantics) → RRF Fusion
 
 - **Dual-channel**: keyword precision + semantic understanding
 - **Query expansion**: LLM generates search variants, multi-hit boost
-- **Reranker**: LLM or Cohere re-scores for relevance
+- **Reranker**: LLM, Cohere, Voyage AI, Jina AI, or SiliconFlow re-scores for relevance
 - **Smart injection**: constraints and persona always injected first, never truncated
 
 ### 🕸️ Knowledge Graph (Neo4j)
@@ -508,6 +508,18 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | **Ollama** | bge-m3, nomic-embed-text | Local, zero cost |
 
 > ⚠️ **Changing embedding models** requires reindexing all vectors. Use Dashboard → Settings → Reindex Vectors.
+
+### Reranker (optional, improves search relevance)
+
+| Provider | Recommended Models | Free Tier | Notes |
+|---|---|---|---|
+| **LLM** | (your extraction model) | — | Highest quality, ~2-3s latency |
+| **Cohere** | rerank-v3.5 | 1000 req/mo | Established, reliable |
+| **Voyage AI** | rerank-2.5, rerank-2.5-lite | 200M tokens | Best free tier |
+| **Jina AI** | jina-reranker-v2-base-multilingual | 1M tokens | Best for Chinese/multilingual |
+| **SiliconFlow** | BAAI/bge-reranker-v2-m3 | Free tier | Open-source, low latency |
+
+> 💡 Dedicated rerankers are **10-50x faster** than LLM reranking (~100ms vs ~2s). Configure in Dashboard → Settings → Search.
 
 ---
 
