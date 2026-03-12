@@ -116,6 +116,7 @@ export default function Settings() {
           enabled: config.search?.reranker?.enabled ?? false,
           provider: config.search?.reranker?.provider ?? 'none',
           apiKey: config.search?.reranker?.apiKey ?? '',
+          model: config.search?.reranker?.model ?? '',
           topN: config.search?.reranker?.topN ?? 10,
           weight: config.search?.reranker?.weight ?? 0.5,
         },

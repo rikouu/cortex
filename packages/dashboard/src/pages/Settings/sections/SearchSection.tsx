@@ -64,20 +64,56 @@ export default function SearchSection({
                 </select>
 
                 {['cohere', 'voyage', 'jina', 'siliconflow'].includes(draft?.reranker?.provider) && (
-                  <div style={{ marginBottom: 8 }}>
-                    <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
-                      {draft?.reranker?.provider === 'cohere' ? 'Cohere' :
-                       draft?.reranker?.provider === 'voyage' ? 'Voyage AI' :
-                       draft?.reranker?.provider === 'jina' ? 'Jina AI' : 'SiliconFlow'} API Key
-                    </label>
-                    <input
-                      type="password"
-                      value={draft?.reranker?.apiKey ?? ''}
-                      onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, apiKey: e.target.value } }))}
-                      placeholder={`Enter ${draft?.reranker?.provider} API key`}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
+                  <>
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+                        {draft?.reranker?.provider === 'cohere' ? 'Cohere' :
+                         draft?.reranker?.provider === 'voyage' ? 'Voyage AI' :
+                         draft?.reranker?.provider === 'jina' ? 'Jina AI' : 'SiliconFlow'} API Key
+                      </label>
+                      <input
+                        type="password"
+                        value={draft?.reranker?.apiKey ?? ''}
+                        onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, apiKey: e.target.value } }))}
+                        placeholder={`Enter ${draft?.reranker?.provider} API key`}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Model</label>
+                      <select
+                        value={draft?.reranker?.model ?? ''}
+                        onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, model: e.target.value } }))}
+                        style={{ width: '100%' }}
+                      >
+                        {draft?.reranker?.provider === 'cohere' && (
+                          <>
+                            <option value="rerank-v3.5">rerank-v3.5</option>
+                            <option value="rerank-v3.0">rerank-v3.0</option>
+                          </>
+                        )}
+                        {draft?.reranker?.provider === 'voyage' && (
+                          <>
+                            <option value="rerank-2.5">rerank-2.5</option>
+                            <option value="rerank-2.5-lite">rerank-2.5-lite (faster)</option>
+                            <option value="rerank-2">rerank-2</option>
+                          </>
+                        )}
+                        {draft?.reranker?.provider === 'jina' && (
+                          <>
+                            <option value="jina-reranker-v2-base-multilingual">jina-reranker-v2-base-multilingual</option>
+                            <option value="jina-reranker-v1-base-en">jina-reranker-v1-base-en</option>
+                          </>
+                        )}
+                        {draft?.reranker?.provider === 'siliconflow' && (
+                          <>
+                            <option value="BAAI/bge-reranker-v2-m3">BAAI/bge-reranker-v2-m3</option>
+                            <option value="BAAI/bge-reranker-large">BAAI/bge-reranker-large</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                  </>
                 )}
 
                 <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Top N results</label>
