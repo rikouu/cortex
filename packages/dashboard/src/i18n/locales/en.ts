@@ -541,6 +541,7 @@ export default {
     rerankerScoreFusion: 'Score Fusion',
     rerankerTrustOriginal: '← Trust original',
     rerankerTrustReranker: 'Trust Reranker →',
+    rerankerConfigHint: 'Configure provider, model, and API key in the LLM & Embedding section above.',
     hybridSearch: 'Hybrid Search',
     minSimilarity: 'Min Similarity',
     minSimilarityDesc: 'Minimum cosine similarity to include a memory in results. Higher = stricter, fewer but more relevant results. 0 = no filter. Recommended: 15-30%.',

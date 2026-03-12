@@ -49,72 +49,9 @@ export default function SearchSection({
 
             {draft?.reranker?.enabled && (
               <div style={{ marginLeft: 16 }}>
-                <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>{t('settings.rerankerProvider')}</label>
-                <select
-                  value={draft?.reranker?.provider ?? 'none'}
-                  onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, provider: e.target.value } }))}
-                  style={{ width: '100%', marginBottom: 8 }}
-                >
-                  <option value="llm">LLM (uses extraction model)</option>
-                  <option value="cohere">Cohere (rerank-v3.5)</option>
-                  <option value="voyage">Voyage AI (rerank-2.5) — 200M free tokens</option>
-                  <option value="jina">Jina AI (multilingual) — 1M free tokens</option>
-                  <option value="siliconflow">SiliconFlow (开源模型)</option>
-                  <option value="none">Disabled</option>
-                </select>
-
-                {['cohere', 'voyage', 'jina', 'siliconflow'].includes(draft?.reranker?.provider) && (
-                  <>
-                    <div style={{ marginBottom: 8 }}>
-                      <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
-                        {draft?.reranker?.provider === 'cohere' ? 'Cohere' :
-                         draft?.reranker?.provider === 'voyage' ? 'Voyage AI' :
-                         draft?.reranker?.provider === 'jina' ? 'Jina AI' : 'SiliconFlow'} {t('settings.rerankerApiKey')}
-                      </label>
-                      <input
-                        type="password"
-                        value={draft?.reranker?.apiKey ?? ''}
-                        onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, apiKey: e.target.value } }))}
-                        placeholder={`Enter ${draft?.reranker?.provider} API key`}
-                        style={{ width: '100%' }}
-                      />
-                    </div>
-                    <div style={{ marginBottom: 8 }}>
-                      <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>{t('settings.rerankerModel')}</label>
-                      <select
-                        value={draft?.reranker?.model ?? ''}
-                        onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, model: e.target.value } }))}
-                        style={{ width: '100%' }}
-                      >
-                        {draft?.reranker?.provider === 'cohere' && (
-                          <>
-                            <option value="rerank-v3.5">rerank-v3.5</option>
-                            <option value="rerank-v3.0">rerank-v3.0</option>
-                          </>
-                        )}
-                        {draft?.reranker?.provider === 'voyage' && (
-                          <>
-                            <option value="rerank-2.5">rerank-2.5</option>
-                            <option value="rerank-2.5-lite">rerank-2.5-lite (faster)</option>
-                            <option value="rerank-2">rerank-2</option>
-                          </>
-                        )}
-                        {draft?.reranker?.provider === 'jina' && (
-                          <>
-                            <option value="jina-reranker-v2-base-multilingual">jina-reranker-v2-base-multilingual</option>
-                            <option value="jina-reranker-v1-base-en">jina-reranker-v1-base-en</option>
-                          </>
-                        )}
-                        {draft?.reranker?.provider === 'siliconflow' && (
-                          <>
-                            <option value="BAAI/bge-reranker-v2-m3">BAAI/bge-reranker-v2-m3</option>
-                            <option value="BAAI/bge-reranker-large">BAAI/bge-reranker-large</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                  </>
-                )}
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                  💡 {t('settings.rerankerConfigHint')}
+                </div>
 
                 <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>{t('settings.rerankerTopN')}</label>
                 <input
@@ -151,7 +88,7 @@ export default function SearchSection({
             {displayRow(t('settings.textWeight'), config.search?.textWeight?.toFixed(2))}
             {displayRow(t('settings.recencyBoostWindow'), humanizeDuration(config.search?.recencyBoostWindow), t('settings.recencyBoostWindowDesc'))}
             {displayRow(`🎚️ ${t('settings.minSimilarity')}`, `${((config.search?.minSimilarity ?? 0.2) * 100).toFixed(0)}%`, t('settings.minSimilarityDesc'))}
-            {displayRow(t('settings.rerankerTitle'), config.search?.reranker?.enabled ? `${config.search.reranker.provider}${config.search.reranker.model ? ' / ' + config.search.reranker.model : ''} (top ${config.search.reranker.topN}, weight ${((config.search.reranker.weight ?? 0.5) * 100).toFixed(0)}%)` : 'Off')}
+            {displayRow(t('settings.rerankerTitle'), config.search?.reranker?.enabled ? `On (top ${config.search.reranker.topN}, weight ${((config.search.reranker.weight ?? 0.5) * 100).toFixed(0)}%)` : 'Off')}
           </tbody>
         </table>
       )}

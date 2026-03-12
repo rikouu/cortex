@@ -145,6 +145,45 @@ export const EMBEDDING_PROVIDERS: Record<string, ProviderPreset> = {
 };
 
 /** Recommended embedding dimensions per model */
+export const RERANKER_PROVIDERS: Record<string, ProviderPreset> = {
+  none: {
+    label: 'Disabled',
+    defaultBaseUrl: '',
+    models: [],
+    envKey: '',
+  },
+  llm: {
+    label: 'LLM (uses extraction model)',
+    defaultBaseUrl: '',
+    models: [],
+    envKey: '',
+  },
+  cohere: {
+    label: 'Cohere',
+    defaultBaseUrl: 'https://api.cohere.com/v2',
+    models: ['rerank-v3.5', 'rerank-v3.0'],
+    envKey: 'COHERE_API_KEY',
+  },
+  voyage: {
+    label: 'Voyage AI (200M free tokens)',
+    defaultBaseUrl: 'https://api.voyageai.com/v1',
+    models: ['rerank-2.5', 'rerank-2.5-lite', 'rerank-2'],
+    envKey: 'VOYAGE_API_KEY',
+  },
+  jina: {
+    label: 'Jina AI (multilingual, 1M free tokens)',
+    defaultBaseUrl: 'https://api.jina.ai/v1',
+    models: ['jina-reranker-v2-base-multilingual', 'jina-reranker-v1-base-en'],
+    envKey: 'JINA_API_KEY',
+  },
+  siliconflow: {
+    label: 'SiliconFlow (开源模型)',
+    defaultBaseUrl: 'https://api.siliconflow.cn/v1',
+    models: ['BAAI/bge-reranker-v2-m3', 'BAAI/bge-reranker-large'],
+    envKey: 'SILICONFLOW_API_KEY',
+  },
+};
+
 export const EMBEDDING_DIMENSIONS: Record<string, number> = {
   // OpenAI
   'text-embedding-3-small': 1536,

@@ -541,6 +541,7 @@ export default {
     rerankerScoreFusion: '分数融合',
     rerankerTrustOriginal: '← 信任原始分数',
     rerankerTrustReranker: '信任重排序 →',
+    rerankerConfigHint: '服务商、模型和 API 密钥请在上方「LLM & Embedding」中配置。',
     hybridSearch: '混合搜索',
     minSimilarity: '最低相似度',
     minSimilarityDesc: '记忆纳入搜索结果的最低余弦相似度。越高越严格，结果更少但更相关。0 = 不过滤。推荐：15-30%。',

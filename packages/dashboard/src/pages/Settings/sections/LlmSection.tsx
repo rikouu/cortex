@@ -1,5 +1,5 @@
 import React from 'react';
-import { SectionKey, LLM_PROVIDERS, EMBEDDING_PROVIDERS, ProviderPreset } from '../types.js';
+import { SectionKey, LLM_PROVIDERS, EMBEDDING_PROVIDERS, RERANKER_PROVIDERS, ProviderPreset } from '../types.js';
 
 interface LlmSectionProps {
   config: any;
@@ -23,6 +23,7 @@ export default function LlmSection({
           {renderProviderBlock(t('settings.extractionLlm'), 'extraction', LLM_PROVIDERS)}
           {renderProviderBlock(t('settings.lifecycleLlm'), 'lifecycle', LLM_PROVIDERS)}
           {renderProviderBlock(t('settings.embedding'), 'embedding', EMBEDDING_PROVIDERS)}
+          {renderProviderBlock(t('settings.rerankerTitle'), 'reranker', RERANKER_PROVIDERS)}
         </>
       ) : (
         <table>
@@ -88,6 +89,17 @@ export default function LlmSection({
               </td>
             </tr>
             <tr><td>{t('settings.embeddingDimensions')}</td><td>{config.embedding?.dimensions}</td></tr>
+            <tr>
+              <td>{t('settings.rerankerTitle')}</td>
+              <td>
+                {config.search?.reranker?.provider === 'none' || !config.search?.reranker?.provider
+                  ? 'Disabled'
+                  : config.search?.reranker?.provider === 'llm'
+                    ? 'LLM (extraction model)'
+                    : `${config.search.reranker.provider}${config.search.reranker.model ? ' / ' + config.search.reranker.model : ''}`
+                }
+              </td>
+            </tr>
           </tbody>
         </table>
       )}
