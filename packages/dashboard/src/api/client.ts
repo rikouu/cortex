@@ -143,6 +143,9 @@ export const testLLM = (target: 'extraction' | 'lifecycle') =>
 export const testEmbedding = () =>
   request('/test-embedding', { method: 'POST' });
 
+export const testReranker = () =>
+  request('/test-reranker', { method: 'POST' });
+
 // Export
 export const triggerExport = (format: string = 'json') =>
   request('/export', { method: 'POST', body: JSON.stringify({ format }) });

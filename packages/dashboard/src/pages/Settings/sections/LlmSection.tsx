@@ -9,11 +9,12 @@ interface LlmSectionProps {
   testState: Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string; latency?: number }>;
   handleTestLLM: (target: 'extraction' | 'lifecycle') => void;
   handleTestEmbedding: () => void;
+  handleTestReranker: () => void;
   t: (key: string, params?: any) => string;
 }
 
 export default function LlmSection({
-  config, editing, sectionHeader, renderProviderBlock, testState, handleTestLLM, handleTestEmbedding, t,
+  config, editing, sectionHeader, renderProviderBlock, testState, handleTestLLM, handleTestEmbedding, handleTestReranker, t,
 }: LlmSectionProps) {
   return (
     <div className="card">
@@ -91,13 +92,33 @@ export default function LlmSection({
             <tr><td>{t('settings.embeddingDimensions')}</td><td>{config.embedding?.dimensions}</td></tr>
             <tr>
               <td>{t('settings.rerankerTitle')}</td>
-              <td>
-                {config.search?.reranker?.provider === 'none' || !config.search?.reranker?.provider
-                  ? 'Disabled'
-                  : config.search?.reranker?.provider === 'llm'
-                    ? 'LLM (extraction model)'
-                    : `${config.search.reranker.provider}${config.search.reranker.model ? ' / ' + config.search.reranker.model : ''}`
-                }
+              <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>
+                  {config.search?.reranker?.provider === 'none' || !config.search?.reranker?.provider
+                    ? 'Disabled'
+                    : config.search?.reranker?.provider === 'llm'
+                      ? 'LLM (extraction model)'
+                      : `${config.search.reranker.provider}${config.search.reranker.model ? ' / ' + config.search.reranker.model : ''}`
+                  }
+                </span>
+                {config.search?.reranker?.provider && config.search.reranker.provider !== 'none' && (
+                  <>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 11, padding: '2px 8px' }}
+                      disabled={testState['reranker']?.status === 'testing'}
+                      onClick={() => handleTestReranker()}
+                    >
+                      {testState['reranker']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+                    </button>
+                    {testState['reranker']?.status === 'success' && (
+                      <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['reranker'].latency ?? 0 })}</span>
+                    )}
+                    {testState['reranker']?.status === 'error' && (
+                      <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['reranker'].message ?? '' })}</span>
+                    )}
+                  </>
+                )}
               </td>
             </tr>
           </tbody>

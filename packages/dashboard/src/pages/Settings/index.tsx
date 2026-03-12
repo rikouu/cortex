@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getConfig, updateConfig, testLLM, testEmbedding, getLogLevel, setLogLevel as apiSetLogLevel } from '../../api/client.js';
+import { getConfig, updateConfig, testLLM, testEmbedding, testReranker, getLogLevel, setLogLevel as apiSetLogLevel } from '../../api/client.js';
 import { useI18n } from '../../i18n/index.js';
 import {
   SectionKey,
@@ -623,6 +623,21 @@ export default function Settings() {
     }
   };
 
+  const handleTestReranker = async () => {
+    const key = 'reranker';
+    setTestState(prev => ({ ...prev, [key]: { status: 'testing' } }));
+    try {
+      const res = await testReranker();
+      if (res.ok) {
+        setTestState(prev => ({ ...prev, [key]: { status: 'success', latency: res.latency_ms } }));
+      } else {
+        setTestState(prev => ({ ...prev, [key]: { status: 'error', message: res.error || 'Unknown error' } }));
+      }
+    } catch (e: any) {
+      setTestState(prev => ({ ...prev, [key]: { status: 'error', message: e.message } }));
+    }
+  };
+
   // ─── LLM Provider Block ───────────────────────────────────────────────────
 
   const renderProviderBlock = (
@@ -903,6 +918,7 @@ export default function Settings() {
         testState={testState}
         handleTestLLM={handleTestLLM}
         handleTestEmbedding={handleTestEmbedding}
+        handleTestReranker={handleTestReranker}
         t={t}
       />
 

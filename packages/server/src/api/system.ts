@@ -451,6 +451,37 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     }
   });
 
+  // Test Reranker connection
+  app.post('/api/v1/test-reranker', async () => {
+    const rerankerConfig = cortex.config.search?.reranker;
+    const provider = rerankerConfig?.provider ?? 'none';
+    if (provider === 'none') {
+      return { ok: false, provider, error: 'Reranker is disabled' };
+    }
+    const start = Date.now();
+    try {
+      // Create a minimal test: rerank 3 simple documents
+      const testResults = [
+        { id: '1', content: 'The weather is nice today', layer: 'core' as any, category: 'fact', agent_id: 'test', importance: 0.5, decay_score: 1, access_count: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_accessed: new Date().toISOString(), score: 0.5 },
+        { id: '2', content: 'Cortex is a memory system for AI', layer: 'core' as any, category: 'fact', agent_id: 'test', importance: 0.5, decay_score: 1, access_count: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_accessed: new Date().toISOString(), score: 0.5 },
+        { id: '3', content: 'Docker containers need regular cleanup', layer: 'core' as any, category: 'fact', agent_id: 'test', importance: 0.5, decay_score: 1, access_count: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_accessed: new Date().toISOString(), score: 0.5 },
+      ];
+      const { createReranker } = await import('../search/reranker.js');
+      const reranker = createReranker(rerankerConfig, cortex.llmExtraction);
+      const ranked = await reranker.rerank('What is Cortex?', testResults, 3);
+      const topContent = ranked[0]?.content ?? '';
+      return {
+        ok: ranked.length > 0,
+        provider,
+        model: rerankerConfig?.model ?? (provider === 'llm' ? 'extraction model' : ''),
+        topResult: topContent.substring(0, 50),
+        latency_ms: Date.now() - start,
+      };
+    } catch (e: any) {
+      return { ok: false, provider, latency_ms: Date.now() - start, error: e.message };
+    }
+  });
+
   // Full reindex — rebuilds all vector embeddings
   app.post('/api/v1/reindex', async (req, reply) => {
     const db = getDb();
