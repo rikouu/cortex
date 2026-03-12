@@ -190,6 +190,10 @@
 
 ## 架构
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rikouu/cortex/main/.github/assets/architecture-zh.png" alt="Cortex 架构图" width="800" />
+</p>
+
 ```
 ┌─ 客户端 ───────────────────────────────────────────────────────────┐
 │  OpenClaw (Bridge)  │  Claude Desktop (MCP)  │  Cursor  │  REST   │

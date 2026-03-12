@@ -187,6 +187,10 @@ Working Memory (48h) ──promote──→ Core Memory ──decay──→ Arc
 
 ## Architecture
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rikouu/cortex/main/.github/assets/architecture-en.png" alt="Cortex Architecture" width="800" />
+</p>
+
 ```
 ┌─ Clients ──────────────────────────────────────────────────────────┐
 │  OpenClaw (Bridge)  │  Claude Desktop (MCP)  │  Cursor  │  REST   │
