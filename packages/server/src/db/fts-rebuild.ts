@@ -20,20 +20,50 @@ export function rebuildFtsIndex(): void {
   ).get() as { value: string } | undefined;
 
   if (marker?.value === 'jieba') {
-    // Verify count sanity
-    const ftsCount = (db.prepare("SELECT COUNT(*) as cnt FROM memories_fts").get() as any)?.cnt ?? 0;
-    const memCount = (db.prepare("SELECT COUNT(*) as cnt FROM memories").get() as any)?.cnt ?? 0;
-    if (ftsCount > 0 && Math.abs(ftsCount - memCount) < memCount * 0.1) {
-      log.info({ ftsCount, memCount }, 'FTS index (jieba) looks healthy, skipping rebuild');
-      return;
+    // Verify count sanity (handle corrupted FTS gracefully)
+    try {
+      const ftsCount = (db.prepare("SELECT COUNT(*) as cnt FROM memories_fts").get() as any)?.cnt ?? 0;
+      const memCount = (db.prepare("SELECT COUNT(*) as cnt FROM memories").get() as any)?.cnt ?? 0;
+      if (ftsCount > 0 && Math.abs(ftsCount - memCount) < memCount * 0.1) {
+        log.info({ ftsCount, memCount }, 'FTS index (jieba) looks healthy, skipping rebuild');
+        return;
+      }
+    } catch {
+      log.warn('FTS table corrupted or missing, will rebuild');
     }
   }
 
   const memCount = (db.prepare("SELECT COUNT(*) as cnt FROM memories").get() as any)?.cnt ?? 0;
   log.info({ memCount }, 'Rebuilding FTS index with jieba tokenization');
 
-  // Clear existing FTS entries
-  db.exec("DELETE FROM memories_fts");
+  // Drop and recreate FTS table to avoid SQLITE_CORRUPT_VTAB errors
+  // when upgrading from older versions with different FTS schema (content=memories)
+  try {
+    db.exec("DROP TABLE IF EXISTS memories_fts");
+  } catch {
+    // Ignore drop errors on corrupted vtables
+    log.warn('Could not drop old FTS table cleanly, attempting forced rebuild');
+    try {
+      db.exec("DELETE FROM memories_fts");
+    } catch {
+      // Last resort: the table is truly corrupted, sqlite will recreate on next CREATE
+    }
+  }
+
+  // Drop legacy FTS triggers (we manage sync manually with jieba tokenization)
+  db.exec("DROP TRIGGER IF EXISTS memories_ai");
+  db.exec("DROP TRIGGER IF EXISTS memories_ad");
+  db.exec("DROP TRIGGER IF EXISTS memories_au");
+
+  // Recreate FTS table as standalone (no external content linkage)
+  // Content is managed manually with jieba tokenization
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+      content,
+      category,
+      tokenize='unicode61'
+    )
+  `);
 
   // Rebuild with jieba-tokenized content
   const rows = db.prepare('SELECT rowid, content, category FROM memories').all() as {

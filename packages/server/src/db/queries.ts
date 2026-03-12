@@ -123,11 +123,21 @@ function syncFtsInsert(db: Database.Database, id: string, content: string, categ
 }
 
 function syncFtsDelete(db: Database.Database, rowid: number, oldContent: string, oldCategory: string): void {
-  db.prepare("INSERT INTO memories_fts(memories_fts, rowid, content, category) VALUES ('delete', ?, ?, ?)").run(
-    rowid,
-    tokenize(oldContent),
-    oldCategory,
-  );
+  // For standalone FTS5 table (no external content), use regular DELETE
+  try {
+    db.prepare("DELETE FROM memories_fts WHERE rowid = ?").run(rowid);
+  } catch {
+    // Fallback: try external content delete syntax for legacy tables
+    try {
+      db.prepare("INSERT INTO memories_fts(memories_fts, rowid, content, category) VALUES ('delete', ?, ?, ?)").run(
+        rowid,
+        tokenize(oldContent),
+        oldCategory,
+      );
+    } catch {
+      // Ignore - FTS entry may not exist
+    }
+  }
 }
 
 function syncFtsUpdate(db: Database.Database, id: string, newContent: string, newCategory: string): void {
