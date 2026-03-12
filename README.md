@@ -237,10 +237,27 @@ By default, the Dashboard and API have **no auth token** — anyone who can reac
 <details>
 <summary><b>Without Docker</b></summary>
 
+**Production mode** (recommended):
+
 ```bash
 git clone https://github.com/rikouu/cortex.git
-cd cortex && pnpm install && pnpm dev
+cd cortex
+pnpm install
+pnpm build        # Build server + dashboard
+pnpm start        # → http://localhost:21100
 ```
+
+**Development mode** (for contributors):
+
+```bash
+pnpm dev           # API only → http://localhost:21100
+# Dashboard runs separately:
+cd packages/dashboard && pnpm dev  # → http://localhost:5173
+```
+
+> ⚠️ In dev mode, visiting `http://localhost:21100` in browser will show a 404 — that's normal. The Dashboard dev server runs on a separate port.
+
+**Requirements:** Node.js ≥ 18, pnpm ≥ 8
 
 </details>
 

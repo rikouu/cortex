@@ -240,10 +240,28 @@ docker compose up -d
 <details>
 <summary><b>不用 Docker</b></summary>
 
+**生产模式**（推荐）：
+
 ```bash
 git clone https://github.com/rikouu/cortex.git
-cd cortex && pnpm install && pnpm dev
+cd cortex
+pnpm install
+pnpm build        # 构建服务器 + 控制台
+pnpm start        # → http://localhost:21100
 ```
+
+**开发模式**（开发者/贡献者）：
+
+```bash
+pnpm dev           # 仅 API → http://localhost:21100
+# 控制台需要单独启动：
+cd packages/dashboard && pnpm dev  # → http://localhost:5173
+```
+
+> ⚠️ 开发模式下，浏览器访问 `http://localhost:21100` 会显示 404 —— 这是正常的。控制台开发服务器运行在单独的端口。
+
+**依赖：** Node.js ≥ 18, pnpm ≥ 8
+
 </details>
 
 ---
