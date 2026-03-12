@@ -124,9 +124,10 @@ const CortexConfigSchema = z.object({
     accessBoostCap: z.number().default(10),
     reranker: z.object({
       enabled: z.boolean().default(true),
-      provider: z.enum(['cohere', 'llm', 'none']).default('llm'),
+      provider: z.enum(['cohere', 'voyage', 'jina', 'siliconflow', 'llm', 'none']).default('llm'),
       apiKey: z.string().optional(),
       model: z.string().optional(),
+      baseUrl: z.string().optional(),
       topN: z.number().default(15),
       weight: z.number().min(0).max(1).default(0.7),
     }).default({}),

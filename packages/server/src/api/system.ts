@@ -396,6 +396,14 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
         baseUrl: config.embedding.baseUrl,
         hasApiKey: !!config.embedding.apiKey,
       },
+      search: {
+        ...config.search,
+        reranker: {
+          ...config.search.reranker,
+          apiKey: undefined,
+          hasApiKey: !!config.search.reranker?.apiKey,
+        },
+      },
     };
   });
 
@@ -457,6 +465,13 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     const provider = rerankerConfig?.provider ?? 'none';
     if (provider === 'none') {
       return { ok: false, provider, error: 'Reranker is disabled' };
+    }
+    // Check API key for dedicated providers
+    if (['cohere', 'voyage', 'jina', 'siliconflow'].includes(provider)) {
+      const envKeys: Record<string, string> = { cohere: 'COHERE_API_KEY', voyage: 'VOYAGE_API_KEY', jina: 'JINA_API_KEY', siliconflow: 'SILICONFLOW_API_KEY' };
+      if (!rerankerConfig?.apiKey && !process.env[envKeys[provider] ?? '']) {
+        return { ok: false, provider, error: `API key not configured. Set it in Dashboard or via ${envKeys[provider]} env var.` };
+      }
     }
     const start = Date.now();
     try {
