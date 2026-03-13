@@ -61,7 +61,8 @@ const SHARED_EXCLUSIONS = `## Do NOT extract
 const SHARED_OUTPUT_FORMAT = `## Output format
 {"memories": [{"content": "...", "category": "...", "importance": 0.0-1.0, "source": "user_stated|user_implied|observed_pattern|system_defined|self_reflection", "reasoning": "..."}], "relations": [{"subject": "entity (1-5 words)", "predicate": "uses|works_at|lives_in|knows|manages|belongs_to|created|prefers|studies|skilled_in|collaborates_with|reports_to|owns|interested_in|related_to|not_uses|not_interested_in|dislikes", "object": "entity (1-5 words)", "confidence": 0.0-1.0, "expired": false}], "nothing_extracted": false}
 
-If nothing qualifies: {"memories": [], "nothing_extracted": true}`;
+The "nothing_extracted" field is REQUIRED — always include it (true when memories is empty, false otherwise).
+If nothing qualifies: {"memories": [], "relations": [], "nothing_extracted": true}`;
 
 const SHARED_RELATION_RULES = `## Relations
 ### Core rules
@@ -91,7 +92,7 @@ const SHARED_RELATION_RULES = `## Relations
 - Stable architecture: "Cortex --uses--> Haiku" (model choice)
 
 ### Standard predicates
-uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to, not_uses, not_interested_in, dislikes
+uses, works_at, lives_in, knows, manages, belongs_to, created, prefers, studies, skilled_in, collaborates_with, reports_to, owns, interested_in, related_to, not_uses, not_interested_in, dislikes, deployed_on, configured_with, runs_on
 
 ### Avoid "related_to"
 "related_to" is the weakest predicate. Only use it when NO other predicate fits. Prefer specific predicates.`;
@@ -193,7 +194,20 @@ NOTE: "v0.6.7" and "Dashboard 图谱" are version-specific details — NOT extra
 
 {"memories": [{"content": "Considering migrating from PostgreSQL to CockroachDB for distributed database needs", "category": "goal", "importance": 0.8, "source": "user_stated", "reasoning": "architecture migration plan"}], "relations": [{"subject": "user", "predicate": "uses", "object": "PostgreSQL", "confidence": 0.9, "expired": false}, {"subject": "user", "predicate": "interested_in", "object": "CockroachDB", "confidence": 0.7, "expired": false}], "nothing_extracted": false}
 
-### Example 9: Japanese daily preference
+### Example 9: Double negation / ambiguous sentiment — DO NOT extract as preference
+[USER]: 我不是说不喜欢这个方案，只是觉得可以再想想
+[ASSISTANT]: 理解，那我们再看看其他选项
+
+{"memories": [], "nothing_extracted": true}
+NOTE: "不是说不喜欢" is NOT a preference — the user is hedging, not stating a clear like/dislike. When sentiment is ambiguous, do not extract.
+
+### Example 10: Infrastructure relation — use specific predicates
+[USER]: Cortex 部署在甲骨文 ARM 服务器上，用 Docker Compose 管理
+[ASSISTANT]: ARM 服务器性价比不错
+
+{"memories": [{"content": "Cortex 部署在甲骨文 ARM 服务器上，用 Docker Compose 管理", "category": "project_state", "importance": 0.7, "source": "user_stated", "reasoning": "deployment architecture"}], "relations": [{"subject": "Cortex", "predicate": "deployed_on", "object": "甲骨文 ARM", "confidence": 0.9, "expired": false}, {"subject": "Cortex", "predicate": "uses", "object": "Docker Compose", "confidence": 0.9, "expired": false}], "nothing_extracted": false}
+
+### Example 11: Japanese daily preference
 [USER]: 毎朝7時に起きてるけど、最近は6時に変えようかなと思ってる
 [ASSISTANT]: 早起きいいですね！朝の時間が増えると生産性上がりますよ
 
@@ -289,6 +303,20 @@ Output ONLY a valid JSON object:
   "merged_content": "combined content if action=merge, otherwise omit",
   "reasoning": "one sentence explaining why"
 }
+
+## Examples
+
+EXISTING: "在东京工作" | NEW: "搬到大阪工作了"
+→ {"action": "conflict", "reasoning": "Location changed from 东京 to 大阪 — old info is now invalid"}
+
+EXISTING: "使用 Python 开发" | NEW: "也在用 Rust 写一些工具"
+→ {"action": "merge", "merged_content": "使用 Python 开发，也用 Rust 写工具", "reasoning": "Complementary skills, not a replacement"}
+
+EXISTING: "喜欢冰美式" | NEW: "喜欢冰美式咖啡，每天早上一杯"
+→ {"action": "replace", "reasoning": "New memory is strictly more specific — includes frequency detail"}
+
+EXISTING: "在研究 Kubernetes" | NEW: "在研究 Kubernetes"
+→ {"action": "keep", "reasoning": "Identical content, no new information"}
 
 ## Rules
 - Use the same language as the memories for merged_content

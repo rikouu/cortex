@@ -58,6 +58,11 @@ function extractSentenceContext(text: string, matchIdx: number, matchLen: number
 /**
  * High signal patterns for Chinese, English, and Japanese.
  * These detect important information without requiring LLM calls.
+ *
+ * Design principles:
+ * - Prefer precision over recall (false negatives are OK, false positives are not — deep channel catches what we miss)
+ * - skipOnQuestion: indirect patterns that are easily confused with questions
+ * - Chinese patterns must handle adverbs (很/比较/特别/非常) between subject and verb
  */
 const HIGH_SIGNAL_PATTERNS: {
   category: MemoryCategory;
@@ -67,34 +72,40 @@ const HIGH_SIGNAL_PATTERNS: {
   /** If true, skip this rule when the user message looks like a question */
   skipOnQuestion?: boolean;
 }[] = [
+  // ── Correction ──
   {
     category: 'correction',
     patterns: [
       /不是[^，。！？\n]{1,30}[，,]\s*(而)?是/,
-      /其实是/,
+      // "其实是" requires follow-up correction context, not just casual "其实是我忘了"
+      /其实是[^，。！？\n]{1,20}(不是|而不是|应该)/,
       /搞错了/,
       /更正[：:]/,
       /纠正[：:]/,
       /^不对[，,\s]/,
       /说错了/,
+      /我之前说错/,
       /错了[，,]?\s*(应该|其实|是)/,
       /不是这样/,
-      /actually[, ]/i,
+      /actually[, ].{0,30}(not|it's|it was|should)/i,
       /correction[: ]/i,
       /not (.+), (?:but |it's )/i,
-      /実は/,
+      /実は.{0,20}(ではなく|じゃなく|違)/,
       /間違[いえっ]/,
       /訂正/,
     ],
     importance: 0.9,
     name: 'correction',
   },
+
+  // ── Preference (direct) ──
   {
     category: 'preference',
     patterns: [
-      /我(很|比较|特别|非常|超级|真的|确实|一直|最|挺)?(喜欢|偏好|不要|不想|讨厌|倾向|更愿意|最喜欢)/,
+      /我(很|比较|特别|非常|超级|真的|确实|一直|最|挺|有点)?(喜欢|偏好|不要|不想|讨厌|倾向|更愿意|最喜欢)/,
       /我prefer/i,
-      /i (like|prefer|want|don'?t want|hate|love|enjoy|dislike)/i,
+      // EN: require "I" subject, not "you like" or "he likes"
+      /\bi (really |absolutely |definitely )?(like|prefer|want|don'?t want|hate|love|enjoy|dislike) /i,
       /私は.{0,10}(好き|嫌い|したい|したくない)/,
       /が好き/,
       /は嫌[いだ]/,
@@ -106,30 +117,35 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.85,
     name: 'preference',
   },
+
+  // ── Preference (indirect — skip on questions) ──
   {
     category: 'preference',
     patterns: [
-      // Indirect preference patterns — easily confused with questions
       /觉得.{1,20}(比较好|更好|最好|不错)/,
-      /还是.{1,15}(好|吧|比较)/,
+      // "还是...好" but not "还是算了吧"
+      /还是.{1,15}(好|比较)(?!了|算)/,
       /用.{1,10}(习惯了|顺手)/,
-      /i(?:'d| would) (?:rather|prefer)/i,
+      /\bi(?:'d| would) (?:rather|prefer)/i,
       /(?:fan|fond) of/i,
     ],
     importance: 0.75,
     name: 'preference_indirect',
     skipOnQuestion: true,
   },
+
+  // ── Identity ──
   {
     category: 'identity',
     patterns: [
-      /我是[^，。！？\n]{1,30}(的人|工程师|投资者|开发者|设计师|学生|老师|医生)/,
+      // Expanded role list
+      /我是[^，。！？\n]{1,30}(的人|工程师|投资者|开发者|设计师|学生|老师|医生|程序员|产品经理|创始人|自由职业|研究员|架构师|运维|全栈)/,
       /我叫[^，。！？\n]{1,20}/,
       /我的名字是/,
-      /i(?:'m| am) (?:a |an )?[a-z]+ (?:developer|engineer|investor|designer|student|teacher|doctor)/i,
+      /i(?:'m| am) (?:a |an )?[a-z]+ (?:developer|engineer|investor|designer|student|teacher|doctor|programmer|founder|researcher|architect|freelancer)/i,
       /my name is/i,
       /call me /i,
-      /私は.{1,20}(です|だ|と申します)/,
+      /私は.{1,20}(と申します|といいます)/,
       /我住在/,
       /i live in/i,
       /我在[^，。！？\n]{1,20}工作/,
@@ -146,11 +162,14 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 1.0,
     name: 'identity',
   },
+
+  // ── Decision (explicit — requires "我" or first person) ──
   {
     category: 'decision',
     patterns: [
-      /决定[了]?/,
-      /选择了/,
+      // Require first person "我" to avoid "你决定吧" / "让他决定"
+      /我(已经|最终)?决定[了]?/,
+      /我选择了/,
       /最终用/,
       /确定用/,
       /就这样吧/,
@@ -166,17 +185,18 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.8,
     name: 'decision',
   },
+
+  // ── Decision (implicit — skip on questions) ──
   {
     category: 'decision',
     patterns: [
-      // Implicit decisions — can be confused with questions about choices
       /那就.{1,20}(吧|了)/,
-      /行[，,]就/,
-      /好[，,]用/,
+      /行[，,]\s*就/,
+      /好[，,]\s*(就)?用/,
       /换成/,
       /改[用成为]/,
       /迁移到/,
-      /i(?:'ll| will) (?:use|go with|switch to|move to|stick with)/i,
+      /\bi(?:'ll| will) (?:use|go with|switch to|move to|stick with)/i,
       /switching to/i,
       /moving to/i,
       /going with/i,
@@ -185,14 +205,20 @@ const HIGH_SIGNAL_PATTERNS: {
     name: 'decision_implicit',
     skipOnQuestion: true,
   },
+
+  // ── Todo ──
   {
     category: 'todo',
     patterns: [
-      /记得[^，。！？\n]{1,40}/,
-      /需要[^，。！？\n]{1,40}/,
+      // "记得" but NOT "记得吗/记得吧/记得呢" (questions/rhetorical)
+      /记得(?!吗|吧|呢|了吗|不)[^，。！？\n]{2,40}/,
+      // "需要" but NOT "需要注意的是" (explanatory) or "需要吗" (question)
+      /需要(?!注意的是|了解的是|说明的是|吗|呢)[^，。！？\n]{2,40}/,
       /待办/,
       /别忘了/,
       /提醒我/,
+      /回头(要|得|记得)/,
+      /下次记得/,
       /todo[: ]/i,
       /remind me/i,
       /don'?t forget/i,
@@ -205,6 +231,8 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.7,
     name: 'todo',
   },
+
+  // ── Fact ──
   {
     category: 'fact',
     patterns: [
@@ -221,29 +249,33 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.75,
     name: 'important_fact',
   },
+
+  // ── Skill ──
   {
     category: 'skill',
     patterns: [
-      /我会[^，。！？\n]{1,30}/,
-      /我擅长/,
-      /我熟悉/,
+      // "我会" + skill noun/verb, NOT "我会去/想/帮/看/试/等/来/走/做" (future tense actions)
+      /我会(写|用|做|开发|设计|搭建|部署|配置|管理|运维|编程|编写|调试|优化)[^，。！？\n]{0,30}/,
+      /我(很|比较|特别|非常|超)?擅长/,
+      /我(很|比较|特别|非常|超)?熟悉/,
       /我精通/,
       /i know how to/i,
-      /i(?:'m| am) (?:good|proficient|experienced|skilled) (?:at|in|with)/i,
-      /i have experience (?:with|in)/i,
+      /i(?:'m| am) (?:good|proficient|experienced|skilled|fluent) (?:at|in|with)/i,
+      /i have (?:\d+ years? )?experience (?:with|in)/i,
       /得意な/,
-      /できます/,
       /スキル/,
     ],
     importance: 0.85,
     name: 'skill',
   },
+
+  // ── Relationship ──
   {
     category: 'relationship',
     patterns: [
-      /我的(同事|老板|领导|经理|朋友|搭档|合伙人|老婆|老公|女朋友|男朋友)/,
+      /我的(同事|老板|领导|经理|朋友|搭档|合伙人|老婆|老公|女朋友|男朋友|室友|导师|学生|客户|下属)/,
       /我(同事|老板|领导)[^，。！？\n]{1,20}/,
-      /my (colleague|coworker|boss|manager|friend|partner|wife|husband|girlfriend|boyfriend)/i,
+      /my (colleague|coworker|boss|manager|friend|partner|wife|husband|girlfriend|boyfriend|roommate|mentor|client)/i,
       /i work with/i,
       /チームメンバー/,
       /同僚の/,
@@ -252,6 +284,8 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.85,
     name: 'relationship',
   },
+
+  // ── Goal ──
   {
     category: 'goal',
     patterns: [
@@ -269,22 +303,21 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.8,
     name: 'goal',
   },
+
+  // ── Constraint ──
   {
     category: 'constraint',
     patterns: [
-      // Chinese — require constraint context to avoid false positives like "我不能吃辣"
       /禁止.{1,30}/,
       /绝对不[要能可]/,
       /(?<!怪|难|舍|巴|了|恨|免)不得(?!了|已|而知|不).{1,40}/,
       /(不许|不允许|不可以).{1,40}/,
       /(永远|任何时候|无论如何)都?不[要能可以]/,
-      // English
       /must not/i,
       /never .{0,30}(do|allow|execute|run|use)/i,
       /forbidden/i,
       /prohibited/i,
       /do not .{1,30} under any circumstances/i,
-      // Japanese
       /してはいけない/,
       /禁じ/,
       /絶対に.{0,20}(ない|だめ|いけない)/,
@@ -293,17 +326,16 @@ const HIGH_SIGNAL_PATTERNS: {
     importance: 0.95,
     name: 'constraint',
   },
+
+  // ── Agent self-improvement (matches ASSISTANT text only) ──
   {
     category: 'agent_self_improvement',
     patterns: [
-      // Chinese
       /我(发现|注意到|意识到)(自己|我).{0,20}(应该|可以|需要).{0,20}(改进|优化|调整)/,
       /下次(我|应该|可以)/,
-      // English
       /i (should|could|need to) (improve|adjust|change)/i,
       /next time i (should|will|could)/i,
       /i noticed (that )?i/i,
-      // Japanese
       /次回は.{0,20}(べき|ようにする|改善)/,
       /反省.{0,20}(した|する|点|すべき)/,
       /改善(すべき|した方|できる|点)/,
@@ -332,8 +364,11 @@ export function detectHighSignals(exchange: { user: string; assistant: string })
   const cleanAssistant = exchange.assistant.replace(INJECTED_TAG_RE, '').replace(SYSTEM_TAG_RE, '');
 
   // Question detection: skip indirect preference/decision patterns when user is asking a question
-  const isQuestion = /[？?]\s*$/.test(cleanUser.trim()) ||
-    /^(你觉得|你认为|你说|你看|怎么样|哪个|选哪|好不好|是不是|do you think|which|what do you|should i|is it better)/i.test(cleanUser.trim());
+  // Covers: trailing ？/?/吗/呢, and leading question words
+  const trimmedUser = cleanUser.trim();
+  const isQuestion = /[？?]\s*$/.test(trimmedUser) ||
+    /[吗呢]\s*[？?]?\s*$/.test(trimmedUser) ||
+    /^(你觉得|你认为|你说|你看|怎么样|哪个|选哪|好不好|是不是|do you think|which|what do you|should i|is it better|how about)/i.test(trimmedUser);
 
   for (const rule of HIGH_SIGNAL_PATTERNS) {
     // Agent categories match assistant text; all other categories match user text only
@@ -382,13 +417,16 @@ export function isSmallTalk(message: string): boolean {
   const minLength = hasCJK ? 2 : 5;
   if (trimmed.length < minLength) return true;
 
+  // Pure emoji messages
+  if (/^[\p{Emoji}\s]+$/u.test(trimmed)) return true;
+
   const smallTalkPatterns = [
-    /^(hi|hello|hey|yo|sup|嗨|你好|哈喽|おはよう|こんにちは)[\s!！。.]*$/i,
-    /^(thanks|thank you|谢谢|ありがとう|thx)[\s!！。.]*$/i,
-    /^(ok|okay|好的|了解|わかった|はい)[\s!！。.]*$/i,
-    /^(bye|goodbye|再见|じゃね|さようなら)[\s!！。.]*$/i,
-    /^(lol|haha|哈哈|hhh|笑|www)[\s!！。.]*$/i,
-    /^(yes|no|是|不是|うん|ううん)[\s!！。.]*$/i,
+    /^(hi|hello|hey|yo|sup|嗨|你好|哈喽|おはよう|こんにちは|早安|晚安|おやすみ)[\s!！。.]*$/i,
+    /^(thanks|thank you|谢谢|ありがとう|thx|tks|ty)[\s!！。.]*$/i,
+    /^(ok|okay|好的|了解|わかった|はい|嗯嗯|嗯|行)[\s!！。.]*$/i,
+    /^(bye|goodbye|再见|じゃね|さようなら|拜拜|88)[\s!！。.]*$/i,
+    /^(lol|haha|哈哈|hhh|笑|www|233|666|nb|牛)[\s!！。.]*$/i,
+    /^(yes|no|是|不是|うん|ううん|对|没错|是的)[\s!！。.]*$/i,
   ];
 
   return smallTalkPatterns.some(p => p.test(trimmed));
