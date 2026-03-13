@@ -92,7 +92,7 @@ const HIGH_SIGNAL_PATTERNS: {
   {
     category: 'preference',
     patterns: [
-      /我(喜欢|偏好|不要|不想|讨厌|倾向|更愿意|比较喜欢|最喜欢)/,
+      /我(很|比较|特别|非常|超级|真的|确实|一直|最|挺)?(喜欢|偏好|不要|不想|讨厌|倾向|更愿意|最喜欢)/,
       /我prefer/i,
       /i (like|prefer|want|don'?t want|hate|love|enjoy|dislike)/i,
       /私は.{0,10}(好き|嫌い|したい|したくない)/,
