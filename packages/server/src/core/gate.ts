@@ -285,6 +285,7 @@ export class MemoryGate {
     // Inject relevant relations (Neo4j multi-hop or SQLite fallback)
     let relationsCount = 0;
     if (relationInjection) {
+      try {
       // Extract entities from query only
       const queryEntities = [...new Set(extractEntityTokens(query))];
 
@@ -405,6 +406,10 @@ export class MemoryGate {
           context = context ? `${context}\n${relBlock}` : relBlock;
           log.debug({ count: cappedLines.length, source: useNeo4j ? 'neo4j' : 'sqlite' }, 'Relations injected');
         }
+      }
+      } catch (e: any) {
+        log.warn({ error: e.message }, 'Relation injection failed entirely, returning search-only results');
+        // relationsCount stays 0, context stays as-is
       }
     }
 

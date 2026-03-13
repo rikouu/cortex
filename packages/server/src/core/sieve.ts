@@ -108,7 +108,16 @@ export class MemorySieve {
     }
     recentIngestHashes.set(inputHash, Date.now());
     // Periodic cleanup
-    if (recentIngestHashes.size > 100) cleanupIngestHashes();
+    // Emergency cap: evict oldest half to prevent unbounded growth under sustained load
+    if (recentIngestHashes.size > 10000) {
+      const entries = [...recentIngestHashes.entries()].sort((a, b) => a[1] - b[1]);
+      for (let i = 0; i < entries.length / 2; i++) {
+        recentIngestHashes.delete(entries[i]![0]);
+      }
+      log.info({ evicted: Math.floor(entries.length / 2), remaining: recentIngestHashes.size }, 'Emergency dedup map eviction');
+    } else if (recentIngestHashes.size > 100) {
+      cleanupIngestHashes();
+    }
 
     // Build multi-turn messages if provided
     let cleanMessages: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;

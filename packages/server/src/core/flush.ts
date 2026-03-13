@@ -169,20 +169,33 @@ export class MemoryFlush {
     return { flushed, summary, extraction_log: extractionLog };
   }
 
+  private static readonly FLUSH_LLM_TIMEOUT_MS = 30000;
+
   private async extractHighlights(text: string): Promise<string> {
-    return (await this.llm.complete(text, {
-      maxTokens: 300,
-      temperature: 0.2,
-      systemPrompt: FLUSH_HIGHLIGHTS_SYSTEM_PROMPT,
-    })).trim();
+    const result = await Promise.race([
+      this.llm.complete(text, {
+        maxTokens: 300,
+        temperature: 0.2,
+        systemPrompt: FLUSH_HIGHLIGHTS_SYSTEM_PROMPT,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Flush highlights LLM timeout')), MemoryFlush.FLUSH_LLM_TIMEOUT_MS)
+      ),
+    ]);
+    return result.trim();
   }
 
   private async extractCoreItemsStructured(text: string): Promise<{ raw: string; parsed: ExtractedMemory[]; relations: ExtractedRelation[] }> {
-    const raw = await this.llm.complete(text.slice(0, this.config.sieve.maxConversationChars), {
-      maxTokens: this.config.sieve.maxExtractionTokens,
-      temperature: 0.1,
-      systemPrompt: FLUSH_CORE_ITEMS_SYSTEM_PROMPT,
-    });
+    const raw = await Promise.race([
+      this.llm.complete(text.slice(0, this.config.sieve.maxConversationChars), {
+        maxTokens: this.config.sieve.maxExtractionTokens,
+        temperature: 0.1,
+        systemPrompt: FLUSH_CORE_ITEMS_SYSTEM_PROMPT,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Flush structured extraction LLM timeout')), MemoryFlush.FLUSH_LLM_TIMEOUT_MS)
+      ),
+    ]);
 
     const { memories: parsed, relations } = this.parseStructuredOutput(raw);
     return { raw, parsed, relations };
