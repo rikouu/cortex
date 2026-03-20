@@ -79,11 +79,19 @@ export class CortexApp {
       log.info('Reloaded embedding provider');
     }
 
-    // Check if search/gate config changed (reranker, query expansion, etc.)
+    // Check if search/gate/sieve/lifecycle/markdownExport config changed
     const searchConfigChanged = JSON.stringify(this.config.search) !== JSON.stringify(newConfig.search);
     const gateConfigChanged = JSON.stringify(this.config.gate) !== JSON.stringify(newConfig.gate);
+    const sieveConfigChanged = JSON.stringify(this.config.sieve) !== JSON.stringify(newConfig.sieve);
+    const flushConfigChanged = JSON.stringify(this.config.flush) !== JSON.stringify(newConfig.flush);
+    const lifecycleConfigChanged = JSON.stringify(this.config.lifecycle) !== JSON.stringify(newConfig.lifecycle);
+    const exporterConfigChanged = JSON.stringify(this.config.markdownExport) !== JSON.stringify(newConfig.markdownExport);
     if (searchConfigChanged) reloaded.push('search');
     if (gateConfigChanged) reloaded.push('gate');
+    if (sieveConfigChanged) reloaded.push('sieve');
+    if (flushConfigChanged) reloaded.push('flush');
+    if (lifecycleConfigChanged) reloaded.push('lifecycle');
+    if (exporterConfigChanged) reloaded.push('markdownExport');
 
     // Rebuild dependent engines if any provider or config changed
     if (reloaded.length > 0) {
@@ -93,6 +101,7 @@ export class CortexApp {
       this.sieve = new MemorySieve(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
       this.flush = new MemoryFlush(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
       this.lifecycle = new LifecycleEngine(this.llmLifecycle, this.embeddingProvider, this.vectorBackend, newConfig);
+      this.exporter = new MarkdownExporter(newConfig);
       log.info({ reloaded }, 'Rebuilt dependent engines');
     }
 

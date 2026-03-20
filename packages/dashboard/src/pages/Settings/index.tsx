@@ -39,6 +39,8 @@ export default function Settings() {
   const [draft, setDraft] = useState<any>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [testState, setTestState] = useState<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string; latency?: number }>>({});
+  // Store API keys per (prefix, provider) so switching providers doesn't lose entered keys
+  const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
   const [logLevel, setLogLevelState] = useState('info');
   const { t } = useI18n();
 
@@ -689,6 +691,11 @@ export default function Settings() {
     const isDisabled = provider === 'none';
 
     const handleProviderChange = (newProvider: string) => {
+      // Save the current provider's API key before switching
+      const currentKey = d.apiKey;
+      if (currentKey) {
+        setSavedKeys(prev => ({ ...prev, [`${prefix}::${provider}`]: currentKey }));
+      }
       updateDraft(`${prefix}.provider`, newProvider);
       const newPreset = providerMap[newProvider];
       const firstModel = newPreset?.models?.[0] ?? '';
@@ -696,6 +703,9 @@ export default function Settings() {
       updateDraft(`${prefix}.useCustomModel`, false);
       updateDraft(`${prefix}.customModel`, '');
       updateDraft(`${prefix}.baseUrl`, '');
+      // Restore previously saved key for the new provider (if any)
+      const restoredKey = savedKeys[`${prefix}::${newProvider}`] ?? '';
+      updateDraft(`${prefix}.apiKey`, restoredKey);
       // Auto-update dimensions for embedding models
       if (d.dimensions !== undefined && firstModel && EMBEDDING_DIMENSIONS[firstModel]) {
         updateDraft(`${prefix}.dimensions`, EMBEDDING_DIMENSIONS[firstModel]);
