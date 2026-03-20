@@ -284,7 +284,7 @@ export default {
     openclawStep2Title: 'Set Cortex Server Address',
     openclawStep2Desc: 'Tell the plugin where your Cortex server is. Choose one of the two methods below:',
     openclawJsonMethod: 'Method A: OpenClaw config (Recommended)',
-    openclawJsonMethodDesc: 'Add the cortex-bridge plugin config to your openclaw.json. This is the recommended approach — it includes authToken and agentId for secure, isolated access.',
+    openclawJsonMethodDesc: 'Add the cortex-bridge plugin config to your openclaw.json. The agentId field is optional — the plugin automatically reads the current agent\'s ID from OpenClaw\'s context for multi-agent isolation. Only set agentId as a fallback.',
     openclawEnvMethod: 'Method B: Environment variables',
     openclawEnvMethodDesc: 'Alternatively, set environment variables. CORTEX_AGENT_ID must match the current agent\'s ID for strict access isolation.',
     openclawShellMethod: 'Method C: Add to shell profile',

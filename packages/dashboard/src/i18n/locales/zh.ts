@@ -284,7 +284,7 @@ export default {
     openclawStep2Title: '设置 Cortex 服务器地址',
     openclawStep2Desc: '告诉插件你的 Cortex 服务器在哪里。选择以下两种方式之一：',
     openclawJsonMethod: '方式 A：OpenClaw 配置文件（推荐）',
-    openclawJsonMethodDesc: '在 openclaw.json 中添加 cortex-bridge 插件配置。推荐使用此方式 — 包含 authToken 和 agentId，确保安全隔离访问。',
+    openclawJsonMethodDesc: '在 openclaw.json 中添加 cortex-bridge 插件配置。agentId 为可选项 — 插件会自动从 OpenClaw 上下文中读取当前 Agent ID，实现多 Agent 记忆自动隔离。仅在需要手动指定时设置 agentId。',
     openclawEnvMethod: '方式 B：环境变量',
     openclawEnvMethodDesc: '也可以通过环境变量配置。CORTEX_AGENT_ID 必须与当前智能体的 ID 一致，用于严格的访问隔离。',
     openclawShellMethod: '方式 C：添加到 shell 配置文件',

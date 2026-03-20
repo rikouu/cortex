@@ -462,6 +462,8 @@ CORTEX_AUTH_TOKEN=your-token-here CORTEX_AGENT_ID=my-agent \
 
 Each agent gets its own isolated memory namespace via `agent_id`. Memories from one agent are invisible to others.
 
+**How it works:** The `agent_id` is the key for isolation. Cortex automatically creates agents on first use — you don't need to pre-create them in the Dashboard. If an agent with that ID already exists, memories are added to it. Just make sure the same `agent_id` is used consistently across your integration.
+
 **OpenClaw Plugin** — Automatic isolation. The plugin reads `ctx.agentId` from each agent's session, no extra config needed. Multiple agents in `agents.list[]` are isolated out of the box.
 
 ```json
@@ -470,9 +472,12 @@ Each agent gets its own isolated memory namespace via `agent_id`. Memories from 
   "authToken": "your-token-here"
 }
 ```
-> `agentId` in config is only a fallback. Per-agent isolation happens automatically.
 
-**MCP (Claude Code / Cursor / etc.)** — One MCP server per agent:
+> **No `agentId` needed in config.** The plugin automatically uses the current agent's ID from OpenClaw's context. The `agentId` config field is only a fallback for when `ctx.agentId` is unavailable.
+>
+> **Matching IDs:** If your OpenClaw agent's ID is `"xiaoai"`, Cortex will store memories under `agent_id: "xiaoai"`. You can view and manage them in the Cortex Dashboard under that agent.
+
+**MCP (Claude Code / Cursor / etc.)** — One MCP server per agent. Use `--agent-id` matching the agent name in Cortex:
 
 ```json
 {
@@ -489,6 +494,8 @@ Each agent gets its own isolated memory namespace via `agent_id`. Memories from 
 }
 ```
 
+> **Tip:** Each MCP server instance = one agent. If you only have one agent, one MCP server with `--agent-id your-agent` is sufficient.
+
 **REST API** — Pass `agent_id` in every request:
 
 ```bash
@@ -502,6 +509,8 @@ curl -X POST http://localhost:21100/api/v1/recall \
   -H "Content-Type: application/json" \
   -d '{"query":"preferences","agent_id":"agent-b"}'
 ```
+
+> **Auto-creation:** If `agent-a` doesn't exist in Cortex yet, it will be created automatically on the first `ingest` or `remember` call.
 
 ### REST API
 
