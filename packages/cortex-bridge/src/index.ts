@@ -9,7 +9,7 @@
  */
 
 // ── Plugin version ──────────────────────────────────────
-const PLUGIN_VERSION = '0.5.1';
+const PLUGIN_VERSION = '0.6.2';
 
 // ── Timeouts ────────────────────────────────────────────
 const RECALL_TIMEOUT = 8000;

@@ -191,7 +191,7 @@ export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
   }
 
   // 3. Merge and validate
-  const merged = { ...fileConfig, ...envOverrides, ...overrides };
+  const merged = deepMerge(deepMerge(fileConfig, envOverrides), overrides || {});
   _config = CortexConfigSchema.parse(merged);
   return _config;
 }

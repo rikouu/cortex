@@ -248,7 +248,7 @@ git clone https://github.com/rikouu/cortex.git
 cd cortex
 pnpm install
 pnpm build        # Build server + dashboard
-pnpm start        # → http://localhost:21100
+pnpm dev          # → http://localhost:21100
 ```
 
 **Development mode** (for contributors):
@@ -261,7 +261,7 @@ cd packages/dashboard && pnpm dev  # → http://localhost:5173
 
 > ⚠️ In dev mode, visiting `http://localhost:21100` in browser will show a 404 — that's normal. The Dashboard dev server runs on a separate port.
 
-**Requirements:** Node.js ≥ 18, pnpm ≥ 8
+**Requirements:** Node.js ≥ 20, pnpm ≥ 8
 
 </details>
 
@@ -535,6 +535,7 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 |---|---|
 | `cortex_recall` | Search memories with priority injection |
 | `cortex_remember` | Store a specific memory |
+| `cortex_relations` | List entity relationships from memory |
 | `cortex_forget` | Remove or correct a memory |
 | `cortex_search_debug` | Debug search scoring |
 | `cortex_stats` | Memory statistics |
@@ -547,10 +548,10 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 
 | Provider | Recommended Models | Notes |
 |---|---|---|
-| **OpenAI** | gpt-4o-mini, gpt-5.2 | Default. Best cost/quality |
+| **OpenAI** | gpt-4o-mini, gpt-4o | Default. Best cost/quality |
 | **Anthropic** | claude-haiku-4-5, claude-sonnet-4-6 | Highest extraction quality |
 | **Google Gemini** | gemini-2.5-flash | Free tier on AI Studio |
-| **DeepSeek** | deepseek-chat, deepseek-v4 | Cheapest option |
+| **DeepSeek** | deepseek-chat | Cheapest option |
 | **DashScope** | qwen-plus, qwen-turbo | 通义千问, OpenAI-compatible |
 | **Ollama** | qwen2.5, llama3.2 | Fully local, zero cost |
 | **OpenRouter** | Any of 100+ models | Unified gateway |

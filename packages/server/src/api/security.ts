@@ -7,8 +7,12 @@ const log = createLogger('security');
 
 /** Timing-safe string comparison to prevent timing attacks */
 function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const maxLen = Math.max(a.length, b.length);
+  const bufA = Buffer.alloc(maxLen, 0);
+  const bufB = Buffer.alloc(maxLen, 0);
+  Buffer.from(a).copy(bufA);
+  Buffer.from(b).copy(bufB);
+  return a.length === b.length && timingSafeEqual(bufA, bufB);
 }
 
 /** Check if the active token comes from env var (immutable from Dashboard) */
