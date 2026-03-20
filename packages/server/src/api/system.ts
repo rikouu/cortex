@@ -21,8 +21,8 @@ function getPackageVersion(): string {
       const p = path.resolve(__dirname, rel);
       if (fs.existsSync(p)) {
         const pkg = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        // Only return version from the root monorepo package, not sub-packages
         if (pkg.name === 'cortex' || pkg.name === '@cortex/root') return pkg.version;
-        if (pkg.version) return pkg.version;
       }
     }
   } catch {}

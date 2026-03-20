@@ -22,9 +22,14 @@ const CORTEX_URL = process.argv.includes('--server-url')
   ? process.argv[process.argv.indexOf('--server-url') + 1] || 'http://localhost:21100'
   : process.env.CORTEX_URL || 'http://localhost:21100';
 
-const CORTEX_AGENT_ID = process.argv.includes('--agent-id')
+// Agent ID: CLI flag is static, but env var is re-read per request
+// to support dynamic agent switching (e.g. multi-agent orchestrators)
+const CORTEX_AGENT_ID_FLAG = process.argv.includes('--agent-id')
   ? process.argv[process.argv.indexOf('--agent-id') + 1]
-  : process.env.CORTEX_AGENT_ID || '';
+  : '';
+function getAgentId(): string {
+  return CORTEX_AGENT_ID_FLAG || process.env.CORTEX_AGENT_ID || '';
+}
 
 const CORTEX_AUTH_TOKEN = process.argv.includes('--auth-token')
   ? process.argv[process.argv.indexOf('--auth-token') + 1]
@@ -33,7 +38,8 @@ const CORTEX_AUTH_TOKEN = process.argv.includes('--auth-token')
 async function forwardToServer(msg: any): Promise<any> {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (CORTEX_AGENT_ID) headers['x-agent-id'] = CORTEX_AGENT_ID;
+    const agentId = getAgentId();
+    if (agentId) headers['x-agent-id'] = agentId;
     if (CORTEX_AUTH_TOKEN) headers['Authorization'] = `Bearer ${CORTEX_AUTH_TOKEN}`;
 
     const res = await fetch(`${CORTEX_URL}/mcp/message`, {

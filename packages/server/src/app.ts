@@ -79,21 +79,55 @@ export class CortexApp {
       log.info('Reloaded embedding provider');
     }
 
-    // Check if search/gate config changed (reranker, query expansion, etc.)
+    // Check which engine configs changed
     const searchConfigChanged = JSON.stringify(this.config.search) !== JSON.stringify(newConfig.search);
     const gateConfigChanged = JSON.stringify(this.config.gate) !== JSON.stringify(newConfig.gate);
+    const sieveConfigChanged = JSON.stringify(this.config.sieve) !== JSON.stringify(newConfig.sieve);
+    const flushConfigChanged = JSON.stringify(this.config.flush) !== JSON.stringify(newConfig.flush);
+    const lifecycleConfigChanged = JSON.stringify(this.config.lifecycle) !== JSON.stringify(newConfig.lifecycle);
+    const exporterConfigChanged = JSON.stringify(this.config.markdownExport) !== JSON.stringify(newConfig.markdownExport);
     if (searchConfigChanged) reloaded.push('search');
     if (gateConfigChanged) reloaded.push('gate');
+    if (sieveConfigChanged) reloaded.push('sieve');
+    if (flushConfigChanged) reloaded.push('flush');
+    if (lifecycleConfigChanged) reloaded.push('lifecycle');
+    if (exporterConfigChanged) reloaded.push('markdownExport');
 
-    // Rebuild dependent engines if any provider or config changed
-    if (reloaded.length > 0) {
-      const reranker = createReranker(newConfig.search.reranker, this.llmExtraction);
+    // Only rebuild engines whose dependencies actually changed
+    const embeddingChanged = reloaded.includes('embedding');
+    const extractionChanged = reloaded.includes('llm.extraction');
+    const lifecycleLLMChanged = reloaded.includes('llm.lifecycle');
+
+    const needsSearchEngine = searchConfigChanged || embeddingChanged;
+    const needsReranker = searchConfigChanged || extractionChanged;
+    const needsGate = gateConfigChanged || needsSearchEngine || needsReranker || extractionChanged;
+    const needsSieve = sieveConfigChanged || extractionChanged || embeddingChanged;
+    const needsFlush = flushConfigChanged || extractionChanged || embeddingChanged;
+    const needsLifecycle = lifecycleConfigChanged || lifecycleLLMChanged || embeddingChanged;
+    const needsExporter = exporterConfigChanged;
+
+    if (needsSearchEngine) {
       this.searchEngine = new HybridSearchEngine(this.vectorBackend, this.embeddingProvider, newConfig.search);
+    }
+    if (needsGate) {
+      const reranker = createReranker(newConfig.search.reranker, this.llmExtraction);
       this.gate = new MemoryGate(this.searchEngine, newConfig.gate, this.llmExtraction, reranker, newConfig.search.reranker?.weight);
+    }
+    if (needsSieve) {
       this.sieve = new MemorySieve(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
+    }
+    if (needsFlush) {
       this.flush = new MemoryFlush(this.llmExtraction, this.embeddingProvider, this.vectorBackend, newConfig);
+    }
+    if (needsLifecycle) {
       this.lifecycle = new LifecycleEngine(this.llmLifecycle, this.embeddingProvider, this.vectorBackend, newConfig);
-      log.info({ reloaded }, 'Rebuilt dependent engines');
+    }
+    if (needsExporter) {
+      this.exporter = new MarkdownExporter(newConfig);
+    }
+
+    if (reloaded.length > 0) {
+      log.info({ reloaded }, 'Rebuilt changed engines');
     }
 
     this.config = newConfig;

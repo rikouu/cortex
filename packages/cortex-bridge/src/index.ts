@@ -241,11 +241,31 @@ export default {
   register(api: PluginApi) {
     const config = api.pluginConfig ?? {};
     const cortexUrl = getCortexUrl(config);
-    const agentId = (config.agentId as string) || process.env.CORTEX_AGENT_ID || 'openclaw';
+    const defaultAgentId = (config.agentId as string) || process.env.CORTEX_AGENT_ID || 'openclaw';
     const debug = isDebug(config);
     const log = api.logger;
 
-    log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${agentId}, config keys: ${Object.keys(config).join(',') || '(empty)'}`);
+    // Resolve agentId: prefer ctx.agentId (per-agent isolation), fallback to config.
+    // Per-session cache keyed by sessionId to avoid race conditions in concurrent multi-agent scenarios.
+    const sessionAgentMap = new Map<string, string>();
+    let lastSessionAgentId = defaultAgentId; // fallback for tools when session unknown
+
+    function resolveAgentId(ctx?: any): string {
+      const resolved = ctx?.agentId || defaultAgentId;
+      const sessionId = ctx?.sessionId;
+      if (sessionId) {
+        sessionAgentMap.set(sessionId, resolved);
+      }
+      lastSessionAgentId = resolved;
+      return resolved;
+    }
+
+    // For tools: use optional override, then fallback to last known session agent
+    function resolveToolAgentId(paramAgentId?: string): string {
+      return paramAgentId || lastSessionAgentId;
+    }
+
+    log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${defaultAgentId}, config keys: ${Object.keys(config).join(',') || '(empty)'}`);
 
     // ════════════════════════════════════════════════════════
     // TOOLS (primary interface — always work)
@@ -259,12 +279,14 @@ export default {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'The search query — describe what you want to recall' },
+          agent_id: { type: 'string', description: 'Optional agent ID for memory isolation (defaults to configured agent)' },
         },
         required: ['query'],
       },
-      async execute(_id: string, params: { query: string }) {
+      async execute(_id: string, params: { query: string; agent_id?: string }) {
         try {
-          const result = await cortexRecall(cortexUrl, params.query, agentId, config);
+          const effectiveAgent = resolveToolAgentId(params.agent_id);
+          const result = await cortexRecall(cortexUrl, params.query, effectiveAgent, config);
           if (result) {
             return { content: [{ type: 'text', text: result.context }] };
           }
@@ -295,18 +317,20 @@ export default {
             ],
             default: 'fact',
           },
+          agent_id: { type: 'string', description: 'Optional agent ID for memory isolation (defaults to configured agent)' },
         },
         required: ['content'],
       },
-      async execute(_id: string, params: { content: string; category?: string }) {
+      async execute(_id: string, params: { content: string; category?: string; agent_id?: string }) {
         try {
+          const effectiveAgent = resolveToolAgentId(params.agent_id);
           const res = await fetch(`${cortexUrl}/api/v1/memories`, {
             method: 'POST',
             headers: getHeaders(config),
             body: JSON.stringify({
               content: params.content,
               category: params.category || 'fact',
-              agent_id: agentId,
+              agent_id: effectiveAgent,
               layer: 'core',
               importance: 0.7,
               confidence: 0.9,
@@ -333,16 +357,18 @@ export default {
         properties: {
           user_message: { type: 'string', description: 'What the user said' },
           assistant_message: { type: 'string', description: 'What you (the assistant) replied' },
+          agent_id: { type: 'string', description: 'Optional agent ID for memory isolation (defaults to configured agent)' },
         },
         required: ['user_message', 'assistant_message'],
       },
-      async execute(_id: string, params: { user_message: string; assistant_message: string }) {
+      async execute(_id: string, params: { user_message: string; assistant_message: string; agent_id?: string }) {
         try {
+          const effectiveAgent = resolveToolAgentId(params.agent_id);
           const result = await cortexIngest(
             cortexUrl,
             cleanForIngestion(params.user_message),
             cleanForIngestion(params.assistant_message),
-            agentId,
+            effectiveAgent,
             undefined,
             config,
           );
@@ -370,15 +396,17 @@ export default {
             subject: { type: 'string', description: 'Filter by subject entity' },
             object: { type: 'string', description: 'Filter by object entity' },
             limit: { type: 'number', description: 'Maximum results to return', default: 20 },
+            agent_id: { type: 'string', description: 'Optional agent ID for memory isolation (defaults to configured agent)' },
           },
         },
-        async execute(_id: string, params: { subject?: string; object?: string; limit?: number }) {
+        async execute(_id: string, params: { subject?: string; object?: string; limit?: number; agent_id?: string }) {
           try {
+            const effectiveAgent = resolveToolAgentId(params.agent_id);
             const query = new URLSearchParams();
             if (params.subject) query.set('subject', params.subject);
             if (params.object) query.set('object', params.object);
             if (params.limit) query.set('limit', String(params.limit));
-            query.set('agent_id', agentId);
+            query.set('agent_id', effectiveAgent);
             const headers: Record<string, string> = {};
             const token = getAuthToken(config);
             if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -450,7 +478,7 @@ export default {
 
         try {
           // Memory stats
-          const statsRes = await fetch(`${cortexUrl}/api/v1/stats?agent_id=${encodeURIComponent(agentId)}`, {
+          const statsRes = await fetch(`${cortexUrl}/api/v1/stats?agent_id=${encodeURIComponent(lastSessionAgentId)}`, {
             headers: getHeaders(config),
             signal: AbortSignal.timeout(HEALTH_TIMEOUT),
           });
@@ -465,7 +493,7 @@ export default {
           }
         } catch { /* ignore */ }
 
-        lines.push(`🤖 Agent: ${agentId}`);
+        lines.push(`🤖 Agent: ${lastSessionAgentId}`);
         lines.push(`🌐 URL: ${cortexUrl}`);
         lines.push(`🔌 Plugin: v${PLUGIN_VERSION}`);
 
@@ -502,7 +530,7 @@ export default {
           const res = await fetch(`${cortexUrl}/api/v1/recall`, {
             method: 'POST',
             headers: getHeaders(config),
-            body: JSON.stringify({ query, agent_id: agentId }),
+            body: JSON.stringify({ query, agent_id: lastSessionAgentId }),
             signal: AbortSignal.timeout(15000),
           });
           if (!res.ok) return { text: `❌ 搜索失败 (HTTP ${res.status})` };
@@ -534,7 +562,7 @@ export default {
             body: JSON.stringify({
               content,
               category: 'fact',
-              agent_id: agentId,
+              agent_id: lastSessionAgentId,
               layer: 'core',
               importance: 0.7,
               confidence: 0.9,
@@ -561,7 +589,7 @@ export default {
           const token = getAuthToken(config);
           if (token) headers['Authorization'] = `Bearer ${token}`;
           const res = await fetch(
-            `${cortexUrl}/api/v1/memories?agent_id=${encodeURIComponent(agentId)}&limit=10&sort=created_at&order=desc`,
+            `${cortexUrl}/api/v1/memories?agent_id=${encodeURIComponent(lastSessionAgentId)}&limit=10&sort=created_at&order=desc`,
             { headers, signal: AbortSignal.timeout(10000) },
           );
           if (!res.ok) {
@@ -590,8 +618,9 @@ export default {
     // ════════════════════════════════════════════════════════
 
     // ── Hook: before_agent_start → Recall memories ──────
-    api.on('before_agent_start', async (event: any) => {
+    api.on('before_agent_start', async (event: any, ctx?: any) => {
       try {
+        const currentAgentId = resolveAgentId(ctx);
         const rawQuery = extractText(event?.prompt) || '';
         if (!rawQuery) return;
 
@@ -600,11 +629,11 @@ export default {
         if (!query || query.length < 5) return;
 
         // Try recall with one retry on timeout
-        let result = await cortexRecall(cortexUrl, query, agentId, config).catch(() => null);
+        let result = await cortexRecall(cortexUrl, query, currentAgentId, config).catch(() => null);
         if (!result) {
           // Retry once after a short delay
           await new Promise(r => setTimeout(r, 500));
-          result = await cortexRecall(cortexUrl, query, agentId, config).catch(() => null);
+          result = await cortexRecall(cortexUrl, query, currentAgentId, config).catch(() => null);
           if (result && debug) log.info(`[cortex-bridge] Hook recall succeeded on retry`);
         }
 
@@ -627,7 +656,8 @@ export default {
     const HEARTBEAT_PROMPT_RE = /HEARTBEAT(?:\.md|_OK)/i;
 
     // Fix #5: Content-level dedup to avoid repeated ingestion of same content
-    let lastIngestHash = '';
+    // Per-agent hash map for multi-agent isolation
+    const lastIngestHashes: Record<string, string> = {};
     function simpleHash(str: string): string {
       let h = 0;
       for (let i = 0; i < str.length; i++) {
@@ -636,8 +666,9 @@ export default {
       return String(h);
     }
 
-    api.on('agent_end', async (event: any) => {
+    api.on('agent_end', async (event: any, ctx?: any) => {
       try {
+        const currentAgentId = resolveAgentId(ctx);
         const allMessages: any[] = event?.messages || [];
 
         // Filter to user/assistant messages only
@@ -713,30 +744,31 @@ export default {
           return;
         }
 
-        // Fix #5: Content-level dedup — skip if same user+assistant pair
+        // Fix #5: Content-level dedup — skip if same user+assistant pair (per-agent)
         const currentHash = simpleHash(userText + '|||' + assistantText);
-        if (currentHash === lastIngestHash) {
-          if (debug) log.info('[cortex-bridge] agent_end: skipping duplicate ingest (same content hash)');
+        if (currentHash === lastIngestHashes[currentAgentId]) {
+          if (debug) log.info(`[cortex-bridge] agent_end: skipping duplicate ingest for agent ${currentAgentId}`);
           return;
         }
-        lastIngestHash = currentHash;
+        lastIngestHashes[currentAgentId] = currentHash;
 
-        let result = await cortexIngest(cortexUrl, userText, assistantText, agentId, cleanedMessages, config);
+        let result = await cortexIngest(cortexUrl, userText, assistantText, currentAgentId, cleanedMessages, config);
         if (!result.ok) {
           // Retry once
           await new Promise(r => setTimeout(r, 1000));
-          result = await cortexIngest(cortexUrl, userText, assistantText, agentId, cleanedMessages, config);
+          result = await cortexIngest(cortexUrl, userText, assistantText, currentAgentId, cleanedMessages, config);
           if (result.ok && debug) log.info(`[cortex-bridge] agent_end ingest succeeded on retry`);
         }
-        if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}, messages=${cleanedMessages.length}`);
+        if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}, agent=${currentAgentId}, messages=${cleanedMessages.length}`);
       } catch (e) {
         if (debug) log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
       }
     });
 
     // ── Hook: before_compaction → Emergency flush ───────
-    api.on('before_compaction', async (event: any) => {
+    api.on('before_compaction', async (event: any, ctx?: any) => {
       try {
+        const currentAgentId = resolveAgentId(ctx);
         const rawMessages: any[] = event?.messages || [];
         if (rawMessages.length === 0) return;
 
@@ -748,7 +780,7 @@ export default {
 
         if (messages.length === 0) return;
 
-        await cortexFlush(cortexUrl, messages, agentId, config);
+        await cortexFlush(cortexUrl, messages, currentAgentId, config);
         if (debug) log.info(`[cortex-bridge] Hook flushed ${messages.length} messages`);
       } catch (e) {
         if (debug) log.warn(`[cortex-bridge] Hook flush failed: ${(e as Error).message}`);

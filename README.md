@@ -458,6 +458,51 @@ CORTEX_AUTH_TOKEN=your-token-here CORTEX_AGENT_ID=my-agent \
 ```
 </details>
 
+### Multi-Agent Memory Isolation
+
+Each agent gets its own isolated memory namespace via `agent_id`. Memories from one agent are invisible to others.
+
+**OpenClaw Plugin** — Automatic isolation. The plugin reads `ctx.agentId` from each agent's session, no extra config needed. Multiple agents in `agents.list[]` are isolated out of the box.
+
+```json
+{
+  "cortexUrl": "http://localhost:21100",
+  "authToken": "your-token-here"
+}
+```
+> `agentId` in config is only a fallback. Per-agent isolation happens automatically.
+
+**MCP (Claude Code / Cursor / etc.)** — One MCP server per agent:
+
+```json
+{
+  "mcpServers": {
+    "cortex-coder": {
+      "command": "npx",
+      "args": ["@cortexmem/mcp", "--server-url", "http://localhost:21100", "--agent-id", "coder"]
+    },
+    "cortex-researcher": {
+      "command": "npx",
+      "args": ["@cortexmem/mcp", "--server-url", "http://localhost:21100", "--agent-id", "researcher"]
+    }
+  }
+}
+```
+
+**REST API** — Pass `agent_id` in every request:
+
+```bash
+# Agent A's memories
+curl -X POST http://localhost:21100/api/v1/recall \
+  -H "Content-Type: application/json" \
+  -d '{"query":"preferences","agent_id":"agent-a"}'
+
+# Agent B's memories (isolated)
+curl -X POST http://localhost:21100/api/v1/recall \
+  -H "Content-Type: application/json" \
+  -d '{"query":"preferences","agent_id":"agent-b"}'
+```
+
 ### REST API
 
 ```bash

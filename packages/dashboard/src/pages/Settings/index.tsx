@@ -39,6 +39,8 @@ export default function Settings() {
   const [draft, setDraft] = useState<any>({});
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [testState, setTestState] = useState<Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string; latency?: number }>>({});
+  // Store API keys per (prefix, provider) so switching providers doesn't lose entered keys
+  const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
   const [logLevel, setLogLevelState] = useState('info');
   const { t } = useI18n();
 
@@ -205,6 +207,23 @@ export default function Settings() {
           d.reranker.customModel = d.reranker.model;
         }
       }
+
+      // Seed savedKeys so the very first provider switch preserves existing keys
+      setSavedKeys(prev => {
+        const next = { ...prev };
+        for (const [prefix, sub] of [
+          ['extraction', d.extraction],
+          ['lifecycle', d.lifecycle],
+          ['embedding', d.embedding],
+          ['reranker', d.reranker],
+        ] as const) {
+          if (sub?.hasApiKey && !next[`${prefix}::${sub.provider}`]) {
+            // Sentinel: server has a key but we don't know the actual value
+            next[`${prefix}::${sub.provider}`] = '__CONFIGURED__';
+          }
+        }
+        return next;
+      });
     }
 
     setDraft(d);
@@ -689,6 +708,13 @@ export default function Settings() {
     const isDisabled = provider === 'none';
 
     const handleProviderChange = (newProvider: string) => {
+      // Save the current provider's API key (or configured sentinel) before switching
+      const currentKey = d.apiKey;
+      if (currentKey) {
+        setSavedKeys(prev => ({ ...prev, [`${prefix}::${provider}`]: currentKey }));
+      } else if (d.hasApiKey) {
+        setSavedKeys(prev => ({ ...prev, [`${prefix}::${provider}`]: prev[`${prefix}::${provider}`] || '__CONFIGURED__' }));
+      }
       updateDraft(`${prefix}.provider`, newProvider);
       const newPreset = providerMap[newProvider];
       const firstModel = newPreset?.models?.[0] ?? '';
@@ -696,6 +722,15 @@ export default function Settings() {
       updateDraft(`${prefix}.useCustomModel`, false);
       updateDraft(`${prefix}.customModel`, '');
       updateDraft(`${prefix}.baseUrl`, '');
+      // Restore previously saved key for the new provider (if any)
+      const restoredKey = savedKeys[`${prefix}::${newProvider}`] ?? '';
+      if (restoredKey === '__CONFIGURED__') {
+        updateDraft(`${prefix}.apiKey`, '');
+        updateDraft(`${prefix}.hasApiKey`, true);
+      } else {
+        updateDraft(`${prefix}.apiKey`, restoredKey);
+        updateDraft(`${prefix}.hasApiKey`, !!restoredKey);
+      }
       // Auto-update dimensions for embedding models
       if (d.dimensions !== undefined && firstModel && EMBEDDING_DIMENSIONS[firstModel]) {
         updateDraft(`${prefix}.dimensions`, EMBEDDING_DIMENSIONS[firstModel]);
