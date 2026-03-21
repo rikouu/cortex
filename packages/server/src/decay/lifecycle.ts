@@ -1,5 +1,9 @@
 import { getDb } from '../db/connection.js';
-import { insertMemory, updateMemory, deleteMemory, insertLifecycleLog, type Memory, type MemoryLayer } from '../db/index.js';
+import {
+  insertMemory, updateMemory, deleteMemory, insertLifecycleLog,
+  getMemoriesNeedingAdjustment, getMemoryById, insertImportanceAdjustment,
+  type Memory, type MemoryLayer,
+} from '../db/index.js';
 import { createLogger } from '../utils/logger.js';
 import { generateId, parseDuration } from '../utils/helpers.js';
 import type { LLMProvider } from '../llm/interface.js';
@@ -50,6 +54,7 @@ export interface LifecycleReport {
   archived: number;
   compressedToCore: number;
   expiredWorking: number;
+  importanceAdjusted?: number;
   indexRebuilt: boolean;
   errors: string[];
   startedAt: string;
@@ -138,6 +143,18 @@ export class LifecycleEngine {
       // Phase 6b: Decay stale relation confidences
       log.info('Phase 6b: updateRelationDecay');
       await this.updateRelationDecay();
+
+      // Phase 6c: Adjust importance from memory feedback (self-improvement)
+      if (this.config.selfImprovement?.enabled !== false && !dryRun) {
+        log.info('Phase 6c: adjustImportanceFromFeedback');
+        try {
+          const adjusted = await this.adjustImportanceFromFeedback(agentId);
+          report.importanceAdjusted = adjusted;
+        } catch (e: any) {
+          log.warn({ error: e.message }, 'Self-improvement feedback adjustment failed');
+          report.errors.push(`Phase 6c: ${e.message}`);
+        }
+      }
 
       // Phase 7: Synthesize user profiles (skip in dry-run)
       if (!dryRun) {
@@ -618,6 +635,126 @@ export class LifecycleEngine {
         }
       }
     })();
+  }
+
+  /**
+   * Phase 6c: Self-improvement — adjust memory importance based on feedback signals.
+   *
+   * For each memory with enough feedback in the configured window:
+   * 1. Compute weighted average of feedback signals (explicit weighted more than implicit)
+   * 2. Compute delta (clamped to maxDelta)
+   * 3. Skip pinned memories
+   * 4. Skip if delta is below minDelta threshold (noise filter)
+   * 5. Apply adjustment and log to importance_adjustments audit table
+   *
+   * Signal weights: helpful=+1, not_helpful=-1, outdated=-0.5, wrong=-1
+   */
+  private async adjustImportanceFromFeedback(agentId?: string): Promise<number> {
+    const selfConfig = this.config.selfImprovement;
+    const windowDays = selfConfig?.windowSize ?? 30;
+    const minFeedbacks = selfConfig?.minFeedbacks ?? 3;
+    const maxDelta = selfConfig?.maxDelta ?? 0.15;
+    const implicitWeight = selfConfig?.implicitWeight ?? 0.3;
+    const explicitWeight = selfConfig?.explicitWeight ?? 1.0;
+    const minDelta = selfConfig?.minDelta ?? 0.01;
+
+    // Signal score mapping
+    const SIGNAL_SCORE: Record<string, number> = {
+      helpful: 1.0,
+      not_helpful: -1.0,
+      outdated: -0.5,
+      wrong: -1.0,
+    };
+
+    const candidates = getMemoriesNeedingAdjustment({
+      agent_id: agentId,
+      minFeedbacks,
+      windowDays,
+    });
+
+    if (candidates.length === 0) return 0;
+
+    let adjusted = 0;
+    const db = getDb();
+
+    for (const candidate of candidates) {
+      const memory = getMemoryById(candidate.memory_id);
+      if (!memory) continue;
+
+      // Skip pinned memories
+      if (memory.is_pinned) continue;
+
+      // Get individual feedback entries for this memory to compute weighted score
+      const feedbacks = db.prepare(`
+        SELECT id, signal, source FROM memory_feedback
+        WHERE memory_id = ? AND created_at > ?
+      `).all(candidate.memory_id, new Date(Date.now() - windowDays * 86400_000).toISOString()) as { id: string; signal: string; source: string }[];
+
+      if (feedbacks.length < minFeedbacks) continue;
+
+      // Compute weighted average score
+      let weightedSum = 0;
+      let totalWeight = 0;
+      const feedbackIds: string[] = [];
+
+      for (const fb of feedbacks) {
+        const signalScore = SIGNAL_SCORE[fb.signal] ?? 0;
+        const weight = fb.source === 'implicit' ? implicitWeight : explicitWeight;
+        weightedSum += signalScore * weight;
+        totalWeight += weight;
+        feedbackIds.push(fb.id);
+      }
+
+      if (totalWeight === 0) continue;
+
+      const avgScore = weightedSum / totalWeight; // Range: -1 to +1
+
+      // Map average score to delta: positive score → increase importance, negative → decrease
+      let delta = avgScore * maxDelta;
+
+      // Clamp delta
+      delta = Math.max(-maxDelta, Math.min(maxDelta, delta));
+
+      // Skip noise — if the change is too small, don't bother
+      if (Math.abs(delta) < minDelta) continue;
+
+      const oldImportance = memory.importance;
+      const newImportance = Math.max(0.05, Math.min(1.0, oldImportance + delta));
+
+      // Skip if effective change is negligible
+      if (Math.abs(newImportance - oldImportance) < 0.001) continue;
+
+      // Apply the adjustment
+      updateMemory(memory.id, { importance: newImportance });
+
+      // Record in audit log
+      insertImportanceAdjustment({
+        memory_id: memory.id,
+        agent_id: memory.agent_id,
+        old_importance: oldImportance,
+        new_importance: newImportance,
+        delta: newImportance - oldImportance,
+        reason: `feedback_weighted_avg: ${avgScore.toFixed(3)} (${feedbacks.length} feedbacks)`,
+        feedback_ids: feedbackIds.length > 0 ? feedbackIds : undefined,
+      });
+
+      insertLifecycleLog('importance_adjustment', [memory.id], {
+        old_importance: oldImportance,
+        new_importance: newImportance,
+        delta: newImportance - oldImportance,
+        feedback_count: feedbacks.length,
+        avg_score: avgScore,
+        agent_id: memory.agent_id,
+      });
+
+      adjusted++;
+    }
+
+    if (adjusted > 0) {
+      log.info({ adjusted, candidates: candidates.length }, 'Self-improvement: adjusted memory importance from feedback');
+    }
+
+    return adjusted;
   }
 
   /**

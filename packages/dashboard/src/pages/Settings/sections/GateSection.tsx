@@ -27,14 +27,14 @@ export default function GateSection({
           {renderNumberField(`🔍 ${t('settings.searchCandidates')}`, t('settings.searchCandidatesDesc'), 'searchLimit', 5, 50)}
           {renderToggleField(t('settings.skipSmallTalk'), t('settings.skipSmallTalkDesc'), 'skipSmallTalk')}
 
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
+          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 16, paddingTop: 12 }}>
             <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>✂️ {t('settings.cliffFilter')}</label>
             {renderNumberField(t('settings.cliffAbsolute'), t('settings.cliffAbsoluteDesc'), 'cliffAbsolute', 0.1, 0.9)}
             {renderNumberField(t('settings.cliffGap'), t('settings.cliffGapDesc'), 'cliffGap', 0.1, 0.9)}
             {renderNumberField(t('settings.cliffFloor'), t('settings.cliffFloorDesc'), 'cliffFloor', 0, 0.5)}
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
+          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 16, paddingTop: 12 }}>
             <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔄 {t('settings.queryExpansion')}</label>
             {renderToggleField(t('settings.queryExpansion'), t('settings.queryExpansionDesc'), 'queryExpansion.enabled')}
             {draft?.queryExpansion?.enabled && (

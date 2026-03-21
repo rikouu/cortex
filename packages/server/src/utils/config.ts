@@ -113,6 +113,15 @@ const CortexConfigSchema = z.object({
     archiveThreshold: z.number().default(0.2),
     decayLambda: z.number().default(0.03),
   }).default({}),
+  selfImprovement: z.object({
+    enabled: z.boolean().default(true),
+    windowSize: z.number().min(1).max(90).default(30),         // Days of feedback to consider
+    minFeedbacks: z.number().min(1).max(50).default(3),        // Minimum feedbacks before adjusting
+    maxDelta: z.number().min(0.01).max(0.5).default(0.15),     // Maximum importance change per cycle
+    implicitWeight: z.number().min(0).max(1).default(0.3),     // Weight for implicit signals (usage)
+    explicitWeight: z.number().min(0).max(1).default(1.0),     // Weight for explicit signals (user feedback)
+    minDelta: z.number().min(0.001).max(0.1).default(0.01),    // Minimum delta to apply (skip noise)
+  }).default({}),
   flush: z.object({
     enabled: z.boolean().default(true),
     softThresholdTokens: z.number().default(40000),

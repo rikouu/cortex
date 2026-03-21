@@ -14,10 +14,10 @@ function ElapsedTimer() {
   const secs = (elapsed / 1000).toFixed(1);
   return (
     <div style={{
-      padding: '8px 16px', marginTop: 8, borderRadius: 6,
-      background: 'var(--bg-secondary, rgba(99,102,241,0.1))',
+      padding: '8px 16px', marginTop: 8, borderRadius: 'var(--radius-sm)',
+      background: 'var(--color-primary-muted)',
       display: 'inline-flex', alignItems: 'center', gap: 8,
-      fontSize: 13, color: 'var(--text-muted)', animation: 'pulse 1.5s ease-in-out infinite',
+      fontSize: 13, color: 'var(--color-text-secondary)', animation: 'pulse 1.5s ease-in-out infinite',
     }}>
       <span className="spinner" /> 运行中... {secs}s
     </div>
@@ -208,25 +208,25 @@ export default function LifecycleMonitor() {
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ marginBottom: 12 }}>{t('lifecycle.scheduleConfig')}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.schedule')}</div>
+            <div style={{ padding: 12, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{t('lifecycle.schedule')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{parseCron(config.lifecycle?.schedule)}</div>
-              <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>{config.lifecycle?.schedule}</code>
+              <code style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{config.lifecycle?.schedule}</code>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.promotionThreshold')}</div>
+            <div style={{ padding: 12, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{t('lifecycle.promotionThreshold')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{config.lifecycle?.promotionThreshold}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('lifecycle.promotionDesc')}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t('lifecycle.promotionDesc')}</div>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.archiveThreshold')}</div>
+            <div style={{ padding: 12, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{t('lifecycle.archiveThreshold')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{config.lifecycle?.archiveThreshold}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('lifecycle.archiveDesc')}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t('lifecycle.archiveDesc')}</div>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('lifecycle.decayLambda')}</div>
+            <div style={{ padding: 12, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>{t('lifecycle.decayLambda')}</div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{config.lifecycle?.decayLambda}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('lifecycle.decayDesc')}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t('lifecycle.decayDesc')}</div>
             </div>
           </div>
         </div>
@@ -235,10 +235,10 @@ export default function LifecycleMonitor() {
       {/* Layer Distribution (before/after) */}
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginBottom: 12 }}>{t('lifecycle.currentDistribution')}</h3>
-        <div style={{ display: 'flex', height: 32, borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ display: 'flex', height: 32, borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 8 }}>
           {[
-            { label: t('lifecycle.working'), value: layerStats.working, color: '#4ade80' },
-            { label: t('lifecycle.core'), value: layerStats.core, color: '#818cf8' },
+            { label: t('lifecycle.working'), value: layerStats.working, color: 'var(--color-success)' },
+            { label: t('lifecycle.core'), value: layerStats.core, color: 'var(--color-primary-hover)' },
             { label: t('lifecycle.archive'), value: layerStats.archive, color: '#a1a1aa' },
           ].map((seg, i) => {
             const total = layerStats.working + layerStats.core + layerStats.archive;
@@ -258,7 +258,7 @@ export default function LifecycleMonitor() {
       {/* Agent selector + Actions */}
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Agent</label>
+          <label style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Agent</label>
           <select value={agentId} onChange={e => { setAgentId(e.target.value); setLogPage(0); setPreview(null); setRunResult(null); setLogs([]); setLayerStats({ working: 0, core: 0, archive: 0 }); setShowAffected(false); }} style={{ fontSize: 13, padding: '4px 8px' }}>
             <option value="">{t('lifecycle.allAgents') || '全部 Agent'}</option>
             {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
@@ -280,38 +280,38 @@ export default function LifecycleMonitor() {
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ marginBottom: 12 }}>{t('lifecycle.previewTitle', { count: totalOps })}</h3>
           {totalOps === 0 ? (
-            <div style={{ padding: '16px 0', color: 'var(--text-muted)', textAlign: 'center' }}>
+            <div style={{ padding: '16px 0', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
               ✅ {t('lifecycle.previewAllGood') || '当前没有需要处理的记忆。所有工作层记忆不足 24 小时或未达到升级条件。'}
             </div>
           ) : (
             <>
               <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
                 {preview.promoted > 0 && (
-                  <div className="stat-card">
+                  <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <div className="label">{t('lifecycle.wouldPromote')}</div>
-                    <div className="value" style={{ color: 'var(--success)' }}>{preview.promoted}</div>
+                    <div className="value" style={{ color: 'var(--color-success)' }}>{preview.promoted}</div>
                   </div>
                 )}
                 {preview.merged > 0 && (
-                  <div className="stat-card">
+                  <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <div className="label">{t('lifecycle.wouldMerge')}</div>
-                    <div className="value" style={{ color: 'var(--info)' }}>{preview.merged}</div>
+                    <div className="value" style={{ color: 'var(--color-info)' }}>{preview.merged}</div>
                   </div>
                 )}
                 {preview.archived > 0 && (
-                  <div className="stat-card">
+                  <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <div className="label">{t('lifecycle.wouldArchive')}</div>
-                    <div className="value" style={{ color: 'var(--warning)' }}>{preview.archived}</div>
+                    <div className="value" style={{ color: 'var(--color-warning)' }}>{preview.archived}</div>
                   </div>
                 )}
                 {preview.compressedToCore > 0 && (
-                  <div className="stat-card">
+                  <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <div className="label">{t('lifecycle.wouldCompress')}</div>
-                    <div className="value" style={{ color: 'var(--danger)' }}>{preview.compressedToCore}</div>
+                    <div className="value" style={{ color: 'var(--color-danger)' }}>{preview.compressedToCore}</div>
                   </div>
                 )}
                 {preview.expiredWorking > 0 && (
-                  <div className="stat-card">
+                  <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <div className="label">{t('lifecycle.expiredWorking')}</div>
                     <div className="value">{preview.expiredWorking}</div>
                   </div>
@@ -342,13 +342,13 @@ export default function LifecycleMonitor() {
                     <tbody>
                       {affectedMemories.map((m: any) => {
                         const actionMap: Record<string, { label: string; color: string }> = {
-                          promote: { label: '⬆️ ' + t('lifecycle.promote'), color: 'var(--success)' },
-                          expire: { label: '🗑️ ' + t('lifecycle.expire'), color: 'var(--danger)' },
-                          archive: { label: '📦 ' + (t('lifecycle.archiveAction') || '归档'), color: 'var(--warning)' },
-                          merge: { label: '🔗 ' + (t('lifecycle.mergeAction') || '合并'), color: 'var(--info)' },
-                          compress: { label: '📐 ' + (t('lifecycle.compressAction') || '压缩'), color: 'var(--info)' },
+                          promote: { label: '⬆️ ' + t('lifecycle.promote'), color: 'var(--color-success)' },
+                          expire: { label: '🗑️ ' + t('lifecycle.expire'), color: 'var(--color-danger)' },
+                          archive: { label: '📦 ' + (t('lifecycle.archiveAction') || '归档'), color: 'var(--color-warning)' },
+                          merge: { label: '🔗 ' + (t('lifecycle.mergeAction') || '合并'), color: 'var(--color-info)' },
+                          compress: { label: '📐 ' + (t('lifecycle.compressAction') || '压缩'), color: 'var(--color-info)' },
                         };
-                        const display = actionMap[m.action] || { label: m.action, color: 'var(--text-muted)' };
+                        const display = actionMap[m.action] || { label: m.action, color: 'var(--color-text-secondary)' };
                         return (
                           <tr key={m.id}>
                             <td style={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.content}</td>
@@ -372,17 +372,17 @@ export default function LifecycleMonitor() {
 
       {/* Run result */}
       {runResult && (
-        <div className="card" style={{ marginBottom: 16, borderColor: 'var(--success)' }}>
+        <div className="card" style={{ marginBottom: 16, borderColor: 'var(--color-success)' }}>
           <h3 style={{ marginBottom: 12 }}>{t('lifecycle.lastRunResult')}</h3>
           <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
-            <div className="stat-card"><div className="label">{t('lifecycle.promoted')}</div><div className="value">{runResult.promoted}</div></div>
-            <div className="stat-card"><div className="label">{t('lifecycle.merged')}</div><div className="value">{runResult.merged}</div></div>
-            <div className="stat-card"><div className="label">{t('lifecycle.archived')}</div><div className="value">{runResult.archived}</div></div>
-            <div className="stat-card"><div className="label">{t('lifecycle.compressed')}</div><div className="value">{runResult.compressedToCore}</div></div>
-            <div className="stat-card"><div className="label">{t('lifecycle.duration')}</div><div className="value">{runResult.durationMs}ms</div></div>
+            <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}><div className="label">{t('lifecycle.promoted')}</div><div className="value">{runResult.promoted}</div></div>
+            <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}><div className="label">{t('lifecycle.merged')}</div><div className="value">{runResult.merged}</div></div>
+            <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}><div className="label">{t('lifecycle.archived')}</div><div className="value">{runResult.archived}</div></div>
+            <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}><div className="label">{t('lifecycle.compressed')}</div><div className="value">{runResult.compressedToCore}</div></div>
+            <div className="stat-card" style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}><div className="label">{t('lifecycle.duration')}</div><div className="value">{runResult.durationMs}ms</div></div>
           </div>
           {runResult.errors?.length > 0 && (
-            <div style={{ marginTop: 12, color: 'var(--danger)' }}>
+            <div style={{ marginTop: 12, color: 'var(--color-danger)' }}>
               {t('lifecycle.errors')}: {runResult.errors.join(', ')}
             </div>
           )}
@@ -395,7 +395,7 @@ export default function LifecycleMonitor() {
           <h3 style={{ marginBottom: 12 }}>{t('lifecycle.actionSummary', { count: logs.length })}</h3>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {Object.entries(actionCounts).map(([action, count]) => (
-              <div key={action} className="stat-card" style={{ padding: 12, minWidth: 100 }}>
+              <div key={action} className="stat-card" style={{ padding: 12, minWidth: 100, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                 <div className="label">{actionLabel(action)}</div>
                 <div className="value" style={{ fontSize: 20 }}>{count}</div>
               </div>
@@ -436,7 +436,7 @@ export default function LifecycleMonitor() {
         {logTotal > logLimit && (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 12, gap: 8 }}>
             <button className="btn" disabled={logPage === 0} onClick={() => setLogPage(p => p - 1)}>{t('common.prev')}</button>
-            <span style={{ padding: '8px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('common.page', { current: logPage + 1, total: Math.ceil(logTotal / logLimit) })}</span>
+            <span style={{ padding: '8px 16px', color: 'var(--color-text-secondary)', fontSize: 13 }}>{t('common.page', { current: logPage + 1, total: Math.ceil(logTotal / logLimit) })}</span>
             <button className="btn" disabled={(logPage + 1) * logLimit >= logTotal} onClick={() => setLogPage(p => p + 1)}>{t('common.next')}</button>
           </div>
         )}

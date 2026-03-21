@@ -87,19 +87,19 @@ export default function AuthSection() {
       {/* Token source status */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '10px 14px', background: 'var(--bg)', borderRadius: 8,
-        border: '1px solid var(--border)', marginBottom: 16, fontSize: 13,
+        padding: '10px 14px', background: 'var(--color-base)', borderRadius: 8,
+        border: '1px solid var(--color-border)', marginBottom: 16, fontSize: 13,
       }}>
         <span style={{ fontSize: 16 }}>{sourceIcon}</span>
         <div>
           <div style={{ fontWeight: 600 }}>{t('settings.authTokenSource')}: {sourceLabel}</div>
           {status.source === 'env' && (
-            <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
+            <div style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
               {t('settings.authEnvHint')}
             </div>
           )}
           {status.hasAgentTokens && (
-            <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
+            <div style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
               {t('settings.authAgentTokens', { count: status.agentTokenCount })}
             </div>
           )}
@@ -150,18 +150,18 @@ export default function AuthSection() {
 
           {error && (
             <div style={{
-              fontSize: 13, color: 'var(--danger)', marginTop: 10,
-              padding: '8px 10px', background: 'rgba(239,68,68,0.1)',
-              borderRadius: 'var(--radius)',
+              fontSize: 13, color: 'var(--color-danger)', marginTop: 10,
+              padding: '8px 10px', background: 'var(--color-danger-muted)',
+              borderRadius: 'var(--radius-md)',
             }}>
               {error}
             </div>
           )}
           {success && (
             <div style={{
-              fontSize: 13, color: 'var(--success)', marginTop: 10,
-              padding: '8px 10px', background: 'rgba(34,197,94,0.1)',
-              borderRadius: 'var(--radius)',
+              fontSize: 13, color: 'var(--color-success)', marginTop: 10,
+              padding: '8px 10px', background: 'var(--color-success-muted)',
+              borderRadius: 'var(--radius-md)',
             }}>
               {success}
             </div>
@@ -172,8 +172,8 @@ export default function AuthSection() {
             disabled={loading || !oldToken || !newToken || !confirmToken}
             style={{
               marginTop: 12, padding: '8px 20px', fontSize: 13, fontWeight: 600,
-              background: 'var(--primary)', color: '#fff', border: 'none',
-              borderRadius: 'var(--radius)', cursor: loading ? 'wait' : 'pointer',
+              background: 'var(--color-primary)', color: '#fff', border: 'none',
+              borderRadius: 'var(--radius-md)', cursor: loading ? 'wait' : 'pointer',
               opacity: loading || !oldToken || !newToken || !confirmToken ? 0.6 : 1,
             }}
           >
@@ -182,8 +182,8 @@ export default function AuthSection() {
         </form>
       ) : (
         <div style={{
-          padding: '12px 14px', background: 'var(--bg)', borderRadius: 8,
-          border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-muted)',
+          padding: '12px 14px', background: 'var(--color-base)', borderRadius: 8,
+          border: '1px solid var(--color-border)', fontSize: 13, color: 'var(--color-text-secondary)',
         }}>
           {t('settings.authEnvImmutable')}
         </div>

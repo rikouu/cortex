@@ -39,17 +39,17 @@ export default function SearchSection({
               onChange={e => setDraft((d: any) => ({ ...d, minSimilarity: Number(e.target.value) }))}
               style={{ width: '100%' }}
             />
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('settings.minSimilarityDesc')}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{t('settings.minSimilarityDesc')}</div>
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 12 }}>
+          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 16, paddingTop: 12 }}>
             <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔍 {t('settings.searchEnhancement')}</label>
 
             {renderToggleField(`🎯 ${t('settings.rerankerTitle')}`, t('settings.rerankerDesc'), 'reranker.enabled')}
 
             {draft?.reranker?.enabled && (
               <div style={{ marginLeft: 16 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
                   💡 {t('settings.rerankerConfigHint')}
                 </div>
 
@@ -71,7 +71,7 @@ export default function SearchSection({
                     onChange={e => setDraft((d: any) => ({ ...d, reranker: { ...d.reranker, weight: Number(e.target.value) } }))}
                     min={0} max={1} step={0.05} style={{ width: '100%' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-secondary)' }}>
                     <span>{t('settings.rerankerTrustOriginal')}</span>
                     <span>{t('settings.rerankerTrustReranker')}</span>
                   </div>

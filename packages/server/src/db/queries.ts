@@ -630,3 +630,198 @@ export function getCategoryFeedbackStats(agentId: string): Record<string, { tota
   }
   return stats;
 }
+
+// ── Memory Feedback (Self-Improvement) ──
+
+export type FeedbackSignal = 'helpful' | 'not_helpful' | 'outdated' | 'wrong';
+export type FeedbackSource = 'explicit' | 'implicit';
+
+export interface MemoryFeedback {
+  id: string;
+  memory_id: string;
+  agent_id: string;
+  recall_id: string | null;
+  signal: FeedbackSignal;
+  comment: string | null;
+  source: FeedbackSource;
+  created_at: string;
+}
+
+export interface ImportanceAdjustment {
+  id: string;
+  memory_id: string;
+  agent_id: string;
+  old_importance: number;
+  new_importance: number;
+  delta: number;
+  reason: string;
+  feedback_ids: string | null;
+  created_at: string;
+}
+
+export function insertMemoryFeedback(fb: {
+  memory_id: string;
+  agent_id?: string;
+  recall_id?: string;
+  signal: FeedbackSignal;
+  comment?: string;
+  source?: FeedbackSource;
+}): MemoryFeedback {
+  const db = getDb();
+  const id = generateId();
+  db.prepare(`
+    INSERT INTO memory_feedback (id, memory_id, agent_id, recall_id, signal, comment, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, fb.memory_id, fb.agent_id || 'default', fb.recall_id || null, fb.signal, fb.comment || null, fb.source || 'explicit');
+
+  return db.prepare('SELECT * FROM memory_feedback WHERE id = ?').get(id) as MemoryFeedback;
+}
+
+export function getMemoryFeedbacks(memoryId: string, opts?: { limit?: number; offset?: number }): { items: MemoryFeedback[]; total: number } {
+  const db = getDb();
+  const limit = opts?.limit || 50;
+  const offset = opts?.offset || 0;
+
+  const total = (db.prepare('SELECT COUNT(*) as cnt FROM memory_feedback WHERE memory_id = ?').get(memoryId) as any).cnt;
+  const items = db.prepare(
+    'SELECT * FROM memory_feedback WHERE memory_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(memoryId, limit, offset) as MemoryFeedback[];
+
+  return { items, total };
+}
+
+export function getMemoryFeedbackStats(memoryId: string): {
+  total: number;
+  helpful: number;
+  not_helpful: number;
+  outdated: number;
+  wrong: number;
+  helpfulness_rate: number;
+} {
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT signal, COUNT(*) as cnt FROM memory_feedback WHERE memory_id = ? GROUP BY signal'
+  ).all(memoryId) as { signal: string; cnt: number }[];
+
+  const counts = { helpful: 0, not_helpful: 0, outdated: 0, wrong: 0 };
+  for (const r of rows) {
+    if (r.signal in counts) (counts as any)[r.signal] = r.cnt;
+  }
+  const total = counts.helpful + counts.not_helpful + counts.outdated + counts.wrong;
+  const helpfulness_rate = total > 0 ? counts.helpful / total : 1;
+
+  return { total, ...counts, helpfulness_rate };
+}
+
+export function insertImportanceAdjustment(adj: {
+  memory_id: string;
+  agent_id?: string;
+  old_importance: number;
+  new_importance: number;
+  delta: number;
+  reason: string;
+  feedback_ids?: string[];
+}): ImportanceAdjustment {
+  const db = getDb();
+  const id = generateId();
+  db.prepare(`
+    INSERT INTO importance_adjustments (id, memory_id, agent_id, old_importance, new_importance, delta, reason, feedback_ids)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, adj.memory_id, adj.agent_id || 'default', adj.old_importance, adj.new_importance, adj.delta, adj.reason, adj.feedback_ids ? JSON.stringify(adj.feedback_ids) : null);
+
+  return db.prepare('SELECT * FROM importance_adjustments WHERE id = ?').get(id) as ImportanceAdjustment;
+}
+
+export function getImportanceAdjustments(memoryId: string, opts?: { limit?: number }): ImportanceAdjustment[] {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM importance_adjustments WHERE memory_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(memoryId, opts?.limit || 50) as ImportanceAdjustment[];
+}
+
+export function getRecentAdjustments(opts?: { agent_id?: string; limit?: number; since?: string }): ImportanceAdjustment[] {
+  const db = getDb();
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (opts?.agent_id) { conditions.push('agent_id = ?'); params.push(opts.agent_id); }
+  if (opts?.since) { conditions.push('created_at > ?'); params.push(opts.since); }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return db.prepare(
+    `SELECT * FROM importance_adjustments ${where} ORDER BY created_at DESC LIMIT ?`
+  ).all(...params, opts?.limit || 100) as ImportanceAdjustment[];
+}
+
+/**
+ * Get memories that have enough feedback to potentially warrant an importance adjustment.
+ * Returns memories with at least `minFeedbacks` feedback entries within `windowDays`.
+ */
+export function getMemoriesNeedingAdjustment(opts: {
+  agent_id?: string;
+  minFeedbacks: number;
+  windowDays: number;
+}): { memory_id: string; agent_id: string; helpful: number; not_helpful: number; outdated: number; wrong: number; total: number }[] {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - opts.windowDays * 86400_000).toISOString();
+  const conditions = ['mf.created_at > ?'];
+  const params: any[] = [cutoff];
+
+  if (opts.agent_id) { conditions.push('mf.agent_id = ?'); params.push(opts.agent_id); }
+
+  const where = conditions.join(' AND ');
+  return db.prepare(`
+    SELECT
+      mf.memory_id,
+      mf.agent_id,
+      SUM(CASE WHEN mf.signal = 'helpful' THEN 1 ELSE 0 END) as helpful,
+      SUM(CASE WHEN mf.signal = 'not_helpful' THEN 1 ELSE 0 END) as not_helpful,
+      SUM(CASE WHEN mf.signal = 'outdated' THEN 1 ELSE 0 END) as outdated,
+      SUM(CASE WHEN mf.signal = 'wrong' THEN 1 ELSE 0 END) as wrong,
+      COUNT(*) as total
+    FROM memory_feedback mf
+    JOIN memories m ON m.id = mf.memory_id AND m.superseded_by IS NULL
+    WHERE ${where}
+    GROUP BY mf.memory_id, mf.agent_id
+    HAVING COUNT(*) >= ?
+  `).all(...params, opts.minFeedbacks) as any[];
+}
+
+/**
+ * Get a high-level overview of feedback across all memories for an agent.
+ */
+export function getFeedbackOverview(agentId?: string): {
+  total_feedbacks: number;
+  total_memories_with_feedback: number;
+  signal_distribution: Record<string, number>;
+  recent_adjustments: number;
+  avg_delta: number;
+} {
+  const db = getDb();
+  const agentFilter = agentId ? ' WHERE agent_id = ?' : '';
+  const params = agentId ? [agentId] : [];
+
+  const totalFeedbacks = (db.prepare(`SELECT COUNT(*) as cnt FROM memory_feedback${agentFilter}`).get(...params) as any).cnt;
+  const totalMemories = (db.prepare(`SELECT COUNT(DISTINCT memory_id) as cnt FROM memory_feedback${agentFilter}`).get(...params) as any).cnt;
+
+  const signals = db.prepare(
+    `SELECT signal, COUNT(*) as cnt FROM memory_feedback${agentFilter} GROUP BY signal`
+  ).all(...params) as { signal: string; cnt: number }[];
+  const signal_distribution: Record<string, number> = {};
+  for (const s of signals) { signal_distribution[s.signal] = s.cnt; }
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const adjFilter = agentId ? ' WHERE agent_id = ? AND created_at > ?' : ' WHERE created_at > ?';
+  const adjParams = agentId ? [agentId, thirtyDaysAgo] : [thirtyDaysAgo];
+  const adjStats = db.prepare(
+    `SELECT COUNT(*) as cnt, COALESCE(AVG(ABS(delta)), 0) as avg_delta FROM importance_adjustments${adjFilter}`
+  ).get(...adjParams) as any;
+
+  return {
+    total_feedbacks: totalFeedbacks,
+    total_memories_with_feedback: totalMemories,
+    signal_distribution,
+    recent_adjustments: adjStats.cnt,
+    avg_delta: adjStats.avg_delta,
+  };
+}

@@ -46,7 +46,7 @@ export default function MarkdownExportSection({
             <label style={{ fontWeight: 500, display: 'block', marginBottom: 4 }}>
               {t('settings.markdownExportDebounceMs')}
             </label>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
               {t('settings.markdownExportDebounceMsDesc')}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -63,7 +63,7 @@ export default function MarkdownExportSection({
             </div>
             <div style={{
               fontSize: 12,
-              color: 'var(--text-muted)',
+              color: 'var(--color-text-secondary)',
               background: 'var(--bg-secondary, #f5f5f5)',
               padding: '8px 12px',
               borderRadius: 6,

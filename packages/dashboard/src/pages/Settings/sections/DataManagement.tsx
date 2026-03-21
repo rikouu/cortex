@@ -39,7 +39,7 @@ export default function DataManagement({ config, setConfig, setToast, t }: DataM
 
         {/* Export */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.exportLabel')}</div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.exportLabel')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" onClick={async () => {
               try {
@@ -66,7 +66,7 @@ export default function DataManagement({ config, setConfig, setToast, t }: DataM
 
         {/* Reindex */}
         <div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.maintenance')}</div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('settings.maintenance')}</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="btn" disabled={reindexing} onClick={async () => {
               if (!confirm(t('settings.confirmReindex'))) return;
@@ -83,13 +83,13 @@ export default function DataManagement({ config, setConfig, setToast, t }: DataM
               }
             }}>{reindexing ? t('settings.reindexing') : t('settings.rebuildIndex')}</button>
             {reindexing && (
-              <span style={{ fontSize: 12, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: 12, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid var(--color-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                 {t('settings.reindexingHint')}
               </span>
             )}
             {!reindexing && (
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.rebuildHint')}</span>
+              <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{t('settings.rebuildHint')}</span>
             )}
           </div>
         </div>

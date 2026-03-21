@@ -14,6 +14,26 @@ import { search, checkAuth, verifyToken, setStoredToken, getStoredToken, clearSt
 import { I18nProvider, useI18n } from './i18n/index.js';
 import type { Locale } from './i18n/index.js';
 
+// ============ Theme Management ============
+
+function getInitialTheme(): 'dark' | 'light' {
+  const stored = localStorage.getItem('cortex-theme');
+  if (stored === 'light' || stored === 'dark') return stored;
+  return 'dark';
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('cortex-theme', theme);
+  }, [theme]);
+
+  const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  return { theme, toggle };
+}
+
 // ============ Login Page ============
 
 function LoginPage({ onLogin }: { onLogin: () => void }) {
@@ -45,23 +65,23 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      minHeight: '100vh', background: 'var(--bg)',
+      minHeight: '100vh', background: 'var(--color-base)',
     }}>
       <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)', padding: 32, width: 360,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        background: 'var(--color-elevated)', border: '1px solid var(--color-border)',
+        borderRadius: 16, padding: 36, width: 380,
+        boxShadow: 'var(--shadow-xl)',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🧠</div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Cortex</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>🧠</div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, letterSpacing: '-0.02em' }}>Cortex</h1>
+          <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
             {t('login.subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', display: 'block', marginBottom: 6 }}>
+          <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
             {t('login.tokenLabel')}
           </label>
           <input
@@ -70,17 +90,17 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             onChange={e => setToken(e.target.value)}
             placeholder={t('login.tokenPlaceholder')}
             style={{
-              width: '100%', padding: '10px 12px', fontSize: 14,
-              boxSizing: 'border-box', marginBottom: 12,
+              width: '100%', padding: '10px 14px', fontSize: 14,
+              boxSizing: 'border-box', marginBottom: 14,
             }}
             autoFocus
           />
 
           {error && (
             <div style={{
-              fontSize: 13, color: 'var(--danger)', marginBottom: 12,
-              padding: '8px 10px', background: 'rgba(239,68,68,0.1)',
-              borderRadius: 'var(--radius)',
+              fontSize: 13, color: 'var(--color-danger)', marginBottom: 14,
+              padding: '10px 12px', background: 'var(--color-danger-muted)',
+              borderRadius: 8, border: '1px solid var(--color-danger-border)',
             }}>
               {error}
             </div>
@@ -89,10 +109,9 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
           <button
             type="submit"
             disabled={loading || !token.trim()}
+            className="btn primary lg"
             style={{
-              width: '100%', padding: '10px 0', fontSize: 14, fontWeight: 600,
-              background: 'var(--primary)', color: '#fff', border: 'none',
-              borderRadius: 'var(--radius)', cursor: loading ? 'wait' : 'pointer',
+              width: '100%', justifyContent: 'center',
               opacity: loading || !token.trim() ? 0.6 : 1,
             }}
           >
@@ -149,25 +168,25 @@ function SetupPage({ onSetup }: { onSetup: () => void }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      minHeight: '100vh', background: 'var(--bg)',
+      minHeight: '100vh', background: 'var(--color-base)',
     }}>
       <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)', padding: 32, width: 400,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        background: 'var(--color-elevated)', border: '1px solid var(--color-border)',
+        borderRadius: 16, padding: 36, width: 420,
+        boxShadow: 'var(--shadow-xl)',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🔐</div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>🔐</div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, letterSpacing: '-0.02em' }}>
             {t('setup.title')}
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 8, lineHeight: 1.6 }}>
             {t('setup.subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', display: 'block', marginBottom: 6 }}>
+          <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
             {t('setup.tokenLabel')}
           </label>
           <input
@@ -176,13 +195,13 @@ function SetupPage({ onSetup }: { onSetup: () => void }) {
             onChange={e => setToken(e.target.value)}
             placeholder={t('setup.tokenPlaceholder')}
             style={{
-              width: '100%', padding: '10px 12px', fontSize: 14,
-              boxSizing: 'border-box', marginBottom: 12,
+              width: '100%', padding: '10px 14px', fontSize: 14,
+              boxSizing: 'border-box', marginBottom: 14,
             }}
             autoFocus
           />
 
-          <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', display: 'block', marginBottom: 6 }}>
+          <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
             {t('setup.confirmLabel')}
           </label>
           <input
@@ -191,16 +210,16 @@ function SetupPage({ onSetup }: { onSetup: () => void }) {
             onChange={e => setConfirm(e.target.value)}
             placeholder={t('setup.confirmPlaceholder')}
             style={{
-              width: '100%', padding: '10px 12px', fontSize: 14,
-              boxSizing: 'border-box', marginBottom: 12,
+              width: '100%', padding: '10px 14px', fontSize: 14,
+              boxSizing: 'border-box', marginBottom: 14,
             }}
           />
 
           {error && (
             <div style={{
-              fontSize: 13, color: 'var(--danger)', marginBottom: 12,
-              padding: '8px 10px', background: 'rgba(239,68,68,0.1)',
-              borderRadius: 'var(--radius)',
+              fontSize: 13, color: 'var(--color-danger)', marginBottom: 14,
+              padding: '10px 12px', background: 'var(--color-danger-muted)',
+              borderRadius: 8, border: '1px solid var(--color-danger-border)',
             }}>
               {error}
             </div>
@@ -209,10 +228,9 @@ function SetupPage({ onSetup }: { onSetup: () => void }) {
           <button
             type="submit"
             disabled={loading || !token.trim() || !confirm.trim()}
+            className="btn primary lg"
             style={{
-              width: '100%', padding: '10px 0', fontSize: 14, fontWeight: 600,
-              background: 'var(--primary)', color: '#fff', border: 'none',
-              borderRadius: 'var(--radius)', cursor: loading ? 'wait' : 'pointer',
+              width: '100%', justifyContent: 'center',
               opacity: loading || !token.trim() || !confirm.trim() ? 0.6 : 1,
             }}
           >
@@ -220,7 +238,7 @@ function SetupPage({ onSetup }: { onSetup: () => void }) {
           </button>
         </form>
 
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 16, lineHeight: 1.5, textAlign: 'center' }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 16, lineHeight: 1.5, textAlign: 'center' }}>
           {t('setup.hint')}
         </p>
       </div>
@@ -277,11 +295,8 @@ function GlobalSearch() {
         <button
           onClick={handleSearch}
           disabled={loading}
-          style={{
-            padding: '6px 10px', fontSize: 13, cursor: loading ? 'wait' : 'pointer',
-            background: 'var(--primary)', color: '#fff', border: 'none',
-            borderRadius: 'var(--radius)', whiteSpace: 'nowrap',
-          }}
+          className="btn primary sm"
+          style={{ flexShrink: 0 }}
         >🔍</button>
       </div>
       {open && (error || results.length > 0) && (
@@ -289,35 +304,41 @@ function GlobalSearch() {
           <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)', maxHeight: 320, overflowY: 'auto',
-            zIndex: 50, minWidth: 320, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            background: 'var(--color-elevated)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)', maxHeight: 320, overflowY: 'auto',
+            zIndex: 50, minWidth: 320, boxShadow: 'var(--shadow-lg)',
           }}>
             {error && (
-              <div style={{ padding: '10px 12px', color: 'var(--danger)', fontSize: 13 }}>
+              <div style={{ padding: '10px 14px', color: 'var(--color-danger)', fontSize: 13 }}>
                 {t('globalSearch.error', { message: error })}
               </div>
             )}
             {results.map((r: any) => (
               <div
                 key={r.id}
-                style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}
+                style={{
+                  padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
+                  cursor: 'pointer', fontSize: 13, transition: 'background 0.1s',
+                }}
                 onClick={() => { setOpen(false); setQuery(''); navigate('/memories'); }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = '')}
               >
                 <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
                   <span className={`badge ${r.layer}`} style={{ fontSize: 10 }}>{r.layer}</span>
-                  <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa', fontSize: 10 }}>{r.category}</span>
+                  <span className="badge" style={{ background: 'var(--color-info-muted)', color: '#60a5fa', fontSize: 10 }}>{r.category}</span>
                 </div>
-                <div style={{ color: 'var(--text)', lineHeight: 1.4 }}>{r.content?.slice(0, 120)}{r.content?.length > 120 ? '...' : ''}</div>
+                <div style={{ color: 'var(--color-text-primary)', lineHeight: 1.4 }}>{r.content?.slice(0, 120)}{r.content?.length > 120 ? '...' : ''}</div>
               </div>
             ))}
             {results.length > 0 && (
               <div
-                style={{ padding: '8px 12px', textAlign: 'center', fontSize: 12, color: 'var(--primary)', cursor: 'pointer' }}
+                style={{
+                  padding: '10px 14px', textAlign: 'center', fontSize: 12,
+                  color: 'var(--color-primary)', cursor: 'pointer', transition: 'background 0.1s',
+                }}
                 onClick={() => { setOpen(false); navigate('/memories'); }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = '')}
               >
                 {t('globalSearch.fullSearch')}
@@ -329,6 +350,19 @@ function GlobalSearch() {
     </div>
   );
 }
+
+// ============ Nav Icons (SVG) ============
+
+const icons: Record<string, React.ReactNode> = {
+  dashboard: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+  memories: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 002-2V8a2 2 0 00-2-2h-7.93a2 2 0 01-1.66-.9l-.82-1.2A2 2 0 007.93 3H4a2 2 0 00-2 2v13c0 1.1.9 2 2 2z"/></svg>,
+  agents: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 10-16 0"/></svg>,
+  relations: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+  extraction: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  system: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+  lifecycle: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23,4 23,10 17,10"/><polyline points="1,20 1,14 7,14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>,
+  settings: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+};
 
 // ============ Main App Content ============
 
@@ -345,6 +379,7 @@ function AppContent() {
   const [updateResult, setUpdateResult] = useState<'success'|'stale'|'down'|null>(null);
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState<string|null>(null);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     // Check auth status (new endpoint with setup detection)
@@ -403,8 +438,9 @@ function AppContent() {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        minHeight: '100vh', color: 'var(--text-muted)', fontSize: 14,
+        minHeight: '100vh', color: 'var(--color-text-tertiary)', fontSize: 14, gap: 10,
       }}>
+        <span className="spinner" />
         {t('common.loading')}
       </div>
     );
@@ -418,6 +454,23 @@ function AppContent() {
     return <LoginPage onLogin={() => setAuthState('authenticated')} />;
   }
 
+  const navItems = [
+    { to: '/', icon: icons.dashboard, label: t('nav.dashboard'), end: true },
+    { to: '/memories', icon: icons.memories, label: t('nav.memories') },
+    { to: '/agents', icon: icons.agents, label: t('nav.agents') },
+    { to: '/relations', icon: icons.relations, label: t('nav.relations') },
+  ];
+
+  const logItems = [
+    { to: '/extraction-logs', icon: icons.extraction, label: t('nav.extractionLogs') },
+    { to: '/system-logs', icon: icons.system, label: t('nav.systemLogs') },
+  ];
+
+  const systemItems = [
+    { to: '/lifecycle', icon: icons.lifecycle, label: t('nav.lifecycle') },
+    { to: '/settings', icon: icons.settings, label: t('nav.settings') },
+  ];
+
   return (
     <div className="app">
       {/* Mobile menu button */}
@@ -426,21 +479,23 @@ function AppContent() {
       </button>
       {/* Overlay */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-logo">🧠 <span>Cortex</span></div>
+
         {/* Version & GitHub & Update — under logo */}
         {versionInfo && (
-          <div style={{ padding: '2px 16px 6px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '8px 16px 10px', borderBottom: '1px solid var(--color-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontFamily: 'monospace' }}>v{versionInfo.version}</span>
+              <span className="version-badge">v{versionInfo.version}</span>
               <a
                 href={versionInfo.github}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+                style={{ color: 'var(--color-text-tertiary)', textDecoration: 'none', display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
                 title="GitHub"
               >
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               </a>
               {!versionInfo.latestRelease?.updateAvailable && !updating && !updateResult && !checkMsg && (
                 <button
@@ -463,11 +518,11 @@ function AppContent() {
                   }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto',
-                    fontSize: 10, padding: '1px 5px',
-                    background: 'none', color: 'var(--text-muted)',
-                    border: '1px solid rgba(255,255,255,0.08)', borderRadius: 'var(--radius)',
+                    fontSize: 10, padding: '2px 6px',
+                    background: 'none', color: 'var(--color-text-tertiary)',
+                    border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
                     cursor: checking ? 'default' : 'pointer',
-                    opacity: checking ? 0.5 : 0.7, transition: 'opacity 0.2s',
+                    opacity: checking ? 0.5 : 0.7, transition: 'all 0.15s',
                   }}
                   onMouseEnter={e => { if (!checking) (e.target as HTMLElement).style.opacity = '1'; }}
                   onMouseLeave={e => { if (!checking) (e.target as HTMLElement).style.opacity = '0.7'; }}
@@ -488,20 +543,20 @@ function AppContent() {
               {checkMsg && (
                 <span style={{
                   marginLeft: 'auto', fontSize: 10,
-                  color: checkMsg.startsWith('✅') ? '#22c55e' : '#ef4444',
+                  color: checkMsg.startsWith('✅') ? 'var(--color-success)' : 'var(--color-danger)',
                   animation: 'fadeIn 0.2s ease',
                 }}>{checkMsg}</span>
               )}
             </div>
             {versionInfo.latestRelease?.updateAvailable && !updating && !updateResult && (
-              <div style={{ marginTop: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
-                  <span>🆕 v{versionInfo.latestRelease.version}</span>
+              <div style={{ marginTop: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 11 }}>
+                  <span style={{ color: 'var(--color-info)' }}>🆕 v{versionInfo.latestRelease.version}</span>
                   <a
                     href={versionInfo.latestRelease.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 10 }}
+                    style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: 10 }}
                   >{locale === 'zh' ? '更新日志' : 'Changelog'}</a>
                 </div>
                 <button
@@ -512,29 +567,22 @@ function AppContent() {
                     setUpdateCountdown(0);
                     const target = versionInfo.latestRelease!.version;
 
-                    // Phase 1: Trigger update (backend pulls image + spawns updater)
                     try { await triggerUpdate(); } catch {}
 
-                    // Phase 2: Wait for server to go down first
-                    // Don't poll immediately — give the container time to be replaced
                     let elapsed = 0;
                     const pollTimer = setInterval(() => { elapsed++; setUpdateCountdown(elapsed); }, 1000);
 
-                    // Wait up to 15s for server to go offline
                     let serverWentDown = false;
                     for (let i = 0; i < 15; i++) {
                       await new Promise(r => setTimeout(r, 1000));
                       try {
                         await getHealth();
-                        // Still up — keep waiting
                       } catch {
                         serverWentDown = true;
                         break;
                       }
                     }
 
-                    // Phase 3: Poll for server to come back with new version
-                    // Allow up to 90s for pull + recreate (CI images can be large)
                     let found = false;
                     const maxPollAttempts = serverWentDown ? 45 : 60;
                     for (let i = 0; i < maxPollAttempts; i++) {
@@ -549,7 +597,6 @@ function AppContent() {
                           found = true;
                           break;
                         } else if (h.version && serverWentDown) {
-                          // Server came back but with old version — image may not have updated
                           clearInterval(pollTimer);
                           setUpdateResult('stale');
                           setUpdating(false);
@@ -557,9 +604,7 @@ function AppContent() {
                           found = true;
                           break;
                         }
-                        // Version still old but server never went down — keep waiting
                       } catch {
-                        // Server still restarting, keep polling
                         serverWentDown = true;
                       }
                     }
@@ -569,18 +614,14 @@ function AppContent() {
                       setUpdating(false);
                     }
                   }}
-                  style={{
-                    display: 'block', width: '100%', fontSize: 11, padding: '3px 8px',
-                    background: 'rgba(59,130,246,0.15)', color: 'var(--primary)',
-                    border: '1px solid rgba(59,130,246,0.3)', borderRadius: 'var(--radius)',
-                    cursor: 'pointer', textAlign: 'center',
-                  }}
+                  className="btn primary sm"
+                  style={{ width: '100%', justifyContent: 'center', fontSize: 11 }}
                 >{locale === 'zh' ? '⬆️ 立即更新' : '⬆️ Update now'}</button>
               </div>
             )}
             {updating && (
-              <div style={{ marginTop: 4 }}>
-                <div style={{ fontSize: 11, marginBottom: 3, textAlign: 'center' }}>
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 11, marginBottom: 4, textAlign: 'center', color: 'var(--color-text-secondary)' }}>
                   {updateCountdown < 5
                     ? (locale === 'zh' ? '📦 正在拉取镜像...' : '📦 Pulling image...')
                     : updateCountdown < 15
@@ -588,12 +629,12 @@ function AppContent() {
                       : (locale === 'zh' ? `⏳ 重建容器中... ${updateCountdown}s` : `⏳ Rebuilding container... ${updateCountdown}s`)
                   }
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 3 }}>
+                <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textAlign: 'center', marginBottom: 4 }}>
                   {locale === 'zh' ? '请勿关闭或刷新页面' : 'Do not close or refresh this page'}
                 </div>
-                <div style={{ height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: 3, background: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{
-                    height: '100%', background: 'var(--primary)', borderRadius: 2,
+                    height: '100%', background: 'var(--color-primary)', borderRadius: 2,
                     width: `${Math.min((updateCountdown / 90) * 100, 95)}%`,
                     transition: 'width 1s linear',
                   }} />
@@ -601,44 +642,63 @@ function AppContent() {
               </div>
             )}
             {updateResult === 'success' && (
-              <div style={{ marginTop: 4, fontSize: 11, color: '#22c55e', textAlign: 'center' }}>
+              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-success)', textAlign: 'center' }}>
                 ✅ {locale === 'zh' ? '更新成功！正在刷新...' : 'Updated! Reloading...'}
               </div>
             )}
             {updateResult === 'stale' && (
-              <div style={{ marginTop: 4, fontSize: 11, textAlign: 'center' }}>
-                <div style={{ color: '#f59e0b' }}>⚠️ {locale === 'zh' ? '版本未变化 — 新镜像可能还在构建中，请稍后再试' : 'Version unchanged — new image may still be building, try again later'}</div>
-                <button onClick={() => { setUpdateResult(null); }} style={{ fontSize: 10, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 2 }}>
+              <div style={{ marginTop: 6, fontSize: 11, textAlign: 'center' }}>
+                <div style={{ color: 'var(--color-warning)' }}>⚠️ {locale === 'zh' ? '版本未变化 — 新镜像可能还在构建中，请稍后再试' : 'Version unchanged — new image may still be building, try again later'}</div>
+                <button onClick={() => { setUpdateResult(null); }} className="btn ghost sm" style={{ fontSize: 10, marginTop: 4 }}>
                   {locale === 'zh' ? '🔄 重试' : '🔄 Retry'}
                 </button>
               </div>
             )}
             {updateResult === 'down' && (
-              <div style={{ marginTop: 4, fontSize: 11, textAlign: 'center' }}>
-                <div style={{ color: '#ef4444' }}>❌ {locale === 'zh' ? '服务器无响应，容器可能在重建中' : 'Server unreachable, container may be rebuilding'}</div>
-                <button onClick={() => window.location.reload()} style={{ fontSize: 10, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 2 }}>
+              <div style={{ marginTop: 6, fontSize: 11, textAlign: 'center' }}>
+                <div style={{ color: 'var(--color-danger)' }}>❌ {locale === 'zh' ? '服务器无响应，容器可能在重建中' : 'Server unreachable, container may be rebuilding'}</div>
+                <button onClick={() => window.location.reload()} className="btn ghost sm" style={{ fontSize: 10, marginTop: 4 }}>
                   {locale === 'zh' ? '刷新页面' : 'Refresh'}
                 </button>
               </div>
             )}
           </div>
         )}
-        <nav onClick={() => setSidebarOpen(false)}>
-          <NavLink to="/" end className={({ isActive }) => isActive ? 'active' : ''}>📊 {t('nav.dashboard')}</NavLink>
-          <NavLink to="/memories" className={({ isActive }) => isActive ? 'active' : ''}>🗂️ {t('nav.memories')}</NavLink>
-          <NavLink to="/agents" className={({ isActive }) => isActive ? 'active' : ''}>🤖 {t('nav.agents')}</NavLink>
 
-          <NavLink to="/relations" className={({ isActive }) => isActive ? 'active' : ''}>🕸️ {t('nav.relations')}</NavLink>
+        <nav onClick={() => setSidebarOpen(false)}>
+          {navItems.map(item => (
+            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => isActive ? 'active' : ''}>
+              {item.icon} {item.label}
+            </NavLink>
+          ))}
+
           <div className="nav-divider" />
           <div className="nav-group-label">{locale === 'zh' ? '日志' : 'Logs'}</div>
-          <NavLink to="/extraction-logs" className={({ isActive }) => isActive ? 'active' : ''}>📋 {t('nav.extractionLogs')}</NavLink>
-          <NavLink to="/system-logs" className={({ isActive }) => isActive ? 'active' : ''}>🖥️ {t('nav.systemLogs')}</NavLink>
+          {logItems.map(item => (
+            <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'active' : ''}>
+              {item.icon} {item.label}
+            </NavLink>
+          ))}
+
           <div className="nav-divider" />
           <div className="nav-group-label">{locale === 'zh' ? '系统' : 'System'}</div>
-          <NavLink to="/lifecycle" className={({ isActive }) => isActive ? 'active' : ''}>♻️ {t('nav.lifecycle')}</NavLink>
-          <NavLink to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>⚙️ {t('nav.settings')}</NavLink>
+          {systemItems.map(item => (
+            <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'active' : ''}>
+              {item.icon} {item.label}
+            </NavLink>
+          ))}
         </nav>
+
         <div className="sidebar-footer">
+          {/* Theme toggle */}
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+
           <select
             value={locale}
             onChange={e => setLocale(e.target.value as Locale)}
@@ -653,6 +713,7 @@ function AppContent() {
           )}
         </div>
       </aside>
+
       <main className="main">
         <Routes>
           <Route path="/" element={<Stats />} />

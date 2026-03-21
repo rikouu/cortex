@@ -7,10 +7,55 @@ import type { Reranker } from '../search/reranker.js';
 import type { CortexConfig } from '../utils/config.js';
 import type { LLMProvider } from '../llm/interface.js';
 import { findRelatedRelations, listMemories } from '../db/queries.js';
-import { extractEntityTokens } from '../utils/helpers.js';
+import { extractEntityTokens, generateId } from '../utils/helpers.js';
 import { getDriver, traverseRelations, listRelations as neo4jListRelations } from '../db/neo4j.js';
 
 const log = createLogger('gate');
+
+// ── Recall Session Tracking ──
+// In-memory map for recall sessions: recallId -> { query, memory_ids, agent_id, created_at }
+// Entries expire after 1 hour.
+interface RecallSession {
+  query: string;
+  memory_ids: string[];
+  agent_id: string;
+  created_at: number;
+}
+const recallSessions = new Map<string, RecallSession>();
+const RECALL_SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_RECALL_SESSIONS = 10_000;
+
+/** Periodically clean expired recall sessions and evict oldest if over cap */
+function cleanExpiredRecallSessions(): void {
+  const now = Date.now();
+  for (const [id, session] of recallSessions) {
+    if (now - session.created_at > RECALL_SESSION_TTL_MS) {
+      recallSessions.delete(id);
+    }
+  }
+
+  // Evict oldest entries if over cap
+  if (recallSessions.size > MAX_RECALL_SESSIONS) {
+    const sorted = [...recallSessions.entries()].sort((a, b) => a[1].created_at - b[1].created_at);
+    const toEvict = sorted.slice(0, recallSessions.size - MAX_RECALL_SESSIONS);
+    for (const [id] of toEvict) {
+      recallSessions.delete(id);
+    }
+  }
+}
+
+// Periodic cleanup every 5 minutes
+setInterval(cleanExpiredRecallSessions, 5 * 60_000).unref();
+
+/** Get a recall session by ID */
+export function getRecallSession(recallId: string): RecallSession | undefined {
+  const session = recallSessions.get(recallId);
+  if (session && Date.now() - session.created_at > RECALL_SESSION_TTL_MS) {
+    recallSessions.delete(recallId);
+    return undefined;
+  }
+  return session;
+}
 
 export interface RecallRequest {
   query: string;
@@ -25,6 +70,7 @@ export interface RecallResponse {
   memories: SearchResult[];
   meta: {
     query: string;
+    recall_id: string;
     total_found: number;
     injected_count: number;
     relations_count: number;
@@ -51,6 +97,8 @@ export class MemoryGate {
     const start = Date.now();
     const query = stripInjectedContent(req.query);
 
+    const recallId = generateId();
+
     // Skip small talk (unless skip_filters is set, e.g. Dashboard search test)
     if (this.config.skipSmallTalk && !req.skip_filters && isSmallTalk(query)) {
       return {
@@ -58,6 +106,7 @@ export class MemoryGate {
         memories: [],
         meta: {
           query: req.query,
+          recall_id: recallId,
           total_found: 0,
           injected_count: 0,
           relations_count: 0,
@@ -67,6 +116,9 @@ export class MemoryGate {
         },
       };
     }
+
+    // Clean expired recall sessions periodically
+    cleanExpiredRecallSessions();
 
     const relationBudget = this.config.relationBudget ?? 100;
     const relationInjection = this.config.relationInjection !== false;
@@ -414,13 +466,22 @@ export class MemoryGate {
     }
 
     const latency = Date.now() - start;
-    log.info({ query: query.slice(0, 50), results: results.length, injected: injectedCount, relations: relationsCount, latency_ms: latency }, 'Recall completed');
+    log.info({ query: query.slice(0, 50), recall_id: recallId, results: results.length, injected: injectedCount, relations: relationsCount, latency_ms: latency }, 'Recall completed');
+
+    // Track recall session for feedback correlation
+    recallSessions.set(recallId, {
+      query,
+      memory_ids: results.map(r => r.id),
+      agent_id: req.agent_id || 'default',
+      created_at: Date.now(),
+    });
 
     return {
       context,
       memories: results,
       meta: {
         query,
+        recall_id: recallId,
         total_found: results.length,
         injected_count: injectedCount,
         relations_count: relationsCount,

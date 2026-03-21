@@ -49,7 +49,7 @@ export default function Agents() {
     }
   };
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (error) return <div className="card" style={{ color: 'var(--color-danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
   if (loading) return <div className="loading">{t('common.loading')}</div>;
 
   return (
@@ -59,7 +59,7 @@ export default function Agents() {
         <button className="btn primary" onClick={() => setShowModal(true)}>{t('agents.newAgent')}</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
         {agents.map((a: any) => {
           const config = a.config_override;
           const hasCustomConfig = !!config;
@@ -70,17 +70,17 @@ export default function Agents() {
               className="card"
               style={{ cursor: 'pointer', transition: 'border-color 0.2s' }}
               onClick={() => navigate(`/agents/${a.id}`)}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--primary)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 600 }}>{a.name}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-muted)', marginTop: 2 }}>{a.id}</div>
+                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)', marginTop: 2 }}>{a.id}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {hasCustomConfig && (
-                    <span className="badge" style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc', fontSize: 10 }}>
+                    <span className="badge" style={{ background: 'rgba(168,85,247,0.12)', color: '#c084fc', fontSize: 10 }}>
                       {t('agents.customConfig')}
                     </span>
                   )}
@@ -88,13 +88,13 @@ export default function Agents() {
               </div>
 
               {a.description && (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 10, lineHeight: 1.4 }}>
                   {a.description}
                 </div>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa', fontSize: 11 }}>
+                <span className="badge" style={{ background: 'var(--color-info-muted)', color: '#60a5fa', fontSize: 11 }}>
                   {t('agents.memoriesCount', { count: a.memory_count })}
                 </span>
               </div>
@@ -104,7 +104,7 @@ export default function Agents() {
       </div>
 
       {agents.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-secondary)' }}>
           {t('agents.noAgents')}
         </div>
       )}
@@ -118,9 +118,9 @@ export default function Agents() {
           />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: 'var(--bg-card)', borderRadius: 'var(--radius)', border: '1px solid var(--border)',
+            background: 'var(--color-elevated)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--color-border)',
             padding: 24, width: 420, maxWidth: '90vw', zIndex: 101,
-            boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
+            boxShadow: 'var(--shadow-xl)',
           }}>
             <h3 style={{ marginTop: 0, marginBottom: 16 }}>{t('agents.createTitle')}</h3>
 
@@ -132,11 +132,11 @@ export default function Agents() {
                 placeholder="my-agent"
                 onChange={e => setForm(f => ({ ...f, id: e.target.value.toLowerCase() }))}
               />
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
                 {t('agents.agentIdHint')}
               </div>
               {form.id && !AGENT_ID_RE.test(form.id) && (
-                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>{t('agents.invalidId')}</div>
+                <div style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 2 }}>{t('agents.invalidId')}</div>
               )}
             </div>
 
@@ -151,7 +151,7 @@ export default function Agents() {
             </div>
 
             <div className="form-group">
-              <label>{t('agents.description')} <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{t('common.optional')}</span></label>
+              <label>{t('agents.description')} <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>{t('common.optional')}</span></label>
               <textarea
                 value={form.description}
                 placeholder={t('agents.whatDoes')}
@@ -162,7 +162,7 @@ export default function Agents() {
             </div>
 
             {formError && (
-              <div style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 12 }}>{formError}</div>
+              <div style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 12 }}>{formError}</div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

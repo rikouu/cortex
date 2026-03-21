@@ -209,3 +209,30 @@ export const testConnections = () =>
 // Search/Recall test
 export const testRecall = (query: string, agentId?: string) =>
   request('/recall', { method: 'POST', body: JSON.stringify({ query, agent_id: agentId, limit: 10, skip_filters: true }) });
+
+// Memory Feedback (Self-Improvement)
+export const submitMemoryFeedback = (memoryId: string, data: {
+  signal: 'helpful' | 'not_helpful' | 'outdated' | 'wrong';
+  recall_id?: string;
+  comment?: string;
+  source?: 'explicit' | 'implicit';
+  agent_id?: string;
+}) =>
+  request(`/memories/${memoryId}/feedback`, { method: 'POST', body: JSON.stringify(data) });
+
+export const getMemoryFeedback = (memoryId: string, opts?: { limit?: number; offset?: number }) => {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.offset) params.set('offset', String(opts.offset));
+  const qs = params.toString();
+  return request(`/memories/${memoryId}/feedback${qs ? `?${qs}` : ''}`);
+};
+
+export const recordRecallUsage = (recallId: string, memoryIds: string[], agentId?: string) =>
+  request(`/recall/${recallId}/usage`, {
+    method: 'POST',
+    body: JSON.stringify({ memory_ids: memoryIds, agent_id: agentId }),
+  });
+
+export const getFeedbackOverview = (agentId?: string) =>
+  request(`/feedback/overview${agentId ? `?agent_id=${agentId}` : ''}`);

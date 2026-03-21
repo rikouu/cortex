@@ -42,10 +42,10 @@ export default function LlmSection({
                   {testState['llm.extraction']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
                 </button>
                 {testState['llm.extraction']?.status === 'success' && (
-                  <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['llm.extraction'].latency ?? 0 })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-success)' }}>{t('settings.testSuccess', { latency: testState['llm.extraction'].latency ?? 0 })}</span>
                 )}
                 {testState['llm.extraction']?.status === 'error' && (
-                  <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['llm.extraction'].message ?? '' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>{t('settings.testFailed', { message: testState['llm.extraction'].message ?? '' })}</span>
                 )}
               </td>
             </tr>
@@ -62,10 +62,10 @@ export default function LlmSection({
                   {testState['llm.lifecycle']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
                 </button>
                 {testState['llm.lifecycle']?.status === 'success' && (
-                  <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['llm.lifecycle'].latency ?? 0 })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-success)' }}>{t('settings.testSuccess', { latency: testState['llm.lifecycle'].latency ?? 0 })}</span>
                 )}
                 {testState['llm.lifecycle']?.status === 'error' && (
-                  <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['llm.lifecycle'].message ?? '' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>{t('settings.testFailed', { message: testState['llm.lifecycle'].message ?? '' })}</span>
                 )}
               </td>
             </tr>
@@ -82,10 +82,10 @@ export default function LlmSection({
                   {testState['embedding']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
                 </button>
                 {testState['embedding']?.status === 'success' && (
-                  <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['embedding'].latency ?? 0 })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-success)' }}>{t('settings.testSuccess', { latency: testState['embedding'].latency ?? 0 })}</span>
                 )}
                 {testState['embedding']?.status === 'error' && (
-                  <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['embedding'].message ?? '' })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>{t('settings.testFailed', { message: testState['embedding'].message ?? '' })}</span>
                 )}
               </td>
             </tr>
@@ -112,10 +112,10 @@ export default function LlmSection({
                       {testState['reranker']?.status === 'testing' ? t('settings.testing') : t('settings.testConnection')}
                     </button>
                     {testState['reranker']?.status === 'success' && (
-                      <span style={{ fontSize: 11, color: 'var(--success)' }}>{t('settings.testSuccess', { latency: testState['reranker'].latency ?? 0 })}</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-success)' }}>{t('settings.testSuccess', { latency: testState['reranker'].latency ?? 0 })}</span>
                     )}
                     {testState['reranker']?.status === 'error' && (
-                      <span style={{ fontSize: 11, color: 'var(--danger)' }}>{t('settings.testFailed', { message: testState['reranker'].message ?? '' })}</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>{t('settings.testFailed', { message: testState['reranker'].message ?? '' })}</span>
                     )}
                   </>
                 )}

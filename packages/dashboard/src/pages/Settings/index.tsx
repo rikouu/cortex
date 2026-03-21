@@ -22,6 +22,7 @@ import SieveSection from './sections/SieveSection.js';
 import MarkdownExportSection from './sections/MarkdownExportSection.js';
 import DataManagement from './sections/DataManagement.js';
 import AuthSection from './sections/AuthSection.js';
+import SelfImprovementSection from './sections/SelfImprovementSection.js';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -179,6 +180,15 @@ export default function Settings() {
         debounceMs: config.markdownExport?.debounceMs ?? 300000,
       }),
       auth: () => ({}), // AuthSection manages its own state
+      selfImprovement: () => ({
+        enabled: config.selfImprovement?.enabled ?? true,
+        windowSize: config.selfImprovement?.windowSize ?? 30,
+        minFeedbacks: config.selfImprovement?.minFeedbacks ?? 3,
+        maxDelta: config.selfImprovement?.maxDelta ?? 0.15,
+        implicitWeight: config.selfImprovement?.implicitWeight ?? 0.3,
+        explicitWeight: config.selfImprovement?.explicitWeight ?? 1.0,
+        minDelta: config.selfImprovement?.minDelta ?? 0.01,
+      }),
     };
 
     const d = sectionDrafts[section]();
@@ -292,6 +302,21 @@ export default function Settings() {
       if (isNaN(edt) || edt < 0.01 || edt > 0.2) errors.push(t('settings.validationThresholdRange'));
     }
 
+    if (section === 'selfImprovement') {
+      const ws = Number(draft.windowSize);
+      if (isNaN(ws) || ws < 1 || ws > 90) errors.push(t('settings.validationPositiveNumber'));
+      const mf = Number(draft.minFeedbacks);
+      if (isNaN(mf) || mf < 1 || mf > 50) errors.push(t('settings.validationPositiveNumber'));
+      const md = Number(draft.maxDelta);
+      if (isNaN(md) || md < 0.01 || md > 0.5) errors.push(t('settings.validationThresholdRange'));
+      const iw = Number(draft.implicitWeight);
+      if (isNaN(iw) || iw < 0 || iw > 1) errors.push(t('settings.validationWeightRange'));
+      const ew = Number(draft.explicitWeight);
+      if (isNaN(ew) || ew < 0 || ew > 1) errors.push(t('settings.validationWeightRange'));
+      const minD = Number(draft.minDelta);
+      if (isNaN(minD) || minD < 0.001 || minD > 0.1) errors.push(t('settings.validationThresholdRange'));
+    }
+
     if (errors.length > 0) {
       setToast({ message: errors[0], type: 'error' });
       return;
@@ -400,6 +425,16 @@ export default function Settings() {
           exportMemoryMd: draft.exportMemoryMd,
           debounceMs: Number(draft.debounceMs),
         };
+      } else if (section === 'selfImprovement') {
+        payload.selfImprovement = {
+          enabled: draft.enabled,
+          windowSize: Number(draft.windowSize),
+          minFeedbacks: Number(draft.minFeedbacks),
+          maxDelta: Number(draft.maxDelta),
+          implicitWeight: Number(draft.implicitWeight),
+          explicitWeight: Number(draft.explicitWeight),
+          minDelta: Number(draft.minDelta),
+        };
       }
 
       await updateConfig(payload);
@@ -456,7 +491,7 @@ export default function Settings() {
   );
 
   const fieldDesc = (text: string) => (
-    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>{text}</div>
+    <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4, lineHeight: 1.5 }}>{text}</div>
   );
 
   // ─── Enhanced render helpers ───────────────────────────────────────────────
@@ -469,9 +504,9 @@ export default function Settings() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <label style={{ fontWeight: 500 }}>{label}</label>
           <span style={{
-            fontSize: 14, fontWeight: 600, fontFamily: 'monospace',
-            background: 'var(--bg)', padding: '2px 10px', borderRadius: 4,
-            border: '1px solid var(--border)',
+            fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)',
+            background: 'var(--color-base)', padding: '2px 10px', borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--color-border)',
           }}>{val.toFixed(decimals)}</span>
         </div>
         <input
@@ -479,7 +514,7 @@ export default function Settings() {
           onChange={e => updateDraft(path, parseFloat(e.target.value))}
           style={{ width: '100%' }}
         />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
           <span>{min}</span>
           <span>{max}</span>
         </div>
@@ -507,12 +542,12 @@ export default function Settings() {
         <label style={{ fontWeight: 500, display: 'block', marginBottom: 8 }}>{t('settings.searchBalance')}</label>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12,
-          padding: '12px 16px', background: 'var(--bg)', borderRadius: 'var(--radius)',
-          border: '1px solid var(--border)',
+          padding: '12px 16px', background: 'var(--color-base)', borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--color-border)',
         }}>
           <div style={{ textAlign: 'center', minWidth: 70 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{t('settings.textWeight')}</div>
-            <div style={{ fontSize: 16, fontWeight: 600, fontFamily: 'monospace' }}>{tw.toFixed(2)}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 2 }}>{t('settings.textWeight')}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{tw.toFixed(2)}</div>
           </div>
           <input
             type="range" min={0} max={1} step={0.05} value={vw}
@@ -520,12 +555,12 @@ export default function Settings() {
             style={{ flex: 1 }}
           />
           <div style={{ textAlign: 'center', minWidth: 70 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{t('settings.vectorWeight')}</div>
-            <div style={{ fontSize: 16, fontWeight: 600, fontFamily: 'monospace' }}>{vw.toFixed(2)}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 2 }}>{t('settings.vectorWeight')}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{vw.toFixed(2)}</div>
           </div>
         </div>
         {!sumOk && (
-          <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>
+          <div style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 4 }}>
             {t('settings.validationWeightsSum')}
           </div>
         )}
@@ -592,7 +627,7 @@ export default function Settings() {
           <input
             type="text" value={schedule} placeholder="0 3 * * *"
             onChange={e => updateDraft('schedule', e.target.value)}
-            style={{ marginTop: 8, fontFamily: 'monospace' }}
+            style={{ marginTop: 8, fontFamily: 'var(--font-mono)' }}
           />
         )}
         {fieldDesc(t('settings.scheduleDesc'))}
@@ -624,18 +659,20 @@ export default function Settings() {
           <div
             onClick={() => updateDraft(path, !val)}
             style={{
-              width: 40, height: 22, borderRadius: 11,
-              background: val ? 'var(--primary)' : 'var(--border)',
+              width: 44, height: 24, borderRadius: 12,
+              background: val ? 'var(--color-primary)' : 'var(--color-border)',
               position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+              boxShadow: 'var(--shadow-sm)',
             }}
           >
             <div style={{
-              width: 18, height: 18, borderRadius: '50%',
+              width: 20, height: 20, borderRadius: '50%',
               background: '#fff', position: 'absolute', top: 2,
-              left: val ? 20 : 2, transition: 'left 0.2s',
+              left: val ? 22 : 2, transition: 'left 0.2s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
             }} />
           </div>
-          <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{val ? t('common.on') : t('common.off')}</span>
+          <span style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>{val ? t('common.on') : t('common.off')}</span>
         </div>
         {fieldDesc(desc)}
       </div>
@@ -752,8 +789,8 @@ export default function Settings() {
     };
 
     return (
-      <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+      <div style={{ marginBottom: 20, padding: 20, background: 'var(--color-base)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
           {title}
         </div>
 
@@ -815,7 +852,7 @@ export default function Settings() {
                   <label>
                     {t('settings.dimensions')}
                     {recommended && (
-                      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>
+                      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
                         {t('settings.dimensionRecommended', { value: recommended })}
                       </span>
                     )}
@@ -828,8 +865,8 @@ export default function Settings() {
                   {mismatch && (
                     <div style={{
                       marginTop: 8, padding: '8px 12px',
-                      background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)',
-                      borderRadius: 4, fontSize: 12, color: '#b8860b', lineHeight: 1.5
+                      background: 'var(--color-warning-muted)', border: '1px solid var(--color-warning-border)',
+                      borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--color-warning)', lineHeight: 1.5
                     }}>
                       {t('settings.dimensionMismatch', { model: currentModel, recommended })}
                     </div>
@@ -851,10 +888,10 @@ export default function Settings() {
                 <label>
                   {t('settings.apiKey')}
                   {d.hasApiKey && (
-                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--success)' }}>{t('common.configured')}</span>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-success)' }}>{t('common.configured')}</span>
                   )}
                   {!d.hasApiKey && preset.envKey && (
-                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>env: {preset.envKey}</span>
+                    <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-secondary)' }}>env: {preset.envKey}</span>
                   )}
                 </label>
                 <input
@@ -870,7 +907,7 @@ export default function Settings() {
             <div className="form-group">
               <label>
                 {t('settings.baseUrl')}
-                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>{t('common.optional')}</span>
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-secondary)' }}>{t('common.optional')}</span>
               </label>
               <input
                 type="text"
@@ -891,7 +928,7 @@ export default function Settings() {
     <tr>
       <td style={{ verticalAlign: 'top', width: '40%', paddingTop: 8, paddingBottom: 8 }}>
         <div>{label}</div>
-        {desc && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>{desc}</div>}
+        {desc && <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2, lineHeight: 1.4 }}>{desc}</div>}
       </td>
       <td style={{ paddingTop: 8, paddingBottom: 8 }}>{value}</td>
     </tr>
@@ -899,7 +936,7 @@ export default function Settings() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (error) return <div className="card" style={{ color: 'var(--color-danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
   if (!config) return <div className="loading">{t('common.loading')}</div>;
 
   return (
@@ -910,10 +947,10 @@ export default function Settings() {
       {toast && (
         <div style={{
           position: 'fixed', top: 24, right: 24, zIndex: 200,
-          padding: '12px 20px', borderRadius: 'var(--radius)',
-          background: toast.type === 'success' ? 'var(--success)' : 'var(--danger)',
+          padding: '12px 20px', borderRadius: 'var(--radius-lg)',
+          background: toast.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)',
           color: '#fff', fontSize: 14, fontWeight: 500,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--shadow-lg)',
         }}>
           {toast.message}
         </div>
@@ -923,7 +960,7 @@ export default function Settings() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3>{t('settings.serverConfig')}</h3>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('settings.readOnly')}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{t('settings.readOnly')}</span>
         </div>
         <table>
           <tbody>
@@ -948,7 +985,7 @@ export default function Settings() {
           <h3>{t('settings.debugMode')}</h3>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('settings.logLevel')}</label>
+          <label style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{t('settings.logLevel')}</label>
           <select
             value={logLevel}
             onChange={async (e) => {
@@ -970,7 +1007,7 @@ export default function Settings() {
             <option value="trace">Trace</option>
           </select>
           {(logLevel === 'debug' || logLevel === 'trace') && (
-            <span style={{ fontSize: 12, color: 'var(--warning)', fontStyle: 'italic' }}>
+            <span style={{ fontSize: 12, color: 'var(--color-warning)', fontStyle: 'italic' }}>
               ⚠️ {t('settings.debugWarning')}
             </span>
           )}
@@ -1049,6 +1086,17 @@ export default function Settings() {
         t={t}
       />
 
+      <SelfImprovementSection
+        config={config}
+        editing={isEditing('selfImprovement')}
+        sectionHeader={sectionHeader}
+        displayRow={displayRow}
+        renderToggleField={renderToggleField}
+        renderSlider={renderSlider}
+        renderNumberField={renderNumberField}
+        t={t}
+      />
+
       <MarkdownExportSection
         config={config}
         editing={isEditing('markdownExport')}
@@ -1063,8 +1111,8 @@ export default function Settings() {
 
       {/* Auth Section */}
       <div style={{
-        background: 'var(--bg-card)', borderRadius: 'var(--radius)',
-        border: '1px solid var(--border)', padding: 20, marginBottom: 20,
+        background: 'var(--color-elevated)', borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--color-border)', padding: 20, marginBottom: 20,
       }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>
           🔐 {t('settings.authSection')}

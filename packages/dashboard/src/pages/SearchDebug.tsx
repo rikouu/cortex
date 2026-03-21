@@ -100,10 +100,10 @@ export default function SearchDebug() {
   const renderResultCard = (r: SearchResult, i: number) => (
     <div key={r.id} className="memory-card">
       <div className="header">
-        <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>#{i + 1}</span>
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: 12, fontWeight: 600 }}>#{i + 1}</span>
         <span className={`badge ${r.layer}`}>{r.layer}</span>
-        <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>{r.category}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>
+        <span className="badge" style={{ background: 'var(--color-info-muted)', color: 'var(--color-info)' }}>{r.category}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-primary)', fontWeight: 600 }}>
           {t('searchDebug.score')}: {r.finalScore?.toFixed(4)}
         </span>
       </div>
@@ -112,28 +112,28 @@ export default function SearchDebug() {
         <table style={{ fontSize: 12 }}>
           <tbody>
             <tr>
-              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.textScore')}</td>
+              <td style={{ color: 'var(--color-text-secondary)' }}>{t('searchDebug.textScore')}</td>
               <td>
                 <div className="score-bar">
                   <div className="bar"><div className="fill" style={{ width: `${r.textScore * 100}%` }} /></div>
                   <span>{r.textScore?.toFixed(3)}</span>
                 </div>
               </td>
-              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.vectorScore')}</td>
+              <td style={{ color: 'var(--color-text-secondary)' }}>{t('searchDebug.vectorScore')}</td>
               <td>
                 <div className="score-bar">
-                  <div className="bar"><div className="fill" style={{ width: `${r.vectorScore * 100}%`, background: 'var(--success)' }} /></div>
+                  <div className="bar"><div className="fill" style={{ width: `${r.vectorScore * 100}%`, background: 'var(--color-success)' }} /></div>
                   <span>{r.vectorScore?.toFixed(3)}</span>
                 </div>
               </td>
             </tr>
             <tr>
-              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.layerWeight')}</td><td>{r.layerWeight?.toFixed(2)}</td>
-              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.recencyBoost')}</td><td>{r.recencyBoost?.toFixed(3)}</td>
+              <td style={{ color: 'var(--color-text-secondary)' }}>{t('searchDebug.layerWeight')}</td><td>{r.layerWeight?.toFixed(2)}</td>
+              <td style={{ color: 'var(--color-text-secondary)' }}>{t('searchDebug.recencyBoost')}</td><td>{r.recencyBoost?.toFixed(3)}</td>
             </tr>
             <tr>
-              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.accessBoost')}</td><td>{r.accessBoost?.toFixed(2)}</td>
-              <td style={{ color: 'var(--text-muted)' }}>{t('searchDebug.decayScore')}</td><td>{r.decay_score?.toFixed(3)}</td>
+              <td style={{ color: 'var(--color-text-secondary)' }}>{t('searchDebug.accessBoost')}</td><td>{r.accessBoost?.toFixed(2)}</td>
+              <td style={{ color: 'var(--color-text-secondary)' }}>{t('searchDebug.decayScore')}</td><td>{r.decay_score?.toFixed(3)}</td>
             </tr>
           </tbody>
         </table>
@@ -148,7 +148,7 @@ export default function SearchDebug() {
         <span>{t('searchDebug.text')}: {debug.textResultCount}</span>
         <span>{t('searchDebug.vector')}: {debug.vectorResultCount}</span>
         <span>{t('searchDebug.fused')}: {debug.fusedCount}</span>
-        <span style={{ color: 'var(--text-muted)' }}>|</span>
+        <span style={{ color: 'var(--color-text-secondary)' }}>|</span>
         <span>{t('searchDebug.text')}: {debug.timings?.textMs}ms</span>
         <span>{t('searchDebug.vector')}: {debug.timings?.vectorMs}ms</span>
         <span>Fusion: {debug.timings?.fusionMs}ms</span>
@@ -217,14 +217,14 @@ export default function SearchDebug() {
           <h3 style={{ marginBottom: 8 }}>{t('searchDebug.querySyntax')}</h3>
           <table style={{ fontSize: 12 }}>
             <tbody>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.naturalLanguage')}</td><td>{t('searchDebug.naturalLanguageDesc')}</td></tr>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.exactMatch')}</td><td>{t('searchDebug.exactMatchDesc')}</td></tr>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.semantic')}</td><td>{t('searchDebug.semanticDesc')}</td></tr>
-              <tr><td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('searchDebug.hybridFusion')}</td><td>{t('searchDebug.hybridFusionDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{t('searchDebug.naturalLanguage')}</td><td>{t('searchDebug.naturalLanguageDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{t('searchDebug.exactMatch')}</td><td>{t('searchDebug.exactMatchDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{t('searchDebug.semantic')}</td><td>{t('searchDebug.semanticDesc')}</td></tr>
+              <tr><td style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{t('searchDebug.hybridFusion')}</td><td>{t('searchDebug.hybridFusionDesc')}</td></tr>
             </tbody>
           </table>
           <h4 style={{ marginTop: 12, marginBottom: 4 }}>{t('searchDebug.scoreFormula')}</h4>
-          <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <code style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
             final = fused * layerWeight * decayScore * (1 + recencyBoost) * (1 + accessBoost)
           </code>
         </div>
@@ -250,7 +250,7 @@ export default function SearchDebug() {
             <button className="btn primary" onClick={saveWeights} disabled={!weightsDirty} style={{ fontSize: 12 }}>
               {t('searchDebug.saveWeights')}
             </button>
-            {weightsDirty && <span style={{ fontSize: 12, color: 'var(--warning)' }}>{t('searchDebug.unsavedChanges')}</span>}
+            {weightsDirty && <span style={{ fontSize: 12, color: 'var(--color-warning)' }}>{t('searchDebug.unsavedChanges')}</span>}
             <button className="btn" onClick={() => { setVectorWeight(0.7); setTextWeight(0.3); setWeightsDirty(true); }} style={{ fontSize: 12 }}>
               {t('searchDebug.resetToDefault')}
             </button>
@@ -305,11 +305,11 @@ export default function SearchDebug() {
                 return (
                   <div>
                     <div style={{ fontSize: 13, marginBottom: 12 }}>
-                      <span style={{ color: 'var(--success)' }}>{t('searchDebug.common')}: {common.length}</span>
+                      <span style={{ color: 'var(--color-success)' }}>{t('searchDebug.common')}: {common.length}</span>
                       {' / '}
-                      <span style={{ color: '#f59e0b' }}>{t('searchDebug.onlyIn', { label: runs[0]!.label })}: {only0.length}</span>
+                      <span style={{ color: 'var(--color-warning)' }}>{t('searchDebug.onlyIn', { label: runs[0]!.label })}: {only0.length}</span>
                       {' / '}
-                      <span style={{ color: '#ef4444' }}>{t('searchDebug.onlyIn', { label: runs[1]!.label })}: {only1.length}</span>
+                      <span style={{ color: 'var(--color-danger)' }}>{t('searchDebug.onlyIn', { label: runs[1]!.label })}: {only1.length}</span>
                     </div>
                     {common.length > 0 && (
                       <table style={{ fontSize: 12 }}>
@@ -324,7 +324,7 @@ export default function SearchDebug() {
                                 <td style={{ fontFamily: 'monospace', fontSize: 10 }}>{id.slice(0, 12)}..</td>
                                 <td>#{r0}</td>
                                 <td>#{r1}</td>
-                                <td style={{ color: diff > 0 ? 'var(--success)' : diff < 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                <td style={{ color: diff > 0 ? 'var(--color-success)' : diff < 0 ? 'var(--color-danger)' : 'var(--color-text-secondary)' }}>
                                   {diff > 0 ? `+${diff}` : diff < 0 ? String(diff) : '='}
                                 </td>
                               </tr>

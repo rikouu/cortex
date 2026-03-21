@@ -41,7 +41,7 @@ function BarChart({ data, colors, height = 220 }: { data: { label: string; value
     ctx.clearRect(0, 0, W, H);
 
     // Grid lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
       const y = 20 + (H - 90) * (1 - i / 4);
@@ -92,10 +92,10 @@ function BarChart({ data, colors, height = 220 }: { data: { label: string; value
 function DistributionBar({ segments }: { segments: { label: string; value: number; color: string }[] }) {
   const { t } = useI18n();
   const total = segments.reduce((s, seg) => s + seg.value, 0);
-  if (total === 0) return <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('common.noData')}</div>;
+  if (total === 0) return <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('common.noData')}</div>;
   return (
     <div>
-      <div style={{ display: 'flex', height: 28, borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
+      <div style={{ display: 'flex', height: 28, borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 'var(--space-2)' }}>
         {segments.map((seg, i) => (
           <div
             key={i}
@@ -105,20 +105,20 @@ function DistributionBar({ segments }: { segments: { label: string; value: numbe
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 600, color: '#fff',
               minWidth: seg.value > 0 ? 24 : 0,
-              transition: 'width 0.3s',
+              transition: 'width var(--transition-smooth)',
             }}
           >
             {seg.value > 0 && ((seg.value / total) > 0.08 ? seg.value : '')}
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
         {segments.map((seg, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-            <div style={{ width: 10, height: 10, borderRadius: 2, background: seg.color }} />
-            <span style={{ color: 'var(--text-muted)' }}>{seg.label}</span>
-            <span style={{ fontWeight: 600 }}>{seg.value}</span>
-            <span style={{ color: 'var(--text-muted)' }}>({total > 0 ? ((seg.value / total) * 100).toFixed(1) : 0}%)</span>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 12 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 'var(--radius-sm)', background: seg.color }} />
+            <span style={{ color: 'var(--color-text-secondary)' }}>{seg.label}</span>
+            <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{seg.value}</span>
+            <span style={{ color: 'var(--color-text-tertiary)' }}>({total > 0 ? ((seg.value / total) * 100).toFixed(1) : 0}%)</span>
           </div>
         ))}
       </div>
@@ -154,8 +154,8 @@ function Histogram({ values, label, color }: { values: number[]; label: string; 
 
     ctx.clearRect(0, 0, W, H);
 
-    // Y axis
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    // Y axis grid lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     for (let i = 0; i <= 3; i++) {
       const y = 10 + (H - 40) * (1 - i / 3);
       ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(W - 5, y); ctx.stroke();
@@ -228,7 +228,7 @@ export default function Stats() {
       .catch(() => {});
   }, []);
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (error) return <div className="card" style={{ color: 'var(--color-danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
   if (!stats) return <div className="loading">{t('common.loading')}</div>;
 
   const layers = stats.layers || {};
@@ -271,15 +271,15 @@ export default function Stats() {
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.core')}</div>
-          <div className="value" style={{ color: '#818cf8' }}>{layers.core || 0}</div>
+          <div className="value" style={{ color: 'var(--color-primary-hover)' }}>{layers.core || 0}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.working')}</div>
-          <div className="value" style={{ color: '#4ade80' }}>{layers.working || 0}</div>
+          <div className="value" style={{ color: 'var(--color-success)' }}>{layers.working || 0}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.archive')}</div>
-          <div className="value" style={{ color: '#a1a1aa' }}>{layers.archive || 0}</div>
+          <div className="value" style={{ color: 'var(--color-text-tertiary)' }}>{layers.archive || 0}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.relations')}</div>
@@ -293,14 +293,14 @@ export default function Stats() {
 
       {/* Layer Distribution */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>{t('stats.layerDistribution')}</h3>
+        <h3 style={{ marginBottom: 'var(--space-3)' }}>{t('stats.layerDistribution')}</h3>
         <DistributionBar segments={layerSegments} />
       </div>
 
       {/* Category Chart */}
       {catData.length > 0 && (
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>{t('stats.categories')}</h3>
+          <h3 style={{ marginBottom: 'var(--space-3)' }}>{t('stats.categories')}</h3>
           <BarChart data={catData} colors={catColors} height={180} />
         </div>
       )}
@@ -308,15 +308,15 @@ export default function Stats() {
       {/* Score Distributions */}
       {allMemories.length > 0 && (
         <div className="card">
-          <h3 style={{ marginBottom: 12 }}>{t('stats.scoreDistributions')}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-            <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 12 }}>
+          <h3 style={{ marginBottom: 'var(--space-3)' }}>{t('stats.scoreDistributions')}</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-4)' }}>
+            <div style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', border: '1px solid var(--color-border-subtle)' }}>
               <Histogram values={importanceValues} label={t('stats.importance')} color="#6366f1" />
             </div>
-            <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 12 }}>
+            <div style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', border: '1px solid var(--color-border-subtle)' }}>
               <Histogram values={decayValues} label={t('stats.decayScore')} color="#f59e0b" />
             </div>
-            <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 12 }}>
+            <div style={{ background: 'var(--color-base)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', border: '1px solid var(--color-border-subtle)' }}>
               <Histogram values={confidenceValues} label={t('stats.confidence')} color="#22c55e" />
             </div>
           </div>
@@ -325,13 +325,30 @@ export default function Stats() {
 
       {/* System Health */}
       {health && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 12 }}>{t('stats.systemHealth')}</h3>
+        <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+          <h3 style={{ marginBottom: 'var(--space-3)' }}>{t('stats.systemHealth')}</h3>
           <table>
             <tbody>
-              <tr><td>{t('stats.status')}</td><td><span style={{ color: health.status === 'ok' ? 'var(--success)' : 'var(--danger)' }}>● {health.status}</span></td></tr>
-              <tr><td>{t('stats.version')}</td><td>{health.version}</td></tr>
-              <tr><td>{t('stats.uptime')}</td><td>{formatUptime(health.uptime)}</td></tr>
+              <tr>
+                <td>{t('stats.status')}</td>
+                <td>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span className={`status-dot ${health.status === 'ok' ? 'ok' : 'error'}`} />
+                    <span style={{
+                      padding: '2px 10px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      background: health.status === 'ok' ? 'var(--color-success-muted)' : 'var(--color-danger-muted)',
+                      color: health.status === 'ok' ? 'var(--color-success)' : 'var(--color-danger)',
+                    }}>
+                      {health.status}
+                    </span>
+                  </span>
+                </td>
+              </tr>
+              <tr><td>{t('stats.version')}</td><td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{health.version}</span></td></tr>
+              <tr><td>{t('stats.uptime')}</td><td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{formatUptime(health.uptime)}</span></td></tr>
             </tbody>
           </table>
         </div>
@@ -340,60 +357,102 @@ export default function Stats() {
       {/* Component Status */}
       {components.length > 0 && (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
             <h3 style={{ margin: 0 }}>{t('stats.componentStatus')}</h3>
             <button
+              className="btn sm secondary"
               onClick={async () => {
                 setTesting(true); setConnTest(null);
                 try { setConnTest(await testConnections()); } catch (e: any) { setConnTest({ _error: e.message }); }
                 setTesting(false);
               }}
               disabled={testing}
-              style={{ fontSize: 11, padding: '4px 12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text)' }}
+              style={{ fontSize: 11, padding: '4px 12px' }}
             >
-              {testing ? '⏳ 测试中...' : '🔌 测试连接'}
+              {testing ? '测试中...' : '测试连接'}
             </button>
           </div>
           {connTest && !connTest._error && (
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-3)', flexWrap: 'wrap' }}>
               {Object.entries(connTest).map(([key, val]: [string, any]) => (
-                <div key={key} style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, background: val.ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${val.ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-                  <span style={{ fontWeight: 600 }}>{key.toUpperCase()}</span>
-                  {' '}{val.ok ? `✅ ${val.latencyMs}ms` : `❌ ${val.error || '失败'}`}
+                <div key={key} style={{
+                  fontSize: 12, padding: '6px 12px', borderRadius: 'var(--radius-full)',
+                  background: val.ok ? 'var(--color-success-muted)' : 'var(--color-danger-muted)',
+                  border: `1px solid ${val.ok ? 'var(--color-success-border)' : 'var(--color-danger-border)'}`,
+                  display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)',
+                  fontWeight: 500,
+                  transition: 'var(--transition-base)',
+                }}>
+                  <span className={`status-dot ${val.ok ? 'ok' : 'error'}`} style={{ marginRight: 0 }} />
+                  <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 11 }}>{key}</span>
+                  <span style={{ color: val.ok ? 'var(--color-success)' : 'var(--color-danger)', fontFamily: 'var(--font-mono)' }}>
+                    {val.ok ? `${val.latencyMs}ms` : val.error || '失败'}
+                  </span>
                 </div>
               ))}
             </div>
           )}
-          {connTest?._error && <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 12 }}>❌ {connTest._error}</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+          {connTest?._error && (
+            <div style={{
+              color: 'var(--color-danger)', fontSize: 12, marginBottom: 'var(--space-3)',
+              padding: '8px 12px', background: 'var(--color-danger-muted)',
+              borderRadius: 'var(--radius-md)', border: '1px solid var(--color-danger-border)',
+            }}>
+              {connTest._error}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-3)' }}>
             {components.map((c: any) => {
-              const statusColor = c.status === 'ok' ? '#22c55e' : c.status === 'warning' ? '#f59e0b' : c.status === 'error' ? '#ef4444' : c.status === 'stopped' ? '#ef4444' : c.status === 'not_configured' ? '#71717a' : '#71717a';
-              const statusLabel = c.status === 'ok' ? '✅ 正常' : c.status === 'warning' ? '⚠️ 警告' : c.status === 'error' ? '❌ 错误' : c.status === 'stopped' ? '⏹ 停止' : c.status === 'not_configured' ? '⚙️ 未配置' : '❓ 未知';
+              const statusClass = c.status === 'ok' ? 'ok' : c.status === 'warning' ? 'warning' : c.status === 'error' || c.status === 'stopped' ? 'error' : 'inactive';
+              const statusLabel = c.status === 'ok' ? '正常' : c.status === 'warning' ? '警告' : c.status === 'error' ? '错误' : c.status === 'stopped' ? '停止' : c.status === 'not_configured' ? '未配置' : '未知';
+              const statusBg = c.status === 'ok' ? 'var(--color-success-muted)' : c.status === 'warning' ? 'var(--color-warning-muted)' : c.status === 'error' || c.status === 'stopped' ? 'var(--color-danger-muted)' : 'var(--color-overlay)';
+              const statusFg = c.status === 'ok' ? 'var(--color-success)' : c.status === 'warning' ? 'var(--color-warning)' : c.status === 'error' || c.status === 'stopped' ? 'var(--color-danger)' : 'var(--color-text-tertiary)';
               const ago = c.lastRun ? timeAgo(c.lastRun) : null;
               return (
-                <div key={c.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span>
-                    <span style={{ color: statusColor, fontSize: 12, fontWeight: 600 }}>{statusLabel}</span>
+                <div key={c.id} style={{
+                  background: 'var(--color-base)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 'var(--space-4)',
+                  transition: 'border-color var(--transition-base), box-shadow var(--transition-base)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    background: `linear-gradient(135deg, ${statusFg}08 0%, transparent 60%)`,
+                    pointerEvents: 'none',
+                  }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)', position: 'relative' }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>{c.name}</span>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center',
+                      padding: '2px 10px', borderRadius: 'var(--radius-full)',
+                      fontSize: 11, fontWeight: 600,
+                      background: statusBg, color: statusFg,
+                    }}>
+                      <span className={`status-dot ${statusClass}`} />
+                      {statusLabel}
+                    </span>
                   </div>
                   {ago && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                      上次运行: {ago}
+                    <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 'var(--space-1)', position: 'relative' }}>
+                      上次运行: <span style={{ fontFamily: 'var(--font-mono)' }}>{ago}</span>
                     </div>
                   )}
                   {c.latencyMs != null && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                      延迟: {c.latencyMs}ms
+                    <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 'var(--space-1)', position: 'relative' }}>
+                      延迟: <span style={{ fontFamily: 'var(--font-mono)' }}>{c.latencyMs}ms</span>
                     </div>
                   )}
                   {c.details && (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', position: 'relative' }}>
                       {c.id === 'extraction_llm' && <>
                         通道: {c.details.channel} · 24h: {c.details.last24h}次
-                        {c.details.errorsLast24h > 0 && <span style={{ color: '#ef4444' }}> · 错误: {c.details.errorsLast24h}</span>}
+                        {c.details.errorsLast24h > 0 && <span style={{ color: 'var(--color-danger)' }}> · 错误: {c.details.errorsLast24h}</span>}
                       </>}
                       {c.id === 'lifecycle' && <>
-                        触发: {c.details.trigger === 'scheduled' ? '⏰定时' : c.details.trigger === 'manual' ? '👆手动' : c.details.trigger || '-'}
+                        触发: {c.details.trigger === 'scheduled' ? '定时' : c.details.trigger === 'manual' ? '手动' : c.details.trigger || '-'}
                         {' · '}升级: {c.details.promoted ?? 0} · 归档: {c.details.archived ?? 0}
                       </>}
                       {c.id === 'embedding' && <>
@@ -414,12 +473,12 @@ export default function Stats() {
 
       {/* Recall Tester */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>🔍 {t('stats.recallTester')}</h3>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        <h3 style={{ marginBottom: 'var(--space-3)' }}>{t('stats.recallTester')}</h3>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)', alignItems: 'center' }}>
           <select
             value={recallAgent}
             onChange={e => setRecallAgent(e.target.value)}
-            style={{ fontSize: 13, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', width: 'auto', maxWidth: 140, flexShrink: 0 }}
+            style={{ fontSize: 13, padding: '6px 8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-base)', color: 'var(--color-text-primary)', width: 'auto', maxWidth: 140, flexShrink: 0, transition: 'border-color var(--transition-base)' }}
           >
             {agents.map((a: any) => (
               <option key={a.id} value={a.id}>{a.name || a.id}</option>
@@ -438,9 +497,10 @@ export default function Stats() {
               }
             }}
             placeholder={t('stats.recallPlaceholder')}
-            style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+            style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-base)', color: 'var(--color-text-primary)', transition: 'border-color var(--transition-base), box-shadow var(--transition-base)' }}
           />
           <button
+            className="btn primary sm"
             disabled={recalling || !recallQuery.trim()}
             onClick={async () => {
               setRecalling(true);
@@ -450,7 +510,7 @@ export default function Stats() {
               } catch { setRecallResults({ memories: [], meta: {} }); }
               setRecalling(false);
             }}
-            style={{ fontSize: 12, padding: '6px 14px', borderRadius: 6, cursor: 'pointer', background: 'var(--primary)', color: '#fff', border: 'none', flexShrink: 0 }}
+            style={{ flexShrink: 0 }}
           >
             {recalling ? '...' : t('common.search')}
           </button>
@@ -480,79 +540,87 @@ export default function Stats() {
             : [];
           return (
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <span>{t('stats.recallFound', { total: totalFound })}</span>
-                <span>💉 {fixedCount > 0
+              <div style={{
+                fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-2)',
+                display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center',
+                padding: '8px 12px', background: 'var(--color-base)', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border-subtle)',
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{t('stats.recallFound', { total: totalFound })}</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{fixedCount > 0
                   ? t('stats.recallInjectedBreakdown', { search: searchCount, fixed: fixedCount })
                   : t('stats.recallInjected', { count: injected })
                 }</span>
-                <span>⏱ {latency}ms</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{latency}ms</span>
                 {meta.relations_count ? (
                   <span
-                    style={{ cursor: relationLines.length > 0 ? 'pointer' : 'default', userSelect: 'none' }}
+                    style={{ cursor: relationLines.length > 0 ? 'pointer' : 'default', userSelect: 'none', transition: 'color var(--transition-base)' }}
                     onClick={() => { if (relationLines.length > 0) setRelationsExpanded(!relationsExpanded); }}
                     title={relationLines.length > 0 ? (relationsExpanded ? 'Click to collapse' : 'Click to expand') : ''}
                   >
-                    🔗 {meta.relations_count} {t('stats.recallRelations')} {relationLines.length > 0 ? (relationsExpanded ? '▾' : '▸') : ''}
+                    {meta.relations_count} {t('stats.recallRelations')} {relationLines.length > 0 ? (relationsExpanded ? '▾' : '▸') : ''}
                   </span>
                 ) : null}
               </div>
               {relationsExpanded && relationLines.length > 0 && (
                 <div style={{
-                  fontSize: 12, marginBottom: 8, padding: '8px 12px',
-                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
+                  fontSize: 12, marginBottom: 'var(--space-2)', padding: '8px 12px',
+                  background: 'var(--color-base)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
                   maxHeight: 200, overflowY: 'auto',
+                  boxShadow: 'var(--shadow-sm)',
                 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-muted)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 'var(--space-1)', color: 'var(--color-text-secondary)' }}>
                     {t('stats.recallRelationsTitle')}
                   </div>
                   {relationLines.map((line: string, i: number) => (
-                    <div key={i} style={{ color: 'var(--text)', lineHeight: 1.5, paddingLeft: 4 }}>{line}</div>
+                    <div key={i} style={{ color: 'var(--color-text-primary)', lineHeight: 1.5, paddingLeft: 'var(--space-1)' }}>{line}</div>
                   ))}
                 </div>
               )}
               {fixedLines.length > 0 && (
                 <div
                   style={{
-                    padding: '8px 12px', marginBottom: 4,
-                    background: 'var(--bg)', border: '1px solid var(--text-muted)',
-                    borderRadius: 6, fontSize: 12, borderStyle: 'dashed',
+                    padding: '8px 12px', marginBottom: 'var(--space-1)',
+                    background: 'var(--color-base)', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)', fontSize: 12, borderStyle: 'dashed',
                     cursor: 'pointer', userSelect: 'none',
+                    transition: 'border-color var(--transition-base)',
                   }}
                   onClick={() => setFixedExpanded(!fixedExpanded)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 700, marginRight: 6 }}>#0</span>
+                      <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 700, marginRight: 'var(--space-2)', fontFamily: 'var(--font-mono)' }}>#0</span>
                       <span style={{ fontWeight: 600 }}>{t('stats.recallFixed')}</span>
-                      <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{fixedExpanded ? '▾' : '▸'}</span>
+                      <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 'var(--space-2)' }}>{fixedExpanded ? '▾' : '▸'}</span>
                     </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{fixedCount} {t('stats.recallFixedCount')}</span>
+                    <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>{fixedCount} {t('stats.recallFixedCount')}</span>
                   </div>
                   {fixedExpanded && fixedLines.map((line: string, i: number) => (
-                    <div key={i} style={{ color: 'var(--text)', lineHeight: 1.5, marginTop: i === 0 ? 4 : 0 }}>{line}</div>
+                    <div key={i} style={{ color: 'var(--color-text-primary)', lineHeight: 1.5, marginTop: i === 0 ? 'var(--space-1)' : 0 }}>{line}</div>
                   ))}
                 </div>
               )}
               {memories.map((m: any, i: number) => (
                 <div key={m.id || i} style={{
-                  padding: '8px 12px', marginBottom: 4,
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6, fontSize: 12,
+                  padding: '8px 12px', marginBottom: 'var(--space-1)',
+                  background: 'var(--color-base)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)', fontSize: 12,
+                  transition: 'border-color var(--transition-base)',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-1)', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
                     <span>
-                      <span style={{ color: 'var(--primary)', fontWeight: 700, marginRight: 6 }}>#{i + 1}</span>
+                      <span style={{ color: 'var(--color-primary)', fontWeight: 700, marginRight: 'var(--space-2)', fontFamily: 'var(--font-mono)' }}>#{i + 1}</span>
                       <span style={{ fontWeight: 600 }}>{m.category}</span>
                     </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                    <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
                       {m.finalScore != null ? `score ${Number(m.finalScore).toFixed(3)}` : ''}
                       {m.importance != null ? ` · imp ${m.importance}` : ''}
                       {m.layer ? ` · ${m.layer}` : ''}
                     </span>
                   </div>
-                  <div style={{ color: 'var(--text)', lineHeight: 1.4 }}>{m.content}</div>
+                  <div style={{ color: 'var(--color-text-primary)', lineHeight: 1.4 }}>{m.content}</div>
                 </div>
               ))}
             </div>

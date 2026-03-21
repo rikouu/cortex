@@ -491,6 +491,42 @@ const migrations = [
       );
     `,
   },
+  {
+    name: '013_memory_self_improvement',
+    sql: `
+      -- Memory feedback: explicit user signals on recalled memories
+      CREATE TABLE memory_feedback (
+        id          TEXT PRIMARY KEY,
+        memory_id   TEXT NOT NULL,
+        agent_id    TEXT NOT NULL DEFAULT 'default',
+        recall_id   TEXT,
+        signal      TEXT NOT NULL CHECK (signal IN ('helpful', 'not_helpful', 'outdated', 'wrong')),
+        comment     TEXT,
+        source      TEXT NOT NULL DEFAULT 'explicit' CHECK (source IN ('explicit', 'implicit')),
+        created_at  DATETIME NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_memory_feedback_memory ON memory_feedback(memory_id);
+      CREATE INDEX idx_memory_feedback_agent ON memory_feedback(agent_id);
+      CREATE INDEX idx_memory_feedback_recall ON memory_feedback(recall_id) WHERE recall_id IS NOT NULL;
+      CREATE INDEX idx_memory_feedback_created ON memory_feedback(created_at);
+
+      -- Importance adjustments: audit log of self-improvement changes
+      CREATE TABLE importance_adjustments (
+        id            TEXT PRIMARY KEY,
+        memory_id     TEXT NOT NULL,
+        agent_id      TEXT NOT NULL DEFAULT 'default',
+        old_importance REAL NOT NULL,
+        new_importance REAL NOT NULL,
+        delta         REAL NOT NULL,
+        reason        TEXT NOT NULL,
+        feedback_ids  TEXT,
+        created_at    DATETIME NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_importance_adj_memory ON importance_adjustments(memory_id);
+      CREATE INDEX idx_importance_adj_agent ON importance_adjustments(agent_id);
+      CREATE INDEX idx_importance_adj_created ON importance_adjustments(created_at);
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

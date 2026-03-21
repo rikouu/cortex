@@ -145,14 +145,14 @@ function StepBlock({ step, title, description, code, children, isLast }: {
       {/* Left: step number + vertical line */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
         <div style={{
-          width: 28, height: 28, borderRadius: '50%', background: 'var(--primary)',
+          width: 28, height: 28, borderRadius: '50%', background: 'var(--color-primary)',
           color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 13, fontWeight: 600, flexShrink: 0,
         }}>
           {step}
         </div>
         {!isLast && (
-          <div style={{ width: 2, flex: 1, background: 'var(--border)', marginTop: 4 }} />
+          <div style={{ width: 2, flex: 1, background: 'var(--color-border)', marginTop: 4 }} />
         )}
       </div>
 
@@ -162,7 +162,7 @@ function StepBlock({ step, title, description, code, children, isLast }: {
           {title}
         </div>
         {description && (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
             {description}
           </p>
         )}
@@ -388,8 +388,8 @@ export default function AgentDetail() {
     };
 
     return (
-      <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+      <div style={{ marginBottom: 20, padding: 16, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
           {title}
         </div>
 
@@ -453,8 +453,8 @@ export default function AgentDetail() {
               <div className="form-group">
                 <label>
                   {t('agentDetail.apiKey')}
-                  {d.hasApiKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--success)' }}>{t('common.configured')}</span>}
-                  {!d.hasApiKey && preset.envKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>env: {preset.envKey}</span>}
+                  {d.hasApiKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-success)' }}>{t('common.configured')}</span>}
+                  {!d.hasApiKey && preset.envKey && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-tertiary)' }}>env: {preset.envKey}</span>}
                 </label>
                 <input
                   type="password"
@@ -468,7 +468,7 @@ export default function AgentDetail() {
             <div className="form-group">
               <label>
                 {t('agentDetail.baseUrl')}
-                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)' }}>{t('common.optional')}</span>
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t('common.optional')}</span>
               </label>
               <input
                 type="text"
@@ -498,13 +498,13 @@ export default function AgentDetail() {
 
     const authNotice = (
       authEnabled ? (
-        <div style={{ margin: '8px 0', padding: '10px 14px', background: 'var(--bg-hover)', borderRadius: 8, fontSize: 13, lineHeight: 1.6, border: '1px solid var(--border)' }}>
+        <div style={{ margin: '8px 0', padding: '10px 14px', background: 'var(--color-hover)', borderRadius: 8, fontSize: 13, lineHeight: 1.6, border: '1px solid var(--color-border)' }}>
           <span style={{ fontWeight: 600 }}>🔐 {t('agentDetail.tokenNoticeTitle')}</span>
           <br />
           {t('agentDetail.tokenNoticeDesc')}
         </div>
       ) : (
-        <div style={{ margin: '8px 0', padding: '10px 14px', background: 'var(--bg-hover)', borderRadius: 8, fontSize: 13, lineHeight: 1.6, border: '1px solid var(--border)' }}>
+        <div style={{ margin: '8px 0', padding: '10px 14px', background: 'var(--color-hover)', borderRadius: 8, fontSize: 13, lineHeight: 1.6, border: '1px solid var(--color-border)' }}>
           <span style={{ fontWeight: 600 }}>ℹ️ {t('agentDetail.noTokenNoticeTitle')}</span>
           <br />
           {t('agentDetail.noTokenNoticeDesc')}
@@ -682,9 +682,10 @@ def ingest(user_msg: str, assistant_msg: str):
                 className="btn"
                 style={{
                   padding: '6px 16px', fontSize: 13,
-                  background: mcpClient === key ? 'var(--primary)' : 'var(--bg)',
-                  color: mcpClient === key ? '#fff' : 'var(--text)',
-                  border: mcpClient === key ? '1px solid var(--primary)' : '1px solid var(--border)',
+                  background: mcpClient === key ? 'var(--color-primary)' : 'var(--color-base)',
+                  color: mcpClient === key ? '#fff' : 'var(--color-text-primary)',
+                  border: mcpClient === key ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  transition: 'all 0.15s ease',
                 }}
                 onClick={() => setMcpClient(key)}
               >
@@ -714,8 +715,8 @@ def ingest(user_msg: str, assistant_msg: str):
           <table style={{ width: '100%', fontSize: 13 }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>Tool</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>Description</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--color-border)' }}>Tool</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--color-border)' }}>Description</th>
               </tr>
             </thead>
             <tbody>
@@ -727,8 +728,8 @@ def ingest(user_msg: str, assistant_msg: str):
                 ['cortex_stats', t('agentDetail.mcpToolStats')],
               ] as const).map(([tool, desc]) => (
                 <tr key={tool}>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{tool}</td>
-                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>{desc}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{tool}</td>
+                  <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{desc}</td>
                 </tr>
               ))}
             </tbody>
@@ -752,9 +753,9 @@ def ingest(user_msg: str, assistant_msg: str):
           description={t('agentDetail.openclawStep2Desc')}
         >
           {/* Method A: openclaw.json (recommended) */}
-          <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+          <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{t('agentDetail.openclawJsonMethod')}</div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawJsonMethodDesc')}</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawJsonMethodDesc')}</p>
             <CodeSnippet title="openclaw.json" code={`{
   "plugins": {
     "cortex-bridge": {
@@ -768,15 +769,15 @@ def ingest(user_msg: str, assistant_msg: str):
 }`} />
           </div>
           {/* Method B: .env */}
-          <div style={{ padding: 14, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+          <div style={{ padding: 14, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{t('agentDetail.openclawEnvMethod')}</div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawEnvMethodDesc')}</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawEnvMethodDesc')}</p>
             <CodeSnippet title=".env" code={`CORTEX_URL=${cortexUrl}${authEnabled ? `\nCORTEX_AUTH_TOKEN=YOUR_TOKEN` : ''}\nCORTEX_AGENT_ID=${agentId}`} />
           </div>
           {/* Method C: shell profile */}
-          <div style={{ marginTop: 16, padding: 14, background: 'var(--bg)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--color-base)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{t('agentDetail.openclawShellMethod')}</div>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawShellMethodDesc')}</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 8px 0' }}>{t('agentDetail.openclawShellMethodDesc')}</p>
             <CodeSnippet title="~/.zshrc / ~/.bashrc" code={`echo 'export CORTEX_URL=${cortexUrl}' >> ~/.zshrc${authEnabled ? `\necho 'export CORTEX_AUTH_TOKEN=YOUR_TOKEN' >> ~/.zshrc` : ''}\necho 'export CORTEX_AGENT_ID=${agentId}' >> ~/.zshrc`} />
           </div>
         </StepBlock>
@@ -785,7 +786,7 @@ def ingest(user_msg: str, assistant_msg: str):
           title={t('agentDetail.openclawStep3Title')}
           description={t('agentDetail.openclawStep3Desc')}
         >
-          <ul style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0 0', paddingLeft: 20, lineHeight: 2 }}>
+          <ul style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '4px 0 0 0', paddingLeft: 20, lineHeight: 2 }}>
             <li>{t('agentDetail.openclawHookBefore')}</li>
             <li>{t('agentDetail.openclawHookAfter')}</li>
             <li>{t('agentDetail.openclawHookCompaction')}</li>
@@ -831,9 +832,9 @@ def ingest(user_msg: str, assistant_msg: str):
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  if (error) return <div className="card" style={{ color: 'var(--danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
+  if (error) return <div className="card" style={{ color: 'var(--color-danger)' }}>{t('common.errorPrefix', { message: error })}</div>;
   if (loading) return <div className="loading">{t('common.loading')}</div>;
-  if (!agent) return <div className="card" style={{ color: 'var(--danger)' }}>{t('agentDetail.notFound')}</div>;
+  if (!agent) return <div className="card" style={{ color: 'var(--color-danger)' }}>{t('agentDetail.notFound')}</div>;
 
   const isBuiltIn = agent.id === 'default' || agent.id === 'mcp';
   const stats = agent.stats || { layers: {}, total: 0 };
@@ -845,10 +846,10 @@ def ingest(user_msg: str, assistant_msg: str):
       {toast && (
         <div style={{
           position: 'fixed', top: 24, right: 24, zIndex: 200,
-          padding: '12px 20px', borderRadius: 'var(--radius)',
-          background: toast.type === 'success' ? 'var(--success)' : 'var(--danger)',
+          padding: '12px 20px', borderRadius: 'var(--radius-md)',
+          background: toast.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)',
           color: '#fff', fontSize: 14, fontWeight: 500,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--shadow-lg)',
         }}>
           {toast.message}
         </div>
@@ -860,20 +861,21 @@ def ingest(user_msg: str, assistant_msg: str):
           &larr; {t('agentDetail.backToAgents')}
         </button>
         <h1 className="page-title" style={{ margin: 0 }}>{agent.name}</h1>
-        <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--text-muted)' }}>{agent.id}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-text-secondary)' }}>{agent.id}</span>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--color-border)' }}>
         {(['overview', 'config', 'integration'] as TabKey[]).map(tb => (
           <button
             key={tb}
             onClick={() => setTab(tb)}
             style={{
               padding: '10px 20px', fontSize: 14, cursor: 'pointer',
-              background: 'none', border: 'none', borderBottom: tab === tb ? '2px solid var(--primary)' : '2px solid transparent',
-              color: tab === tb ? 'var(--primary)' : 'var(--text-muted)',
+              background: 'none', border: 'none', borderBottom: tab === tb ? '2px solid var(--color-primary)' : '2px solid transparent',
+              color: tab === tb ? 'var(--color-primary)' : 'var(--color-text-secondary)',
               fontWeight: tab === tb ? 600 : 400,
+              transition: 'color 0.15s ease, border-color 0.15s ease',
             }}
           >
             {tb === 'overview' ? t('agentDetail.overview') : tb === 'config' ? t('agentDetail.configuration') : t('agentDetail.integration')}
@@ -916,9 +918,9 @@ def ingest(user_msg: str, assistant_msg: str):
             ) : (
               <table>
                 <tbody>
-                  <tr><td style={{ width: '30%' }}>Agent ID</td><td><code style={{ fontSize: 13, padding: '2px 8px', background: 'var(--bg)', borderRadius: 4 }}>{agent.id}</code></td></tr>
+                  <tr><td style={{ width: '30%' }}>Agent ID</td><td><code style={{ fontSize: 13, padding: '2px 8px', background: 'var(--color-base)', borderRadius: 4 }}>{agent.id}</code></td></tr>
                   <tr><td>{t('agentDetail.name')}</td><td>{agent.name}</td></tr>
-                  <tr><td>{t('agentDetail.description')}</td><td>{agent.description || <span style={{ color: 'var(--text-muted)' }}>{t('agentDetail.noDescription')}</span>}</td></tr>
+                  <tr><td>{t('agentDetail.description')}</td><td>{agent.description || <span style={{ color: 'var(--color-text-secondary)' }}>{t('agentDetail.noDescription')}</span>}</td></tr>
                   <tr><td>{t('agentDetail.created')}</td><td>{new Date(agent.created_at).toLocaleString()}</td></tr>
                   <tr><td>{t('agentDetail.updated')}</td><td>{new Date(agent.updated_at).toLocaleString()}</td></tr>
                 </tbody>
@@ -930,18 +932,18 @@ def ingest(user_msg: str, assistant_msg: str):
           <div className="card">
             <h3 style={{ marginBottom: 12 }}>{t('agentDetail.memoryStats')}</h3>
             <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
-              {stats.total} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-muted)' }}>{t('agentDetail.totalMemories')}</span>
+              {stats.total} <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--color-text-secondary)' }}>{t('agentDetail.totalMemories')}</span>
             </div>
 
             {stats.total > 0 && (
               <>
                 {/* Layer bar */}
-                <div style={{ display: 'flex', height: 24, borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: 12 }}>
+                <div style={{ display: 'flex', height: 24, borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 12 }}>
                   {(['working', 'core', 'archive'] as const).map(layer => {
                     const count = stats.layers[layer] || 0;
                     const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
                     if (pct === 0) return null;
-                    const colors: Record<string, string> = { working: '#f59e0b', core: '#3b82f6', archive: '#6b7280' };
+                    const colors: Record<string, string> = { working: 'var(--color-warning)', core: 'var(--color-info)', archive: '#6b7280' };
                     return (
                       <div
                         key={layer}
@@ -957,7 +959,7 @@ def ingest(user_msg: str, assistant_msg: str):
                 <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
                   {(['working', 'core', 'archive'] as const).map(layer => (
                     <div key={layer} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: layer === 'working' ? '#f59e0b' : layer === 'core' ? '#3b82f6' : '#6b7280' }} />
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: layer === 'working' ? 'var(--color-warning)' : layer === 'core' ? 'var(--color-info)' : '#6b7280' }} />
                       <span>{layer}: {stats.layers[layer] || 0}</span>
                     </div>
                   ))}
@@ -972,7 +974,7 @@ def ingest(user_msg: str, assistant_msg: str):
               <h3 style={{ marginBottom: 12 }}>{t('agentDetail.activeConfig')}</h3>
               {mergedConfig?.has_override && (
                 <div style={{ marginBottom: 12 }}>
-                  <span className="badge" style={{ background: 'rgba(168,85,247,0.2)', color: '#c084fc' }}>{t('agentDetail.customConfigActive')}</span>
+                  <span className="badge" style={{ background: 'rgba(168,85,247,0.12)', color: '#c084fc' }}>{t('agentDetail.customConfigActive')}</span>
                 </div>
               )}
               <table>
@@ -987,12 +989,12 @@ def ingest(user_msg: str, assistant_msg: str):
 
           {/* Delete */}
           {!isBuiltIn && (
-            <div className="card" style={{ borderColor: 'var(--danger)' }}>
-              <h3 style={{ marginBottom: 8, color: 'var(--danger)' }}>{t('agentDetail.dangerZone')}</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+            <div className="card" style={{ borderColor: 'var(--color-danger)' }}>
+              <h3 style={{ marginBottom: 8, color: 'var(--color-danger)' }}>{t('agentDetail.dangerZone')}</h3>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
                 {t('agentDetail.deleteWarning')}
               </p>
-              <button className="btn" style={{ background: 'var(--danger)', color: '#fff', border: 'none' }} onClick={handleDelete}>
+              <button className="btn" style={{ background: 'var(--color-danger)', color: '#fff', border: 'none' }} onClick={handleDelete}>
                 {t('agentDetail.deleteAgent')}
               </button>
             </div>
@@ -1017,7 +1019,7 @@ def ingest(user_msg: str, assistant_msg: str):
               )}
             </div>
 
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
               {t('agentDetail.configOverrideDesc')}
             </p>
 
@@ -1063,7 +1065,7 @@ def ingest(user_msg: str, assistant_msg: str):
                     </tbody>
                   </table>
                 ) : (
-                  <div style={{ color: 'var(--text-muted)' }}>{t('agentDetail.loadingConfig')}</div>
+                  <div style={{ color: 'var(--color-text-secondary)' }}>{t('agentDetail.loadingConfig')}</div>
                 )}
               </>
             )}

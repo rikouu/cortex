@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.10.0 — 2026-03-21
+
+### Features
+- **Memory Self-Improvement System**: Feedback-driven importance auto-adjustment
+  - Feedback API: `POST /api/v1/memories/:id/feedback` (+1/0/-1 scoring)
+  - Implicit feedback via recall usage tracking (`POST /api/v1/recall/:recallId/usage`)
+  - Lifecycle Phase 6c: automatic importance adjustment with stability safeguards
+  - Configurable: window size, min feedbacks, max delta, implicit/explicit weights
+  - Full audit trail in `importance_adjustments` table for rollback
+- **Dashboard UX/UI Redesign**: Modern Linear/Vercel-inspired aesthetic
+  - New CSS design system with layered backgrounds, 4-level text hierarchy
+  - Redesigned sidebar with section dividers and refined navigation
+  - Stats page with improved charts and trend indicators
+  - Memory browser with category-colored cards and inline feedback buttons
+  - Settings page with self-improvement configuration panel
+  - All pages polished: Agents, ExtractionLogs, SystemLogs, LifecycleMonitor, SearchDebug
+
+### Security
+- Rate limiting on feedback API endpoints
+- Input validation: maxLength on comments, maxItems on memory_ids arrays
+- Recall session map size cap (10K) with TTL cleanup
+
+### Improvements
+- Self-improvement settings section in Dashboard
+- i18n: 24 new strings in both English and Chinese
+- Focus-visible CSS styles for keyboard accessibility
+
 ## v0.9.5 — 2026-03-21
 
 ### Fixes

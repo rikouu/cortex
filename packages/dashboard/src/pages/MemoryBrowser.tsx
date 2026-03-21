@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { listMemories, createMemory, updateMemory, deleteMemory, search, triggerImport, listAgents } from '../api/client.js';
+import { listMemories, createMemory, updateMemory, deleteMemory, search, triggerImport, listAgents, submitMemoryFeedback } from '../api/client.js';
 import MemoryDetail from './MemoryDetail.js';
 import { useI18n } from '../i18n/index.js';
 import { toLocal } from '../utils/time.js';
@@ -51,6 +51,7 @@ export default function MemoryBrowser() {
   const [newMem, setNewMem] = useState({ layer: 'core', category: 'fact', content: '', importance: 0.5 });
   const [scoreMap, setScoreMap] = useState<Record<string, number>>({});
   const [searchLimit, setSearchLimit] = useState(50);
+  const [feedbackSent, setFeedbackSent] = useState<Record<string, string>>({});
   const limit = 20;
   const { t } = useI18n();
 
@@ -241,6 +242,16 @@ export default function MemoryBrowser() {
     }
   };
 
+  const handleFeedback = async (memoryId: string, signal: 'helpful' | 'not_helpful' | 'outdated' | 'wrong') => {
+    try {
+      await submitMemoryFeedback(memoryId, { signal, source: 'explicit' });
+      setFeedbackSent(prev => ({ ...prev, [memoryId]: signal }));
+      setToast({ message: t('memories.feedbackSent'), type: 'success' });
+    } catch (e: any) {
+      setToast({ message: t('memories.feedbackFailed', { message: e.message }), type: 'error' });
+    }
+  };
+
   const sortIcon = (field: SortField) => {
     if (sortField !== field) return ' ↕';
     return sortDir === 'desc' ? ' ↓' : ' ↑';
@@ -260,9 +271,9 @@ export default function MemoryBrowser() {
       {toast && (
         <div style={{
           position: 'fixed', top: 24, right: 24, zIndex: 200,
-          padding: '12px 20px', borderRadius: 'var(--radius)',
-          background: toast.type === 'success' ? 'var(--success)' : 'var(--danger)',
-          color: '#fff', fontSize: 14, fontWeight: 500, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          padding: '12px 20px', borderRadius: 'var(--radius-lg)',
+          background: toast.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)',
+          color: '#fff', fontSize: 14, fontWeight: 500, boxShadow: 'var(--shadow-lg)',
         }}>
           {toast.message}
         </div>
@@ -307,7 +318,7 @@ export default function MemoryBrowser() {
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(0); }}>
-          <option value="">All Agents</option>
+          <option value="">{t('memories.allAgents')}</option>
           {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
         </select>
         <select value={versionFilter} onChange={e => { setVersionFilter(e.target.value); setPage(0); }}>
@@ -322,8 +333,8 @@ export default function MemoryBrowser() {
               className="btn"
               style={{
                 fontSize: 11, padding: '4px 8px',
-                background: sortField === f ? 'var(--primary)' : undefined,
-                borderColor: sortField === f ? 'var(--primary)' : undefined,
+                background: sortField === f ? 'var(--color-primary)' : undefined,
+                borderColor: sortField === f ? 'var(--color-primary)' : undefined,
               }}
               onClick={() => toggleSort(f)}
             >
@@ -331,11 +342,11 @@ export default function MemoryBrowser() {
             </button>
           ))}
         </div>
-        <span style={{ color: 'var(--text-muted)', fontSize: 13, marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           {isSearchMode && t('memories.searchPrefix')}{t('common.total', { count: total })}
           {isSearchMode && (
             <>
-              <span style={{ color: 'var(--text-muted)' }}>/</span>
+              <span style={{ color: 'var(--color-text-tertiary)' }}>/</span>
               <input
                 type="number"
                 value={searchLimit}
@@ -351,7 +362,7 @@ export default function MemoryBrowser() {
 
       {/* Bulk Actions */}
       {selected.size > 0 && (
-        <div className="card" style={{ padding: '10px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="card" style={{ padding: '10px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>{t('common.selected', { count: selected.size })}</span>
           <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} style={{ width: 'auto' }}>
             <option value="">{t('memories.bulkAction')}</option>
@@ -377,13 +388,13 @@ export default function MemoryBrowser() {
         <>
           {/* Select all */}
           <div style={{ padding: '4px 0 8px', fontSize: 12 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-muted)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
               <input type="checkbox" checked={selected.size === memories.length && memories.length > 0} onChange={toggleSelectAll} style={{ width: 'auto' }} />
               {t('memories.selectAll')}
             </label>
           </div>
           {memories.map(m => (
-            <div key={m.id} className="memory-card" style={{ borderColor: selected.has(m.id) ? 'var(--primary)' : undefined }}>
+            <div key={m.id} className="memory-card" data-layer={m.layer} style={{ borderColor: selected.has(m.id) ? 'var(--color-primary)' : undefined }}>
               <div className="header">
                 <input
                   type="checkbox"
@@ -392,16 +403,14 @@ export default function MemoryBrowser() {
                   style={{ width: 'auto', marginRight: 4 }}
                 />
                 <span className={`badge ${m.layer}`}>{m.layer}</span>
-                <span className="badge" style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>{m.category}</span>
+                <span className="badge" style={{ background: 'var(--color-info-muted)', color: '#60a5fa' }}>{m.category}</span>
                 {m.is_pinned ? <span className="badge" style={{ background: 'rgba(255,170,0,0.2)', color: '#b8860b' }}>{t('memoryDetail.pinned')}</span> : null}
                 {isSearchMode && scoreMap[m.id] !== undefined && (
-                  <span className="badge" style={{
-                    background: scoreMap[m.id]! > 0.3 ? 'rgba(34,197,94,0.2)' : scoreMap[m.id]! > 0.1 ? 'rgba(234,179,8,0.2)' : 'rgba(156,163,175,0.2)',
-                    color: scoreMap[m.id]! > 0.3 ? '#22c55e' : scoreMap[m.id]! > 0.1 ? '#eab308' : '#9ca3af',
-                    fontFamily: 'monospace',
-                  }}>{scoreMap[m.id]!.toFixed(3)}</span>
+                  <span className={`score-pill ${scoreMap[m.id]! > 0.3 ? 'high' : scoreMap[m.id]! > 0.1 ? 'medium' : 'low'}`}>
+                    {scoreMap[m.id]!.toFixed(3)}
+                  </span>
                 )}
-                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>{toLocal(m.created_at, 'short')}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{toLocal(m.created_at, 'short')}</span>
               </div>
               <div className="content">{m.content}</div>
               <div className="meta">
@@ -409,7 +418,31 @@ export default function MemoryBrowser() {
                 <span>{t('memories.decay')}: {m.decay_score?.toFixed(2)}</span>
                 <span>{t('memories.access')}: {m.access_count}</span>
                 <span>{t('memories.agent')}: {m.agent_id}</span>
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 2, marginRight: 4 }} role="group" aria-label={t('memories.feedbackLabel')}>
+                    {([
+                      { signal: 'helpful' as const, icon: '👍', label: t('memories.feedbackHelpful') },
+                      { signal: 'not_helpful' as const, icon: '😐', label: t('memories.feedbackNeutral') },
+                      { signal: 'wrong' as const, icon: '👎', label: t('memories.feedbackWrong') },
+                    ]).map(fb => (
+                      <button
+                        key={fb.signal}
+                        className="btn"
+                        title={fb.label}
+                        aria-label={fb.label}
+                        onClick={() => handleFeedback(m.id, fb.signal)}
+                        disabled={!!feedbackSent[m.id]}
+                        style={{
+                          fontSize: 14, padding: '2px 6px', minWidth: 28,
+                          opacity: feedbackSent[m.id] && feedbackSent[m.id] !== fb.signal ? 0.3 : 1,
+                          background: feedbackSent[m.id] === fb.signal ? 'var(--color-primary-muted)' : undefined,
+                          borderColor: feedbackSent[m.id] === fb.signal ? 'var(--color-primary)' : undefined,
+                        }}
+                      >
+                        {fb.icon}
+                      </button>
+                    ))}
+                  </div>
                   <button className="btn" onClick={() => setDetailId(m.id)} style={{ fontSize: 12 }}>{t('common.view')}</button>
                   <button className="btn" onClick={() => setEditing({ ...m })}>{t('common.edit')}</button>
                   <button className="btn danger" onClick={() => handleDelete(m.id)}>{t('common.delete')}</button>
@@ -422,9 +455,16 @@ export default function MemoryBrowser() {
 
       {/* Pagination */}
       {total > limit && (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+        <div style={{
+          display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 20,
+          padding: '12px 0',
+        }}>
           <button className="btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>{t('common.prev')}</button>
-          <span style={{ padding: '8px 16px', color: 'var(--text-muted)' }}>{t('common.page', { current: page + 1, total: Math.ceil(total / limit) })}</span>
+          <span style={{
+            padding: '6px 16px', color: 'var(--color-text-secondary)',
+            background: 'var(--color-elevated)', borderRadius: 'var(--radius-md)',
+            fontSize: 13, fontWeight: 500, boxShadow: 'var(--shadow-sm)',
+          }}>{t('common.page', { current: page + 1, total: Math.ceil(total / limit) })}</span>
           <button className="btn" disabled={(page + 1) * limit >= total} onClick={() => setPage(p => p + 1)}>{t('common.next')}</button>
         </div>
       )}
