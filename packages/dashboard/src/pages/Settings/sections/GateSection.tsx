@@ -34,6 +34,8 @@ export default function GateSection({
             {renderNumberField(t('settings.cliffFloor'), t('settings.cliffFloorDesc'), 'cliffFloor', 0, 0.5)}
           </div>
 
+          {renderNumberField(`⏱️ ${t('settings.recallTimeout')}`, t('settings.recallTimeoutDesc'), 'recallTimeoutMs', 1000, 30000)}
+
           <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 16, paddingTop: 12 }}>
             <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>🔄 {t('settings.queryExpansion')}</label>
             {renderToggleField(t('settings.queryExpansion'), t('settings.queryExpansionDesc'), 'queryExpansion.enabled')}
@@ -59,6 +61,7 @@ export default function GateSection({
             {displayRow(`🔍 ${t('settings.searchCandidates')}`, config.gate?.searchLimit ?? 30, t('settings.searchCandidatesDesc'))}
             {displayRow(t('settings.skipSmallTalk'), config.gate?.skipSmallTalk ? t('common.on') : t('common.off'), t('settings.skipSmallTalkDesc'))}
             {displayRow(`✂️ ${t('settings.cliffFilter')}`, `${t('settings.cliffAbsolute')}: ${config.gate?.cliffAbsolute ?? 0.4} · ${t('settings.cliffGap')}: ${config.gate?.cliffGap ?? 0.6} · ${t('settings.cliffFloor')}: ${config.gate?.cliffFloor ?? 0.05}`)}
+            {displayRow(`⏱️ ${t('settings.recallTimeout')}`, `${config.gate?.recallTimeoutMs ?? 5000} ms`, t('settings.recallTimeoutDesc'))}
             {displayRow(`🔄 ${t('settings.queryExpansion')}`, config.gate?.queryExpansion?.enabled ? `${t('common.on')} (${config.gate.queryExpansion.maxVariants} variants)` : t('common.off'), t('settings.queryExpansionDesc'))}
           </tbody>
         </table>

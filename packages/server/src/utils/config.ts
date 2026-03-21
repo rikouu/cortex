@@ -89,6 +89,7 @@ const CortexConfigSchema = z.object({
     cliffAbsolute: z.number().min(0.1).max(0.9).default(0.4),
     cliffGap: z.number().min(0.1).max(0.9).default(0.6),
     cliffFloor: z.number().min(0).max(0.5).default(0.05),
+    recallTimeoutMs: z.number().min(1000).max(30000).default(5000),
   }).default({}),
   sieve: z.object({
     highSignalImmediate: z.boolean().default(true),

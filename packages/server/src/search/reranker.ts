@@ -4,6 +4,30 @@ import type { LLMProvider } from '../llm/interface.js';
 
 const log = createLogger('reranker');
 
+/** Auth (401/403) and network errors that should trigger instant failover (<100ms) */
+function isInstantFailover(res?: Response, error?: any): { failover: boolean; reason: string } {
+  // Auth errors: skip immediately, don't retry
+  if (res && (res.status === 401 || res.status === 403)) {
+    return { failover: true, reason: `auth_error_${res.status}` };
+  }
+  // Network errors: ECONNREFUSED, ENOTFOUND, ETIMEDOUT, fetch TypeError
+  if (error) {
+    const msg = error.message || '';
+    if (
+      error.name === 'TypeError' ||  // fetch network failure
+      msg.includes('ECONNREFUSED') ||
+      msg.includes('ENOTFOUND') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('ERR_CONNECTION') ||
+      msg.includes('socket hang up') ||
+      msg.includes('network')
+    ) {
+      return { failover: true, reason: 'network_error' };
+    }
+  }
+  return { failover: false, reason: '' };
+}
+
 export interface RerankerConfig {
   enabled: boolean;
   provider: 'cohere' | 'voyage' | 'jina' | 'siliconflow' | 'llm' | 'none';
@@ -42,8 +66,9 @@ export class CohereReranker implements Reranker {
     const n = topN || this.defaultTopN;
     const documents = results.map(r => r.content);
 
+    let res: Response;
     try {
-      const res = await fetch('https://api.cohere.com/v2/rerank', {
+      res = await fetch('https://api.cohere.com/v2/rerank', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,6 +83,23 @@ export class CohereReranker implements Reranker {
         }),
         signal: AbortSignal.timeout(10000),
       });
+    } catch (e: any) {
+      const { failover, reason } = isInstantFailover(undefined, e);
+      if (failover) {
+        log.warn({ reason, error: e.message }, 'Cohere rerank instant failover, returning original order');
+      } else {
+        log.warn({ error: e.message }, 'Cohere rerank failed, returning original order');
+      }
+      return results;
+    }
+
+    try {
+      // Fast failover for auth errors — don't read body, return immediately
+      const authCheck = isInstantFailover(res);
+      if (authCheck.failover) {
+        log.warn({ status: res.status, reason: authCheck.reason }, 'Cohere rerank auth error, returning original order');
+        return results;
+      }
 
       if (!res.ok) {
         const body = await res.text();
@@ -175,8 +217,9 @@ export class VoyageReranker implements Reranker {
     if (results.length === 0) return results;
 
     const n = topN || this.defaultTopN;
+    let res: Response;
     try {
-      const res = await fetch('https://api.voyageai.com/v1/rerank', {
+      res = await fetch('https://api.voyageai.com/v1/rerank', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,6 +233,22 @@ export class VoyageReranker implements Reranker {
         }),
         signal: AbortSignal.timeout(10000),
       });
+    } catch (e: any) {
+      const { failover, reason } = isInstantFailover(undefined, e);
+      if (failover) {
+        log.warn({ reason, error: e.message }, 'Voyage rerank instant failover, returning original order');
+      } else {
+        log.warn({ error: e.message }, 'Voyage rerank failed, returning original order');
+      }
+      return results;
+    }
+
+    try {
+      const authCheck = isInstantFailover(res);
+      if (authCheck.failover) {
+        log.warn({ status: res.status, reason: authCheck.reason }, 'Voyage rerank auth error, returning original order');
+        return results;
+      }
 
       if (!res.ok) {
         const body = await res.text();
@@ -235,8 +294,9 @@ export class JinaReranker implements Reranker {
     if (results.length === 0) return results;
 
     const n = topN || this.defaultTopN;
+    let res: Response;
     try {
-      const res = await fetch('https://api.jina.ai/v1/rerank', {
+      res = await fetch('https://api.jina.ai/v1/rerank', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -250,6 +310,22 @@ export class JinaReranker implements Reranker {
         }),
         signal: AbortSignal.timeout(10000),
       });
+    } catch (e: any) {
+      const { failover, reason } = isInstantFailover(undefined, e);
+      if (failover) {
+        log.warn({ reason, error: e.message }, 'Jina rerank instant failover, returning original order');
+      } else {
+        log.warn({ error: e.message }, 'Jina rerank failed, returning original order');
+      }
+      return results;
+    }
+
+    try {
+      const authCheck = isInstantFailover(res);
+      if (authCheck.failover) {
+        log.warn({ status: res.status, reason: authCheck.reason }, 'Jina rerank auth error, returning original order');
+        return results;
+      }
 
       if (!res.ok) {
         const body = await res.text();
@@ -297,8 +373,9 @@ export class SiliconFlowReranker implements Reranker {
     if (results.length === 0) return results;
 
     const n = topN || this.defaultTopN;
+    let res: Response;
     try {
-      const res = await fetch(`${this.baseUrl}/rerank`, {
+      res = await fetch(`${this.baseUrl}/rerank`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -312,6 +389,22 @@ export class SiliconFlowReranker implements Reranker {
         }),
         signal: AbortSignal.timeout(10000),
       });
+    } catch (e: any) {
+      const { failover, reason } = isInstantFailover(undefined, e);
+      if (failover) {
+        log.warn({ reason, error: e.message }, 'SiliconFlow rerank instant failover, returning original order');
+      } else {
+        log.warn({ error: e.message }, 'SiliconFlow rerank failed, returning original order');
+      }
+      return results;
+    }
+
+    try {
+      const authCheck = isInstantFailover(res);
+      if (authCheck.failover) {
+        log.warn({ status: res.status, reason: authCheck.reason }, 'SiliconFlow rerank auth error, returning original order');
+        return results;
+      }
 
       if (!res.ok) {
         const body = await res.text();

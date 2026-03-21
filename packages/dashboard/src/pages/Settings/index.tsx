@@ -160,6 +160,7 @@ export default function Settings() {
         cliffAbsolute: config.gate?.cliffAbsolute ?? 0.4,
         cliffGap: config.gate?.cliffGap ?? 0.6,
         cliffFloor: config.gate?.cliffFloor ?? 0.05,
+        recallTimeoutMs: config.gate?.recallTimeoutMs ?? 5000,
         queryExpansion: {
           enabled: config.gate?.queryExpansion?.enabled ?? false,
           maxVariants: config.gate?.queryExpansion?.maxVariants ?? 3,
@@ -291,6 +292,8 @@ export default function Settings() {
       if (isNaN(cg) || cg < 0.1 || cg > 0.9) errors.push(t('settings.validationCliffRange'));
       const cf = Number(draft.cliffFloor);
       if (isNaN(cf) || cf < 0 || cf > 0.5) errors.push(t('settings.validationCliffRange'));
+      const rt = Number(draft.recallTimeoutMs);
+      if (isNaN(rt) || rt < 1000 || rt > 30000) errors.push(t('settings.validationRecallTimeoutRange'));
     }
 
     if (section === 'sieve') {
@@ -404,6 +407,7 @@ export default function Settings() {
           cliffAbsolute: Number(draft.cliffAbsolute),
           cliffGap: Number(draft.cliffGap),
           cliffFloor: Number(draft.cliffFloor),
+          recallTimeoutMs: Number(draft.recallTimeoutMs),
           queryExpansion: {
             enabled: draft.queryExpansion?.enabled ?? false,
             maxVariants: Number(draft.queryExpansion?.maxVariants ?? 3),

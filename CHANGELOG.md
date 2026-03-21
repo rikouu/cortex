@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.10.2 — 2026-03-21
+
+### Features
+- **Recall timeout**: Configurable total recall timeout (`recallTimeoutMs`, default 5000ms) — if expansion + search + rerank exceeds budget, returns partial results instead of blocking
+- **Dashboard recall timeout setting**: New field in Gate section with variant-count recommendations (1→3s, 3→5s, 6→8s, 10+→12s)
+
+### Performance
+- **Reranker instant failover**: Auth errors (401/403) skip immediately instead of waiting for timeout
+- **Parallel variant embedding**: Query expansion variants embedded in a single batch API call instead of sequential
+- **Budget-aware timeouts**: Reranker and expansion respect remaining recall budget
+
+### Fixes
+- **Timer leak**: Recall timeout timer properly cleaned up in try/finally
+- **Reranker/expansion honor recallTimeoutMs**: No longer use hardcoded timeouts that can overshoot the total budget
+
 ## v0.10.1 — 2026-03-21
 
 ### Fixes

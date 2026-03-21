@@ -615,6 +615,9 @@ export default {
     queryExpansion: '查询扩展',
     queryExpansionDesc: 'LLM 生成 2-3 个变体查询以扩大候选池。增加约 2 秒延迟但能显著提升模糊查询的召回率。',
     queryExpansionVariants: '最大变体数',
+    recallTimeout: '召回超时',
+    recallTimeoutDesc: '记忆召回超时时间（毫秒）。根据变体数量推荐：1 个变体 → 3000ms，3 个变体 → 5000ms（默认），6 个变体 → 8000ms，10+ 个变体 → 12000ms。',
+    validationRecallTimeoutRange: '召回超时必须在 1000 到 30000 毫秒之间',
     // 时间单位
     unitMinutes: '分钟',
     unitHours: '小时',

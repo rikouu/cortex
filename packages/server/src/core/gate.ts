@@ -98,6 +98,7 @@ export class MemoryGate {
     const query = stripInjectedContent(req.query);
 
     const recallId = generateId();
+    const recallTimeoutMs = this.config.recallTimeoutMs ?? 5000;
 
     // Skip small talk (unless skip_filters is set, e.g. Dashboard search test)
     if (this.config.skipSmallTalk && !req.skip_filters && isSmallTalk(query)) {
@@ -120,6 +121,36 @@ export class MemoryGate {
     // Clean expired recall sessions periodically
     cleanExpiredRecallSessions();
 
+    // Wrap the recall pipeline in a total timeout — return partial results if exceeded
+    return this._recallInner(req, query, recallId, start, recallTimeoutMs);
+  }
+
+  private async _recallInner(
+    req: RecallRequest,
+    query: string,
+    recallId: string,
+    start: number,
+    recallTimeoutMs: number,
+  ): Promise<RecallResponse> {
+    // Create an abort signal for the total recall timeout
+    const timeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => timeoutController.abort(), recallTimeoutMs);
+    const recallDeadline = start + recallTimeoutMs;
+    let timedOut = false;
+
+    // Helper: check if we've exceeded the total recall timeout
+    const checkTimeout = () => {
+      if (timeoutController.signal.aborted) {
+        timedOut = true;
+        return true;
+      }
+      return false;
+    };
+
+    /** Returns milliseconds remaining in the recall budget (min 0). */
+    const remainingMs = () => Math.max(0, recallDeadline - Date.now());
+
+    try {
     const relationBudget = this.config.relationBudget ?? 100;
     const relationInjection = this.config.relationInjection !== false;
     const memoryBudget = req.max_tokens || this.config.maxInjectionTokens;
@@ -139,19 +170,41 @@ export class MemoryGate {
     const originalSearchPromise = this.searchEngine.search({ query, ...searchOpts });
 
     // Expansion runs in parallel with original search
+    // When expansion produces variants, batch-embed all in a single API call
+    // then pass pre-computed embeddings to each variant search (avoids N separate embed calls)
     const variantResultsPromise: Promise<SearchResult[]> = (this.config.queryExpansion?.enabled && this.llm)
       ? Promise.race([
           expandQuery(query, this.llm, this.config.queryExpansion),
           new Promise<string[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Query expansion timeout')), 5000)
+            setTimeout(() => reject(new Error('Query expansion timeout')), Math.min(remainingMs(), 5000))
           ),
         ])
         .then(async (queries) => {
-          // Filter out original query, search all variants in parallel
+          // Filter out original query
           const variants = queries.filter(q => q !== query);
           if (variants.length === 0) return [];
+          if (checkTimeout()) return [];
+
+          // Batch-embed all variants in a single API call (parallel, not sequential)
+          let embeddings: number[][];
+          try {
+            embeddings = await this.searchEngine.embedBatch(variants);
+          } catch (e: any) {
+            log.warn({ error: e.message }, 'Batch embedding for variants failed, falling back to per-query embed');
+            // Fallback: let each search embed individually
+            const variantSearches = await Promise.all(
+              variants.map(q => this.searchEngine.search({ query: q, ...searchOpts }))
+            );
+            return variantSearches.flatMap(s => s.results);
+          }
+
+          // Search all variants in parallel with pre-computed embeddings
           const variantSearches = await Promise.all(
-            variants.map(q => this.searchEngine.search({ query: q, ...searchOpts }))
+            variants.map((q, i) => this.searchEngine.search({
+              query: q,
+              ...searchOpts,
+              embedding: embeddings[i],
+            }))
           );
           return variantSearches.flatMap(s => s.results);
         })
@@ -210,6 +263,12 @@ export class MemoryGate {
       log.info({ total: results.length, signal: 0, zero: zeroSignal.length }, 'All results filtered as zero-signal');
     }
 
+    // Check recall timeout before reranking — return search results so far if exceeded
+    if (checkTimeout()) {
+      log.warn({ latency_ms: Date.now() - start, stage: 'pre-rerank', results: results.length }, 'Recall timeout exceeded, returning partial results');
+      return this._buildResponse(req, query, recallId, start, results, true);
+    }
+
     if (this.reranker && signalResults.length > 0) {
       // Normalize original scores to 0-1 range for fair fusion
       const maxOriginal = Math.max(...signalResults.map(r => r.finalScore)) || 1;
@@ -219,7 +278,7 @@ export class MemoryGate {
         const reranked = await Promise.race([
           this.reranker.rerank(query, signalResults, 15),
           new Promise<SearchResult[]>((_, reject) =>
-            setTimeout(() => reject(new Error('Reranker timeout')), 8000)
+            setTimeout(() => reject(new Error('Reranker timeout')), Math.min(remainingMs(), 8000))
           ),
         ]);
         const rw = this.rerankerWeight;
@@ -303,6 +362,7 @@ export class MemoryGate {
       existingIds.add(pm.id);
       fixedResults.push({
         id: pm.id, content: pm.content, layer: pm.layer, category: pm.category,
+        agent_id: pm.agent_id ?? req.agent_id ?? '',
         importance: pm.importance, decay_score: pm.decay_score,
         access_count: pm.access_count, created_at: pm.created_at,
         textScore: 0, vectorScore: 0, rawVectorSim: 0, fusedScore: 0,
@@ -333,6 +393,12 @@ export class MemoryGate {
       context = fixedContext || searchContext;
     }
     const injectedCount = context ? context.split('\n').filter(l => l.startsWith('[')).length : 0;
+
+    // Check recall timeout before relation injection
+    if (checkTimeout()) {
+      log.warn({ latency_ms: Date.now() - start, stage: 'pre-relations', results: results.length }, 'Recall timeout exceeded, returning partial results');
+      return this._buildResponse(req, query, recallId, start, results, true);
+    }
 
     // Inject relevant relations (Neo4j multi-hop or SQLite fallback)
     let relationsCount = 0;
@@ -486,6 +552,51 @@ export class MemoryGate {
         injected_count: injectedCount,
         relations_count: relationsCount,
         skipped: false,
+        latency_ms: latency,
+      },
+    };
+    } finally {
+      clearTimeout(timeoutTimer);
+    }
+  }
+
+  /**
+   * Build a partial recall response — used when recall timeout is exceeded.
+   * Formats whatever results are available so far without full relation injection.
+   */
+  private _buildResponse(
+    req: RecallRequest,
+    query: string,
+    recallId: string,
+    start: number,
+    results: SearchResult[],
+    partial: boolean,
+  ): RecallResponse {
+    const memoryBudget = req.max_tokens || this.config.maxInjectionTokens;
+    const context = this.searchEngine.formatForInjection(results, memoryBudget);
+    const injectedCount = context ? context.split('\n').filter(l => l.startsWith('[')).length : 0;
+    const latency = Date.now() - start;
+
+    log.info({ query: query.slice(0, 50), recall_id: recallId, results: results.length, injected: injectedCount, partial, latency_ms: latency }, 'Recall completed (partial due to timeout)');
+
+    recallSessions.set(recallId, {
+      query,
+      memory_ids: results.map(r => r.id),
+      agent_id: req.agent_id || 'default',
+      created_at: Date.now(),
+    });
+
+    return {
+      context,
+      memories: results,
+      meta: {
+        query,
+        recall_id: recallId,
+        total_found: results.length,
+        injected_count: injectedCount,
+        relations_count: 0,
+        skipped: false,
+        reason: partial ? 'recall_timeout' : undefined,
         latency_ms: latency,
       },
     };

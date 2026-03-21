@@ -615,6 +615,9 @@ export default {
     queryExpansion: 'Query Expansion',
     queryExpansionDesc: 'LLM generates 2-3 variant queries to expand the candidate pool. Adds ~2s latency but improves recall for vague queries.',
     queryExpansionVariants: 'Max Variants',
+    recallTimeout: 'Recall Timeout',
+    recallTimeoutDesc: 'Timeout (ms) for memory recall. Recommended by variant count: 1 variant → 3000ms, 3 variants → 5000ms (default), 6 variants → 8000ms, 10+ variants → 12000ms.',
+    validationRecallTimeoutRange: 'Recall timeout must be between 1000 and 30000 ms',
     // Duration units
     unitMinutes: 'minutes',
     unitHours: 'hours',

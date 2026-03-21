@@ -36,6 +36,8 @@ export interface SearchOptions {
   limit?: number;
   debug?: boolean;
   maxTokens?: number;
+  /** Pre-computed embedding vector — skips embed() call when provided */
+  embedding?: number[];
 }
 
 export interface SearchDebug {
@@ -63,6 +65,11 @@ export class HybridSearchEngine {
     private config: CortexConfig['search'],
   ) {}
 
+  /** Batch-embed multiple texts in a single API call (for parallel query expansion) */
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    return this.embeddingProvider.embedBatch(texts);
+  }
+
   async search(opts: SearchOptions): Promise<{ results: SearchResult[]; debug?: SearchDebug }> {
     const startTime = Date.now();
     const limit = opts.limit || 10;
@@ -86,7 +93,7 @@ export class HybridSearchEngine {
     const vectorStart = Date.now();
     let vectorResults: { id: string; distance: number }[] = [];
     try {
-      const embedding = await this.embeddingProvider.embed(opts.query);
+      const embedding = opts.embedding ?? await this.embeddingProvider.embed(opts.query);
       if (embedding.length > 0) {
         vectorResults = await this.vectorBackend.search(embedding, limit * 3, opts.agent_id ? { agent_id: opts.agent_id } : undefined);
       }
