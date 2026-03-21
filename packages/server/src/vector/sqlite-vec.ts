@@ -39,6 +39,19 @@ export class SqliteVecBackend implements VectorBackend {
 
     if (this.useVec0) {
       try {
+        // Check if existing vec table has different dimensions — if so, rebuild it
+        try {
+          const info = db.prepare("SELECT * FROM memories_vec_info WHERE key = 'dimensions'").get() as any;
+          if (info && Number(info.value) !== dimensions) {
+            log.info({ old: Number(info.value), new: dimensions }, 'Embedding dimensions changed, rebuilding vec0 table');
+            // Drop shadow tables first, then the virtual table
+            for (const t of ['memories_vec_vector_chunks00', 'memories_vec_rowids', 'memories_vec_chunks', 'memories_vec_info']) {
+              try { db.exec(`DROP TABLE IF EXISTS ${t}`); } catch { /* ignore */ }
+            }
+            try { db.exec('DROP TABLE IF EXISTS memories_vec'); } catch { /* vec0 virtual tables may need special handling */ }
+          }
+        } catch { /* table doesn't exist yet, that's fine */ }
+
         db.exec(`
           CREATE VIRTUAL TABLE IF NOT EXISTS memories_vec USING vec0(
             memory_id TEXT PRIMARY KEY,

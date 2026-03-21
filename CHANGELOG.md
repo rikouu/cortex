@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.1 — 2026-03-21
+
+### Fixes
+- **Reindex auto-rebuilds vec table on dimension change**: When embedding dimensions change (e.g. switching from `text-embedding-3-small` 1536d to `text-embedding-3-large` 3072d), the vec0 virtual table is now automatically dropped and recreated with the correct dimensions on startup
+- **Reindex reports upsert errors**: Vector upsert failures during reindex are now caught and counted in the `errors` field instead of being silently swallowed
+
 ## v0.10.0 — 2026-03-21
 
 ### Features

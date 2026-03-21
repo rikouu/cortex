@@ -534,8 +534,13 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
         const embeddings = await cortex.embeddingProvider.embedBatch(batch.map(m => m.content));
         for (let j = 0; j < batch.length; j++) {
           if (embeddings[j] && embeddings[j]!.length > 0) {
-            await cortex.vectorBackend.upsert(batch[j]!.id, embeddings[j]!);
-            indexed++;
+            try {
+              await cortex.vectorBackend.upsert(batch[j]!.id, embeddings[j]!);
+              indexed++;
+            } catch (ue: any) {
+              log.error({ id: batch[j]!.id, error: ue.message }, 'Reindex: vector upsert failed');
+              errors++;
+            }
           } else {
             log.warn({ id: batch[j]!.id }, 'Reindex: embedding returned empty, provider may be unavailable');
             errors++;
