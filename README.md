@@ -477,6 +477,35 @@ Each agent gets its own isolated memory namespace via `agent_id`. Memories from 
 >
 > **Matching IDs:** If your OpenClaw agent's ID is `"xiaoai"`, Cortex will store memories under `agent_id: "xiaoai"`. You can view and manage them in the Cortex Dashboard under that agent.
 
+#### Pairing Code — Multi-Instance Isolation
+
+If you run **multiple OpenClaw instances** (e.g. Harry's Mac mini + Sarah's laptop) and both use the same default `agent_id` (like `"main"`), their memories would mix. A `pairing_code` solves this.
+
+Set a unique `CORTEX_PAIRING_CODE` env var per instance:
+
+```json
+{
+  "cortexUrl": "http://localhost:21100",
+  "pairingCode": "harry-mac-mini-2026"
+}
+```
+
+Or via environment variable for the OpenClaw plugin:
+```
+CORTEX_PAIRING_CODE=harry-mac-mini-2026
+```
+
+- Requests **with** a pairing code only see memories tagged with that same code
+- Requests **without** a pairing code use the original `agent_id`-only behavior (backward compatible)
+- Each OpenClaw instance should have its own unique code
+
+**REST API with pairing_code:**
+```bash
+curl -X POST http://localhost:21100/api/v1/recall \
+  -H "Content-Type: application/json" \
+  -d '{"query":"preferences","agent_id":"main","pairing_code":"harry-mac-mini-2026"}'
+```
+
 **MCP (Claude Code / Cursor / etc.)** — One MCP server per agent. Use `--agent-id` matching the agent name in Cortex:
 
 ```json
