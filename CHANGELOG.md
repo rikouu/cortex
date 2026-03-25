@@ -1,3 +1,16 @@
+## v0.10.3 — 2026-03-25
+
+### Features
+- **pairing_code: Agent namespace isolation** — Solves multi-instance memory mixing. When multiple OpenClaw instances, MCP clients, or API callers share the same agent_id (e.g. "main"), memories would previously bleed into each other. With pairing_code, each client gets its own isolated namespace.
+
+  **How it works**: Optional `pairing_code` field in all recall/ingest requests. Memories stored/retrieved by composite key (agent_id + pairing_code). No pairing_code = backward-compatible unchanged behavior.
+
+  **Configuration**:
+  - OpenClaw plugin: set `CORTEX_PAIRING_CODE=<unique-code>` env var
+  - MCP / API: pass `"pairing_code": "<code>"` in request body
+
+  **Database**: migration 014 adds `pairing_code` column + composite index.
+
 # Changelog
 
 ## v0.10.2 — 2026-03-21
