@@ -10,6 +10,7 @@ export function registerRecallRoutes(app: FastifyInstance, cortex: CortexApp): v
         properties: {
           query: { type: 'string' },
           agent_id: { type: 'string' },
+          pairing_code: { type: 'string' },
           max_tokens: { type: 'number' },
           layers: { type: 'array', items: { type: 'string', enum: ['working', 'core', 'archive'] } },
           skip_filters: { type: 'boolean' },
@@ -21,6 +22,7 @@ export function registerRecallRoutes(app: FastifyInstance, cortex: CortexApp): v
     const result = await cortex.gate.recall({
       query: body.query,
       agent_id: body.agent_id,
+      pairing_code: body.pairing_code,
       max_tokens: body.max_tokens,
       layers: body.layers,
       skip_filters: body.skip_filters,

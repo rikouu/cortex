@@ -25,6 +25,7 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
             },
           },
           agent_id: { type: 'string' },
+          pairing_code: { type: 'string' },
           session_id: { type: 'string' },
         },
       },
@@ -37,6 +38,7 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
       assistant_message: body.assistant_message,
       messages: body.messages,
       agent_id: body.agent_id,
+      pairing_code: body.pairing_code,
       session_id: body.session_id,
     });
 

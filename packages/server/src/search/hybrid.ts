@@ -33,6 +33,7 @@ export interface SearchOptions {
   layers?: MemoryLayer[];
   categories?: string[];
   agent_id?: string;
+  pairing_code?: string | null;
   limit?: number;
   debug?: boolean;
   maxTokens?: number;
@@ -81,6 +82,7 @@ export class HybridSearchEngine {
       textResults = searchFTS(opts.query, {
         layer: opts.layers?.[0],
         agent_id: opts.agent_id,
+        pairing_code: opts.pairing_code,
         limit: limit * 3,
       });
     } catch (e: any) {

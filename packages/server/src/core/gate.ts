@@ -58,6 +58,7 @@ export function getRecallSession(recallId: string): RecallSession | undefined {
 }
 
 export interface RecallRequest {
+  pairing_code?: string;
   query: string;
   agent_id?: string;
   max_tokens?: number;
@@ -163,6 +164,7 @@ export class MemoryGate {
     const searchOpts = {
       layers: req.layers,
       agent_id: req.agent_id,
+      pairing_code: req.pairing_code,
       limit: this.config.searchLimit || 30,
     };
 

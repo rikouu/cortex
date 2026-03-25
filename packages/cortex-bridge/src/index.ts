@@ -9,6 +9,7 @@
  */
 
 // ── Plugin version ──────────────────────────────────────
+const CORTEX_PAIRING_CODE = typeof process !== 'undefined' ? (process.env.CORTEX_PAIRING_CODE || '') : '';
 const PLUGIN_VERSION = '0.6.2';
 
 // ── Timeouts ────────────────────────────────────────────
@@ -166,6 +167,7 @@ async function cortexIngest(
       user_message: userMessage,
       assistant_message: assistantMessage,
       agent_id: agentId,
+          ...(CORTEX_PAIRING_CODE && { pairing_code: CORTEX_PAIRING_CODE }),
     };
     if (messages && messages.length > 0) {
       payload.messages = messages;

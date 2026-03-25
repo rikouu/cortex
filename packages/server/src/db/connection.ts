@@ -527,6 +527,14 @@ const migrations = [
       CREATE INDEX idx_importance_adj_created ON importance_adjustments(created_at);
     `,
   },
+
+  {
+    name: '014_pairing_code',
+    sql: `
+      ALTER TABLE memories ADD COLUMN pairing_code TEXT;
+      CREATE INDEX IF NOT EXISTS idx_memories_agent_pairing ON memories(agent_id, pairing_code);
+    `,
+  },
 ];
 
 export function closeDatabase(): void {

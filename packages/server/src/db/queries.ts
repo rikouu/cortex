@@ -33,6 +33,7 @@ export interface Memory {
   superseded_by: string | null;
   metadata: string | null;
   is_pinned: number;
+  pairing_code: string | null;
 }
 
 export interface Relation {
@@ -79,14 +80,16 @@ export interface LifecycleLogEntry {
 
 // ============ Memory Queries ============
 
-export function insertMemory(mem: Partial<Memory> & { layer: MemoryLayer; category: MemoryCategory; content: string }): Memory {
+export function insertMemory(mem: Partial<Memory> & { pairing_code?: string | null; } & { layer: MemoryLayer; category: MemoryCategory; content: string }): Memory {
   const db = getDb();
   const id = mem.id || generateId();
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO memories (id, layer, category, content, source, agent_id, importance, confidence, decay_score, expires_at, metadata, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memories (
+    pairing_code,id, layer, category, content, source, agent_id, importance, confidence, decay_score, expires_at, metadata, created_at, updated_at)
+    VALUES (
+    mem.pairing_code ?? null,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     mem.layer,
@@ -161,6 +164,7 @@ export function listMemories(opts: {
   layer?: MemoryLayer;
   category?: MemoryCategory;
   agent_id?: string;
+  pairing_code?: string | null;
   limit?: number;
   offset?: number;
   orderBy?: string;
@@ -303,7 +307,7 @@ function sanitizeFTSQuery(query: string): string {
   return cleaned.slice(0, 500);
 }
 
-export function searchFTS(query: string, opts?: { layer?: MemoryLayer; limit?: number; agent_id?: string }): (Memory & { rank: number })[] {
+export function searchFTS(query: string, opts?: { layer?: MemoryLayer; limit?: number; agent_id?: string; pairing_code?: string | null }): (Memory & { rank: number })[] {
   // Tokenize query with jieba for CJK word matching
   const sanitized = sanitizeFTSQuery(tokenizeQuery(query));
   if (!sanitized) return [];

@@ -67,6 +67,7 @@ export interface ExtractionLogData {
 }
 
 export interface IngestRequest {
+  pairing_code?: string;
   user_message: string;
   assistant_message: string;
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -181,6 +182,7 @@ export class MemorySieve {
 
     log.info({
       agent_id: agentId,
+        pairing_code: req.pairing_code,
       high_signals: highSignals.length,
       deep_extractions: deepExtractionCount,
       extracted: extracted.length,
@@ -340,6 +342,7 @@ export class MemorySieve {
               confidence: rel.confidence,
               source_memory_id: firstMemoryId || undefined,
               agent_id: agentId,
+        pairing_code: req.pairing_code,
               source: 'extraction',
               extraction_count: 1,
               expired: rel.expired ? 1 : 0,
@@ -353,6 +356,7 @@ export class MemorySieve {
               confidence: rel.confidence,
               source_memory_id: firstMemoryId,
               agent_id: agentId,
+        pairing_code: req.pairing_code,
               source: 'extraction',
               expired: rel.expired ? 1 : 0,
             });
