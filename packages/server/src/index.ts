@@ -47,6 +47,16 @@ async function main() {
     logger: false,  // We use our own pino logger
   });
 
+
+  // Accept POST with empty body / no Content-Type (fixes 415 for bodyless POST routes)
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    try {
+      const json = typeof body === "string" && body.trim() ? JSON.parse(body) : {};
+      done(null, json);
+    } catch (e: any) {
+      done(e, undefined);
+    }
+  });
   // CORS
   await app.register(cors, {
     origin: config.cors?.origin ?? true,

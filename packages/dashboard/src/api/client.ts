@@ -141,10 +141,10 @@ export const testLLM = (target: 'extraction' | 'lifecycle') =>
   request('/test-llm', { method: 'POST', body: JSON.stringify({ target }) });
 
 export const testEmbedding = () =>
-  request('/test-embedding', { method: 'POST' });
+  request('/test-embedding', { method: 'POST', body: '{}' });
 
 export const testReranker = () =>
-  request('/test-reranker', { method: 'POST' });
+  request('/test-reranker', { method: 'POST', body: '{}' });
 
 // Export
 export const triggerExport = (format: string = 'json') =>
@@ -156,7 +156,7 @@ export const triggerImport = (data: any) =>
 
 // Reindex
 export const triggerReindex = () =>
-  request('/reindex', { method: 'POST' });
+  request('/reindex', { method: 'POST', body: '{}' });
 
 // Self-update
 export const triggerUpdate = () =>
