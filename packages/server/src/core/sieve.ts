@@ -228,7 +228,7 @@ export class MemorySieve {
           source: 'user_stated' as const, reasoning: `signal: ${s.pattern}`,
         }));
         const batchResults = await this.writer.processNewMemoryBatch(
-          signalExtractions, agentId, sessionId, signals[0]?.confidence, 'session',
+          signalExtractions, agentId, sessionId, signals[0]?.confidence, 'session', req.pairing_code,
         );
         for (const result of batchResults) {
           if (result.action === 'skipped') { deduplicated++; continue; }
@@ -315,7 +315,7 @@ export class MemorySieve {
 
       try {
         const batchResults = await this.writer.processNewMemoryBatch(
-          structuredExtractions, agentId, sessionId, undefined, 'sieve',
+          structuredExtractions, agentId, sessionId, undefined, 'sieve', req.pairing_code,
         );
         for (const result of batchResults) {
           if (result.action === 'skipped') { deduplicated++; continue; }

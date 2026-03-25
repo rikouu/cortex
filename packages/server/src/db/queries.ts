@@ -86,10 +86,8 @@ export function insertMemory(mem: Partial<Memory> & { pairing_code?: string | nu
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO memories (
-    pairing_code,id, layer, category, content, source, agent_id, importance, confidence, decay_score, expires_at, metadata, created_at, updated_at)
-    VALUES (
-    mem.pairing_code ?? null,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memories (id, layer, category, content, source, agent_id, importance, confidence, decay_score, expires_at, metadata, pairing_code, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     mem.layer,
@@ -102,6 +100,7 @@ export function insertMemory(mem: Partial<Memory> & { pairing_code?: string | nu
     mem.decay_score ?? 1.0,
     mem.expires_at || null,
     mem.metadata || null,
+    mem.pairing_code ?? null,
     now,
     now,
   );

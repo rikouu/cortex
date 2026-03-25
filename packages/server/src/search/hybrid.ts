@@ -253,6 +253,8 @@ export class HybridSearchEngine {
       if (opts.categories && !opts.categories.includes(m.category)) continue;
       // agent_id filter: null/undefined agent_id memories are shared (match any agent)
       if (opts.agent_id && m.agent_id && m.agent_id !== opts.agent_id) continue;
+      // pairing_code filter: when specified, only show memories from same namespace
+      if (opts.pairing_code !== undefined && (m as any).pairing_code !== (opts.pairing_code || null)) continue;
 
       const layerWeight = LAYER_WEIGHTS[m.layer] || 0.5;
 

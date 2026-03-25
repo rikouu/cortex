@@ -343,7 +343,7 @@ export class MemoryWriter {
       if (similar.length > 0 && similar[0]!.distance < LEGACY_DEDUP_THRESHOLD) {
         return { action: 'skipped' };
       }
-      const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride, sourcePrefix);
+      const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride, sourcePrefix, undefined, pairingCode);
       await this.indexVector(mem.id, extraction.content);
       return { action: 'inserted', memory: mem };
     }
@@ -398,7 +398,7 @@ export class MemoryWriter {
     }
 
     // Tier 3: unrelated → normal insert
-    const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride, sourcePrefix, forceLayer);
+    const mem = this.insertNewMemory(extraction, agentId, sessionId, confidenceOverride, sourcePrefix, forceLayer, pairingCode);
     await this.indexVector(mem.id, extraction.content);
     return { action: 'inserted', memory: mem };
   }
@@ -414,6 +414,7 @@ export class MemoryWriter {
     sessionId?: string,
     confidenceOverride?: number,
     sourcePrefix = 'sieve',
+    pairingCode?: string,
   ): Promise<ProcessResult[]> {
     if (extractions.length === 0) return [];
 
@@ -546,7 +547,7 @@ export class MemoryWriter {
         }
 
         case 'insert': {
-          const mem = this.insertNewMemory(item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix);
+          const mem = this.insertNewMemory(item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix, undefined, pairingCode);
           await this.indexVector(mem.id, item.extraction.content);
           batchResults[item.index] = { action: 'inserted', memory: mem };
           break;
@@ -572,6 +573,7 @@ export class MemoryWriter {
     confidenceOverride?: number,
     sourcePrefix = 'sieve',
     forceLayer?: 'working' | 'core',
+    pairingCode?: string,
   ): Memory {
     const layer = forceLayer || (extraction.importance >= 0.8 ? 'core' : 'working');
     const ttlMs = parseDuration(this.config.layers.working.ttl);
@@ -587,6 +589,7 @@ export class MemoryWriter {
       source: sessionId ? `${sourcePrefix}:${sessionId}` : sourcePrefix,
       expires_at: expiresAt,
       metadata: JSON.stringify({ extraction_source: extraction.source, reasoning: extraction.reasoning }),
+      pairing_code: pairingCode ?? null,
     });
   }
 
