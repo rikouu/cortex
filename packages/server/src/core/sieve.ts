@@ -344,7 +344,6 @@ export class MemorySieve {
               confidence: rel.confidence,
               source_memory_id: firstMemoryId || undefined,
               agent_id: agentId,
-              pairing_code: pairingCode,
               source: 'extraction',
               extraction_count: 1,
               expired: rel.expired ? 1 : 0,
@@ -358,7 +357,6 @@ export class MemorySieve {
               confidence: rel.confidence,
               source_memory_id: firstMemoryId,
               agent_id: agentId,
-              pairing_code: pairingCode,
               source: 'extraction',
               expired: rel.expired ? 1 : 0,
             });

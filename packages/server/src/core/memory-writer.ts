@@ -40,6 +40,13 @@ class Semaphore {
   }
 }
 const smartUpdateSemaphore = new Semaphore(2);
+const CORRECTION_SEARCH_CATEGORIES: MemoryCategory[] = [
+  'identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship',
+  'goal', 'project_state', 'correction', 'todo', 'constraint', 'policy',
+];
+const CORRECTION_CASCADE_CATEGORIES = new Set<MemoryCategory>([
+  'todo', 'decision', 'goal', 'project_state', 'correction',
+]);
 
 export interface ExtractedMemory {
   content: string;
@@ -72,6 +79,50 @@ export class MemoryWriter {
     private vectorBackend: VectorBackend,
     private config: CortexConfig,
   ) {}
+
+  private getEffectiveThreshold(category: MemoryCategory): number {
+    const { similarityThreshold } = this.config.sieve;
+    return category === 'correction'
+      ? Math.min(similarityThreshold * 1.5, 0.6)
+      : similarityThreshold;
+  }
+
+  private getSearchCategories(category: MemoryCategory): MemoryCategory[] | undefined {
+    return category === 'correction' ? CORRECTION_SEARCH_CATEGORIES : undefined;
+  }
+
+  private getSearchTopK(category: MemoryCategory): number {
+    return category === 'correction' ? 10 : 3;
+  }
+
+  private cascadeCorrectionStateSupersedes(
+    newMemoryId: string,
+    similar: SimilarMemory[],
+    primaryTargetId: string,
+    threshold: number,
+  ): void {
+    for (const candidate of similar) {
+      if (candidate.memory.id === primaryTargetId) continue;
+      if (candidate.distance >= threshold) continue;
+      if (!CORRECTION_CASCADE_CATEGORIES.has(candidate.memory.category)) continue;
+      if (candidate.memory.superseded_by || candidate.memory.is_pinned) continue;
+
+      try {
+        const meta = JSON.parse(candidate.memory.metadata || '{}');
+        updateMemory(candidate.memory.id, {
+          superseded_by: newMemoryId,
+          metadata: JSON.stringify({
+            ...meta,
+            superseded_reason: 'correction_cascade',
+            superseded_by_correction: newMemoryId,
+            superseded_at: new Date().toISOString(),
+          }),
+        });
+      } catch {
+        updateMemory(candidate.memory.id, { superseded_by: newMemoryId });
+      }
+    }
+  }
 
   /**
    * Find similar memories via vector search.
@@ -303,6 +354,7 @@ export class MemoryWriter {
     confidenceOverride?: number,
     sourcePrefix = 'sieve',
     forceLayer?: 'working' | 'core',
+    pairingCode?: string,
   ): Promise<ProcessResult> {
     // Gate: filter obvious noise before expensive operations
     const minImportance = this.config.sieve.minImportance ?? 0.3;
@@ -319,24 +371,15 @@ export class MemoryWriter {
       return { action: 'skipped' };
     }
 
-    const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
+    const { smartUpdate, exactDupThreshold } = this.config.sieve;
 
     // During lifecycle runs, skip smart update to avoid data races with deduplicateCore
     const effectiveSmartUpdate = smartUpdate && !isLifecycleActive();
 
-    // Corrections get a wider similarity window (1.5x)
-    const effectiveThreshold = extraction.category === 'correction'
-      ? Math.min(similarityThreshold * 1.5, 0.6)
-      : similarityThreshold;
-
-    // Corrections search within related categories
-    const correctionCategories = extraction.category === 'correction'
-      ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
-      : undefined;
-
-    // Corrections get wider search (top 10) to find the target memory
-    const topK = extraction.category === 'correction' ? 10 : 3;
-    const similar = await this.findSimilar(extraction.content, agentId, correctionCategories, topK);
+    const effectiveThreshold = this.getEffectiveThreshold(extraction.category);
+    const searchCategories = this.getSearchCategories(extraction.category);
+    const topK = this.getSearchTopK(extraction.category);
+    const similar = await this.findSimilar(extraction.content, agentId, searchCategories, topK);
 
     if (!effectiveSmartUpdate) {
       // Legacy behavior (or lifecycle active — skip smart update to avoid races)
@@ -372,6 +415,9 @@ export class MemoryWriter {
             { action: 'replace', reasoning: 'Near-exact match, auto-replaced without LLM' },
             closest.memory, extraction, agentId, sessionId, confidenceOverride, sourcePrefix,
           );
+          if (extraction.category === 'correction') {
+            this.cascadeCorrectionStateSupersedes(newMem.id, similar, closest.memory.id, effectiveThreshold);
+          }
           return { action: 'smart_updated', memory: newMem };
         }
 
@@ -392,6 +438,9 @@ export class MemoryWriter {
           const newMem = await this.executeSmartUpdate(
             decision, closest.memory, extraction, agentId, sessionId, confidenceOverride, sourcePrefix,
           );
+          if (extraction.category === 'correction') {
+            this.cascadeCorrectionStateSupersedes(newMem.id, similar, closest.memory.id, effectiveThreshold);
+          }
           return { action: 'smart_updated', memory: newMem };
         }
       }
@@ -441,7 +490,7 @@ export class MemoryWriter {
       return gateResults.map(r => r || { action: 'skipped' });
     }
 
-    const { smartUpdate, exactDupThreshold, similarityThreshold } = this.config.sieve;
+    const { smartUpdate, exactDupThreshold } = this.config.sieve;
 
     // Phase 1: find similar for each extraction, classify into tiers
     interface PendingItem {
@@ -455,11 +504,8 @@ export class MemoryWriter {
     // Phase 1: parallel findSimilar for all gated extractions
     const similarResults = await Promise.all(
       gatedExtractions.map(ext => {
-        const cats = ext.category === 'correction'
-          ? ['identity', 'fact', 'preference', 'decision', 'entity', 'skill', 'relationship', 'goal', 'project_state', 'correction']
-          : undefined;
-        // Corrections get wider search (top 10) to find the target memory
-        const topK = ext.category === 'correction' ? 10 : 3;
+        const cats = this.getSearchCategories(ext.category);
+        const topK = this.getSearchTopK(ext.category);
         return this.findSimilar(ext.content, agentId, cats, topK);
       }),
     );
@@ -468,9 +514,7 @@ export class MemoryWriter {
     for (let i = 0; i < gatedExtractions.length; i++) {
       const extraction = gatedExtractions[i]!;
       const similar = similarResults[i]!;
-      const effectiveThreshold = extraction.category === 'correction'
-        ? Math.min(similarityThreshold * 1.5, 0.6)
-        : similarityThreshold;
+      const effectiveThreshold = this.getEffectiveThreshold(extraction.category);
 
       if (!smartUpdate) {
         if (similar.length > 0 && similar[0]!.distance < 0.15) {
@@ -529,6 +573,14 @@ export class MemoryWriter {
             { action: 'replace', reasoning: 'Near-exact match, auto-replaced without LLM' },
             item.closest!.memory, item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix,
           );
+          if (item.extraction.category === 'correction') {
+            this.cascadeCorrectionStateSupersedes(
+              newMem.id,
+              item.similar,
+              item.closest!.memory.id,
+              this.getEffectiveThreshold(item.extraction.category),
+            );
+          }
           batchResults[item.index] = { action: 'smart_updated', memory: newMem };
           break;
         }
@@ -541,6 +593,14 @@ export class MemoryWriter {
             const newMem = await this.executeSmartUpdate(
               decision, item.closest!.memory, item.extraction, agentId, sessionId, confidenceOverride, sourcePrefix,
             );
+            if (item.extraction.category === 'correction') {
+              this.cascadeCorrectionStateSupersedes(
+                newMem.id,
+                item.similar,
+                item.closest!.memory.id,
+                this.getEffectiveThreshold(item.extraction.category),
+              );
+            }
             batchResults[item.index] = { action: 'smart_updated', memory: newMem };
           }
           break;
