@@ -10,7 +10,7 @@
 
 // ── Plugin version ──────────────────────────────────────
 const CORTEX_PAIRING_CODE = typeof process !== 'undefined' ? (process.env.CORTEX_PAIRING_CODE || '') : '';
-const PLUGIN_VERSION = '0.6.2';
+const PLUGIN_VERSION = '0.6.5';
 
 // ── Timeouts ────────────────────────────────────────────
 const RECALL_TIMEOUT = 8000;

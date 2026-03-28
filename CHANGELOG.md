@@ -1,3 +1,15 @@
+## v0.10.4 — 2026-03-28
+
+### Bug Fixes
+- **OpenClaw plugin ID mismatch fixed** — `@cortexmem/openclaw` now correctly declares plugin id `"openclaw"`, resolving the `plugin id mismatch (manifest uses "cortex-bridge", entry hints "openclaw")` error on install (reported by @rollingshmily, #17)
+- **Reindex now rebuilds vec0 table on dimension change** — Clicking "重建向量索引" after switching embedding models (e.g. voyage-3.5 → text-embedding-3-large) no longer fails with `Expected 1536 dimensions but received 1024`. The reindex endpoint now reinitializes the vector backend before re-embedding (reported by @rollingshmily, #17)
+- **Embedding hot-reload reinitializes vector backend** — Saving a new embedding config via Dashboard or `PATCH /api/v1/config` now immediately rebuilds the vec0 table if dimensions changed, no restart needed
+- **Neo4j relation deduplication** — Repeated extraction of the same `(subject, predicate, object, agent_id)` tuple now updates a single edge instead of creating duplicate edges (contributed by @xieyuanqing, #16)
+- **Correction cascade for state memories** — `correction` memories now correctly supersede related `todo`, `decision`, `goal`, `project_state` memories; search coverage expanded to include `todo`, `constraint`, `policy` categories (contributed by @xieyuanqing, #16)
+
+### Packages
+- @cortexmem/openclaw@0.6.5 published (plugin id fix)
+
 ## v0.10.3 — 2026-03-25
 
 ### Features
