@@ -226,7 +226,7 @@ async function cortexHealthCheck(cortexUrl: string): Promise<{ ok: boolean; late
 
 // ── Plugin export (OpenClaw register(api) interface) ────
 export default {
-  id: 'cortex-bridge',
+  id: 'openclaw',
   name: 'Cortex Memory Bridge',
   description: 'Long-term memory for OpenClaw powered by Cortex',
   kind: 'tool' as const,
@@ -267,7 +267,7 @@ export default {
       return paramAgentId || lastSessionAgentId;
     }
 
-    log.info(`[cortex-bridge] Registered — Cortex URL: ${cortexUrl}, Agent: ${defaultAgentId}, config keys: ${Object.keys(config).join(',') || '(empty)'}`);
+    log.info(`[openclaw] Registered — Cortex URL: ${cortexUrl}, Agent: ${defaultAgentId}, config keys: ${Object.keys(config).join(',') || '(empty)'}`);
 
     // ════════════════════════════════════════════════════════
     // TOOLS (primary interface — always work)
@@ -636,15 +636,15 @@ export default {
           // Retry once after a short delay
           await new Promise(r => setTimeout(r, 500));
           result = await cortexRecall(cortexUrl, query, currentAgentId, config).catch(() => null);
-          if (result && debug) log.info(`[cortex-bridge] Hook recall succeeded on retry`);
+          if (result && debug) log.info(`[openclaw] Hook recall succeeded on retry`);
         }
 
         if (result) {
-          log.info(`[cortex-bridge] Hook recalled ${result.count} memories`);
+          log.info(`[openclaw] Hook recalled ${result.count} memories`);
           return { prependContext: result.context };
         }
       } catch (e) {
-        if (debug) log.warn(`[cortex-bridge] Hook recall failed: ${(e as Error).message}`);
+        if (debug) log.warn(`[openclaw] Hook recall failed: ${(e as Error).message}`);
       }
     });
 
@@ -683,7 +683,7 @@ export default {
         if (lastRawAssistant) {
           const rawText = extractText(lastRawAssistant.content).trim();
           if (SKIP_RESPONSE_RE.test(rawText)) {
-            if (debug) log.info('[cortex-bridge] agent_end: skipping heartbeat/no-reply turn');
+            if (debug) log.info('[openclaw] agent_end: skipping heartbeat/no-reply turn');
             return;
           }
         }
@@ -691,7 +691,7 @@ export default {
         if (lastRawUser) {
           const rawUserText = extractText(lastRawUser.content).trim();
           if (HEARTBEAT_PROMPT_RE.test(rawUserText) && rawUserText.length < 500) {
-            if (debug) log.info('[cortex-bridge] agent_end: skipping heartbeat prompt turn');
+            if (debug) log.info('[openclaw] agent_end: skipping heartbeat prompt turn');
             return;
           }
         }
@@ -731,7 +731,7 @@ export default {
         }
 
         if (cleanedMessages.length === 0) {
-          if (debug) log.warn('[cortex-bridge] agent_end: no useful messages after cleaning, skipping');
+          if (debug) log.warn('[openclaw] agent_end: no useful messages after cleaning, skipping');
           return;
         }
 
@@ -742,14 +742,14 @@ export default {
         const assistantText = lastAssistant?.content || '';
 
         if (!userText || !assistantText) {
-          if (debug) log.warn('[cortex-bridge] agent_end: missing user or assistant in last pair, skipping');
+          if (debug) log.warn('[openclaw] agent_end: missing user or assistant in last pair, skipping');
           return;
         }
 
         // Fix #5: Content-level dedup — skip if same user+assistant pair (per-agent)
         const currentHash = simpleHash(userText + '|||' + assistantText);
         if (currentHash === lastIngestHashes[currentAgentId]) {
-          if (debug) log.info(`[cortex-bridge] agent_end: skipping duplicate ingest for agent ${currentAgentId}`);
+          if (debug) log.info(`[openclaw] agent_end: skipping duplicate ingest for agent ${currentAgentId}`);
           return;
         }
         lastIngestHashes[currentAgentId] = currentHash;
@@ -759,11 +759,11 @@ export default {
           // Retry once
           await new Promise(r => setTimeout(r, 1000));
           result = await cortexIngest(cortexUrl, userText, assistantText, currentAgentId, cleanedMessages, config);
-          if (result.ok && debug) log.info(`[cortex-bridge] agent_end ingest succeeded on retry`);
+          if (result.ok && debug) log.info(`[openclaw] agent_end ingest succeeded on retry`);
         }
-        if (debug) log.info(`[cortex-bridge] agent_end ingest ok=${result.ok}, agent=${currentAgentId}, messages=${cleanedMessages.length}`);
+        if (debug) log.info(`[openclaw] agent_end ingest ok=${result.ok}, agent=${currentAgentId}, messages=${cleanedMessages.length}`);
       } catch (e) {
-        if (debug) log.warn(`[cortex-bridge] agent_end error: ${(e as Error).message}`);
+        if (debug) log.warn(`[openclaw] agent_end error: ${(e as Error).message}`);
       }
     });
 
@@ -783,25 +783,25 @@ export default {
         if (messages.length === 0) return;
 
         await cortexFlush(cortexUrl, messages, currentAgentId, config);
-        if (debug) log.info(`[cortex-bridge] Hook flushed ${messages.length} messages`);
+        if (debug) log.info(`[openclaw] Hook flushed ${messages.length} messages`);
       } catch (e) {
-        if (debug) log.warn(`[cortex-bridge] Hook flush failed: ${(e as Error).message}`);
+        if (debug) log.warn(`[openclaw] Hook flush failed: ${(e as Error).message}`);
       }
     });
 
     // ── Service: startup health check ───────────────────
     api.registerService({
-      id: 'cortex-bridge',
+      id: 'openclaw',
       start: async () => {
         const status = await cortexHealthCheck(cortexUrl);
         if (status.ok) {
-          log.info(`[cortex-bridge] Cortex server online (${status.latency_ms}ms)`);
+          log.info(`[openclaw] Cortex server online (${status.latency_ms}ms)`);
         } else {
-          log.warn(`[cortex-bridge] Cortex server unreachable: ${status.error}`);
+          log.warn(`[openclaw] Cortex server unreachable: ${status.error}`);
         }
       },
       stop: async () => {
-        log.info('[cortex-bridge] Service stopped');
+        log.info('[openclaw] Service stopped');
       },
     });
   },

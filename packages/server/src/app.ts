@@ -54,7 +54,7 @@ export class CortexApp {
    * Only recreates providers whose config actually changed.
    * vectorBackend is NOT reloaded (requires restart).
    */
-  reloadProviders(newConfig: CortexConfig): string[] {
+  async reloadProviders(newConfig: CortexConfig): Promise<string[]> {
     const reloaded: string[] = [];
 
     // Check extraction LLM
@@ -77,6 +77,10 @@ export class CortexApp {
       this.embeddingProvider = new CachedEmbeddingProvider(baseEmbedding, 2000);
       reloaded.push('embedding');
       log.info('Reloaded embedding provider');
+      // Re-initialize vector backend so it rebuilds the vec0 table if dimensions changed
+      await this.vectorBackend.initialize(this.embeddingProvider.dimensions || 1536);
+      reloaded.push('vectorBackend');
+      log.info({ dimensions: this.embeddingProvider.dimensions }, 'Re-initialized vector backend for new embedding dimensions');
     }
 
     // Check which engine configs changed

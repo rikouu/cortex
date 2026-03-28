@@ -1,5 +1,5 @@
 {
-  "id": "cortex-bridge",
+  "id": "openclaw",
   "name": "Cortex Memory Bridge",
   "kind": "tool",
   "configSchema": {

@@ -419,7 +419,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
   app.patch('/api/v1/config', async (req) => {
     const body = req.body as any;
     const updated = updateConfig(body);
-    const reloaded = cortex.reloadProviders(updated);
+    const reloaded = await cortex.reloadProviders(updated);
     // Restart lifecycle scheduler if schedule changed
     if (body.lifecycle?.schedule !== undefined) {
       restartLifecycleScheduler(cortex);
@@ -499,6 +499,9 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
 
   // Full reindex — rebuilds all vector embeddings
   app.post('/api/v1/reindex', async (req, reply) => {
+    // Re-initialize vector backend in case embedding dimensions changed since startup
+    await cortex.vectorBackend.initialize(cortex.embeddingProvider.dimensions || 1536);
+
     const db = getDb();
     const memories = db.prepare('SELECT id, content FROM memories WHERE superseded_by IS NULL').all() as Pick<Memory, 'id' | 'content'>[];
     const activeIds = new Set(memories.map(m => m.id));
