@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { initDatabase, closeDatabase, getDb } from '../src/db/index.js';
 import { loadConfig } from '../src/utils/config.js';
+import { buildRelationSemanticId } from '../src/db/neo4j.js';
 import {
   insertMemory,
   getMemoryById,
@@ -136,6 +137,15 @@ describe('Database', () => {
       const list = listRelations({ subject: 'Harry' });
       expect(list.length).toBeGreaterThanOrEqual(1);
       expect(list.find(r => r.predicate === 'lives_in')).toBeDefined();
+    });
+
+    it('should build stable semantic ids for the same relation tuple', () => {
+      const a = buildRelationSemanticId({ subject: '用户', predicate: 'prefers', object: 'TypeScript', agent_id: 'saki' } as any);
+      const b = buildRelationSemanticId({ subject: '用户', predicate: 'prefers', object: 'TypeScript', agent_id: 'saki' } as any);
+      const c = buildRelationSemanticId({ subject: '用户', predicate: 'prefers', object: 'TypeScript', agent_id: 'main' } as any);
+
+      expect(a).toBe(b);
+      expect(a).not.toBe(c);
     });
 
     it('should delete relations', () => {

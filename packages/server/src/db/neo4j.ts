@@ -2,6 +2,7 @@
  * Neo4j graph database connection and relation queries.
  * Replaces SQLite-based relation storage with native graph operations.
  */
+import { createHash } from 'crypto';
 import neo4j, { Driver, Session } from 'neo4j-driver';
 
 let driver: Driver | null = null;
@@ -67,24 +68,97 @@ export interface GraphRelation {
   updated_at: string;
 }
 
+export function buildRelationSemanticId(rel: Pick<GraphRelation, 'subject' | 'predicate' | 'object' | 'agent_id'>): string {
+  return createHash('sha1')
+    .update(`${rel.agent_id}\u0000${rel.subject}\u0000${rel.predicate}\u0000${rel.object}`)
+    .digest('hex');
+}
+
 export async function upsertRelation(rel: Omit<GraphRelation, 'created_at' | 'updated_at'>): Promise<void> {
   if (!driver) return;
   const session = driver.session();
   const now = new Date().toISOString();
   const relType = rel.predicate.toUpperCase().replace(/[\s-]/g, '_');
+  const semanticId = buildRelationSemanticId(rel);
 
   try {
     await session.run(`
       MERGE (s:Entity {name: $subject})
       MERGE (o:Entity {name: $object})
-      MERGE (s)-[r:${relType} {id: $id}]->(o)
-      ON CREATE SET r.confidence = $confidence, r.agent_id = $agentId, r.source = $source,
-                    r.source_memory_id = $sourceMemoryId, r.extraction_count = $extractionCount,
-                    r.expired = $expired, r.created_at = $now, r.updated_at = $now
-      ON MATCH SET r.confidence = $confidence, r.extraction_count = r.extraction_count + 1,
-                   r.expired = $expired, r.updated_at = $now
     `, {
-      id: rel.id,
+      subject: rel.subject,
+      object: rel.object,
+    });
+
+    const existing = await session.run(`
+      MATCH (s:Entity {name: $subject})-[r:${relType}]->(o:Entity {name: $object})
+      WHERE r.agent_id = $agentId
+      RETURN elementId(r) AS element_id
+      ORDER BY r.updated_at DESC, r.created_at DESC
+    `, {
+      subject: rel.subject,
+      object: rel.object,
+      agentId: rel.agent_id,
+    });
+
+    if (existing.records.length > 0) {
+      const keepElementId = existing.records[0]!.get('element_id') as string;
+      const duplicateElementIds = existing.records.slice(1).map(r => r.get('element_id') as string);
+
+      await session.run(`
+        MATCH (s:Entity {name: $subject})-[r:${relType}]->(o:Entity {name: $object})
+        WHERE elementId(r) = $keepElementId
+        SET r.id = coalesce(r.id, $semanticId),
+            r.semantic_id = $semanticId,
+            r.confidence = $confidence,
+            r.agent_id = $agentId,
+            r.source = $source,
+            r.source_memory_id = coalesce($sourceMemoryId, r.source_memory_id),
+            r.extraction_count = coalesce(r.extraction_count, 0) + $extractionCount,
+            r.expired = $expired,
+            r.created_at = coalesce(r.created_at, $now),
+            r.updated_at = $now
+      `, {
+        keepElementId,
+        semanticId,
+        subject: rel.subject,
+        object: rel.object,
+        confidence: rel.confidence,
+        agentId: rel.agent_id,
+        source: rel.source,
+        sourceMemoryId: rel.source_memory_id || null,
+        extractionCount: neo4j.int(rel.extraction_count),
+        expired: neo4j.int(rel.expired),
+        now,
+      });
+
+      if (duplicateElementIds.length > 0) {
+        await session.run(`
+          MATCH ()-[r]->()
+          WHERE elementId(r) IN $duplicateElementIds
+          DELETE r
+        `, { duplicateElementIds });
+      }
+      return;
+    }
+
+    await session.run(`
+      MATCH (s:Entity {name: $subject})
+      MATCH (o:Entity {name: $object})
+      CREATE (s)-[r:${relType} {
+        id: $semanticId,
+        semantic_id: $semanticId,
+        confidence: $confidence,
+        agent_id: $agentId,
+        source: $source,
+        source_memory_id: $sourceMemoryId,
+        extraction_count: $extractionCount,
+        expired: $expired,
+        created_at: $now,
+        updated_at: $now
+      }]->(o)
+    `, {
+      semanticId,
       subject: rel.subject,
       object: rel.object,
       confidence: rel.confidence,
@@ -222,7 +296,7 @@ export async function traverseRelations(entityName: string, opts: {
 export async function findShortestPath(from: string, to: string, opts: {
   maxHops?: number;
   agentId?: string;
-}): Promise<{ path: { entity: string; predicate?: string }[]; hops: number }> {
+}): Promise<{ path: { entity?: string; predicate?: string }[]; hops: number }> {
   if (!driver) return { path: [], hops: 0 };
   const session = driver.session();
   const maxHops = opts.maxHops || 5;
@@ -242,7 +316,7 @@ export async function findShortestPath(from: string, to: string, opts: {
     const hops = typeof result.records[0]!.get('hops')?.toNumber === 'function'
       ? result.records[0]!.get('hops').toNumber() : result.records[0]!.get('hops');
 
-    const path: { entity: string; predicate?: string }[] = [];
+    const path: { entity?: string; predicate?: string }[] = [];
     for (let i = 0; i < entities.length; i++) {
       path.push({ entity: entities[i]! });
       if (i < predicates.length) {

@@ -155,7 +155,7 @@ export class MemorySieve {
     // 1. Fast channel (regex, no LLM)
     let highSignals: DetectedSignal[] = [];
     if (fastEnabled) {
-      const fastResult = await this.runFastChannel(exchange, agentId, req.session_id);
+      const fastResult = await this.runFastChannel(exchange, agentId, req.session_id, req.pairing_code);
       highSignals = fastResult.signals;
       extracted.push(...fastResult.extracted);
       deduplicated += fastResult.deduplicated;
@@ -170,7 +170,7 @@ export class MemorySieve {
     let deepExtractionCount = 0;
     let structuredExtractions: ExtractedMemory[] = [];
     if (!userIsSmallTalk) {
-      const deepResult = await this.runDeepChannel(exchange, agentId, req.session_id);
+      const deepResult = await this.runDeepChannel(exchange, agentId, req.session_id, req.pairing_code);
       extracted.push(...deepResult.extracted);
       deduplicated += deepResult.deduplicated;
       smartUpdated += deepResult.smart_updated;
@@ -182,7 +182,7 @@ export class MemorySieve {
 
     log.info({
       agent_id: agentId,
-        pairing_code: req.pairing_code,
+      pairing_code: req.pairing_code,
       high_signals: highSignals.length,
       deep_extractions: deepExtractionCount,
       extracted: extracted.length,
@@ -214,6 +214,7 @@ export class MemorySieve {
     exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     agentId: string,
     sessionId?: string,
+    pairingCode?: string,
   ): Promise<{ signals: DetectedSignal[]; extracted: Memory[]; deduplicated: number; smart_updated: number; extractionLog?: ExtractionLogData }> {
     const start = Date.now();
     const signals = detectHighSignals(exchange);
@@ -228,7 +229,7 @@ export class MemorySieve {
           source: 'user_stated' as const, reasoning: `signal: ${s.pattern}`,
         }));
         const batchResults = await this.writer.processNewMemoryBatch(
-          signalExtractions, agentId, sessionId, signals[0]?.confidence, 'session', req.pairing_code,
+          signalExtractions, agentId, sessionId, signals[0]?.confidence, 'session', pairingCode,
         );
         for (const result of batchResults) {
           if (result.action === 'skipped') { deduplicated++; continue; }
@@ -266,6 +267,7 @@ export class MemorySieve {
     exchange: { user: string; assistant: string; messages?: Array<{ role: 'user' | 'assistant'; content: string }> },
     agentId: string,
     sessionId?: string,
+    pairingCode?: string,
   ): Promise<{
     extracted: Memory[];
     deduplicated: number;
@@ -315,7 +317,7 @@ export class MemorySieve {
 
       try {
         const batchResults = await this.writer.processNewMemoryBatch(
-          structuredExtractions, agentId, sessionId, undefined, 'sieve', req.pairing_code,
+          structuredExtractions, agentId, sessionId, undefined, 'sieve', pairingCode,
         );
         for (const result of batchResults) {
           if (result.action === 'skipped') { deduplicated++; continue; }
@@ -342,7 +344,6 @@ export class MemorySieve {
               confidence: rel.confidence,
               source_memory_id: firstMemoryId || undefined,
               agent_id: agentId,
-        pairing_code: req.pairing_code,
               source: 'extraction',
               extraction_count: 1,
               expired: rel.expired ? 1 : 0,
@@ -356,7 +357,6 @@ export class MemorySieve {
               confidence: rel.confidence,
               source_memory_id: firstMemoryId,
               agent_id: agentId,
-        pairing_code: req.pairing_code,
               source: 'extraction',
               expired: rel.expired ? 1 : 0,
             });
