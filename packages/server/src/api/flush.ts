@@ -1,7 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { insertExtractionLog } from '../core/extraction-log.js';
-import { ensureAgent } from '../db/index.js';
+import { ensureAgent, getAgentById } from '../db/index.js';
+
+function isHooksDisabled(agentId: string | undefined): boolean {
+  if (!agentId || agentId === 'default') return false;
+  const agent = getAgentById(agentId);
+  if (!agent?.metadata) return false;
+  try {
+    const meta = JSON.parse(agent.metadata);
+    return meta.cortex_hooks_disabled === true;
+  } catch { return false; }
+}
 
 export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/flush', {
@@ -30,6 +40,12 @@ export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): vo
   }, async (req) => {
     const body = req.body as any;
     if (body.agent_id) ensureAgent(body.agent_id);
+
+    // Skip flush if agent has hooks disabled
+    if (isHooksDisabled(body.agent_id)) {
+      return { ok: true, skipped: true, reason: 'hooks_disabled' };
+    }
+
     const result = await cortex.flush.flush({
       messages: body.messages,
       agent_id: body.agent_id,
