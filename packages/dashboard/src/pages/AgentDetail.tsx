@@ -987,6 +987,40 @@ def ingest(user_msg: str, assistant_msg: str):
             </div>
           )}
 
+          {/* Cortex Hooks Toggle */}
+          {!isBuiltIn && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h3 style={{ margin: 0 }}>{t('agentDetail.cortexHooks')}</h3>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={!agent.metadata?.cortex_hooks_disabled}
+                    onChange={async (e) => {
+                      const disabled = !e.target.checked;
+                      try {
+                        const updated = await updateAgent(id!, {
+                          metadata: { ...agent.metadata, cortex_hooks_disabled: disabled || undefined },
+                        });
+                        setAgent((prev: any) => ({ ...prev, ...updated }));
+                        setToast({ message: disabled ? t('agentDetail.hooksDisabled') : t('agentDetail.hooksEnabled'), type: 'success' });
+                      } catch (err: any) {
+                        setToast({ message: err.message, type: 'error' });
+                      }
+                    }}
+                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                  />
+                  <span>{agent.metadata?.cortex_hooks_disabled ? t('agentDetail.hooksDisabledStatus') : t('agentDetail.hooksEnabledStatus')}</span>
+                </label>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: '8px 0 0 0' }}>
+                {t('agentDetail.cortexHooksDesc')}
+              </p>
+            </div>
+          )}
+
           {/* Delete */}
           {!isBuiltIn && (
             <div className="card" style={{ borderColor: 'var(--color-danger)' }}>
