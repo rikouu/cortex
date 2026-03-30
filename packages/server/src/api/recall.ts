@@ -1,16 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
-import { getAgentById } from '../db/index.js';
-
-function isHooksDisabled(agentId: string | undefined): boolean {
-  if (!agentId || agentId === 'default') return false;
-  const agent = getAgentById(agentId);
-  if (!agent?.metadata) return false;
-  try {
-    const meta = JSON.parse(agent.metadata);
-    return meta.cortex_hooks_disabled === true;
-  } catch { return false; }
-}
+import { isHooksDisabled } from './agent-hooks.js';
 
 export function registerRecallRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/recall', {
