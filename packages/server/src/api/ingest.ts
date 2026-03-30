@@ -2,17 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { CortexApp } from '../app.js';
 import { insertExtractionLog } from '../core/extraction-log.js';
 import { triggerMarkdownExport } from '../core/scheduler.js';
-import { ensureAgent, getAgentById } from '../db/index.js';
-
-function isHooksDisabled(agentId: string | undefined): boolean {
-  if (!agentId || agentId === 'default') return false;
-  const agent = getAgentById(agentId);
-  if (!agent?.metadata) return false;
-  try {
-    const meta = JSON.parse(agent.metadata);
-    return meta.cortex_hooks_disabled === true;
-  } catch { return false; }
-}
+import { ensureAgent } from '../db/index.js';
+import { isHooksDisabled } from './agent-hooks.js';
 
 export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): void {
   app.post('/api/v1/ingest', {
