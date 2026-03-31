@@ -548,7 +548,7 @@ export function closeDatabase(): void {
 export function backupDb(): string | null {
   const db = getDb();
   const config = getConfig();
-  const dbPath = path.resolve(config.storage.dbPath);
+  const dbPath = config.storage.dbPath;
   const dir = path.dirname(dbPath);
   const baseName = path.basename(dbPath);
   const backupPath = `${dbPath}.daily-${new Date().toISOString().slice(0, 10)}`;

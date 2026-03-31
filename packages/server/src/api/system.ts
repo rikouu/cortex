@@ -374,6 +374,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
         time: new Date().toISOString(),
         timezone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         uptime: Math.floor(process.uptime()),
+        resolvedDbPath: config.storage.dbPath,
       },
       llm: {
         extraction: {

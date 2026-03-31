@@ -203,6 +203,10 @@ export function loadConfig(overrides?: Partial<CortexConfig>): CortexConfig {
   // 3. Merge and validate
   const merged = deepMerge(deepMerge(fileConfig, envOverrides), overrides || {});
   _config = CortexConfigSchema.parse(merged);
+
+  // 4. Resolve relative dbPath to absolute so all downstream consumers get a stable path
+  _config.storage.dbPath = path.resolve(_config.storage.dbPath);
+
   return _config;
 }
 
