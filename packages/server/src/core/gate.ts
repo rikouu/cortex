@@ -64,6 +64,7 @@ export interface RecallRequest {
   max_tokens?: number;
   layers?: ('working' | 'core' | 'archive')[];
   skip_filters?: boolean;
+  exclude_ids?: string[];
 }
 
 export interface RecallResponse {
@@ -78,6 +79,7 @@ export interface RecallResponse {
     skipped: boolean;
     reason?: string;
     latency_ms: number;
+    memory_ids: string[];
   };
 }
 
@@ -115,6 +117,7 @@ export class MemoryGate {
           skipped: true,
           reason: 'small_talk',
           latency_ms: Date.now() - start,
+          memory_ids: [],
         },
       };
     }
@@ -267,6 +270,11 @@ export class MemoryGate {
 
     // Check recall timeout before reranking — return search results so far if exceeded
     if (checkTimeout()) {
+      // Apply exclude_ids before returning partial results
+      if (req.exclude_ids?.length) {
+        const excl = new Set(req.exclude_ids);
+        results = results.filter(r => !excl.has(r.id));
+      }
       log.warn({ latency_ms: Date.now() - start, stage: 'pre-rerank', results: results.length }, 'Recall timeout exceeded, returning partial results');
       return this._buildResponse(req, query, recallId, start, results, true);
     }
@@ -342,12 +350,23 @@ export class MemoryGate {
       }
     }
 
+    // --- Exclude previously injected memories ---
+    if (req.exclude_ids?.length) {
+      const excludeSet = new Set(req.exclude_ids);
+      const before = results.length;
+      results = results.filter(r => !excludeSet.has(r.id));
+      if (before !== results.length) {
+        log.debug({ excluded: before - results.length }, 'Excluded previously injected memories');
+      }
+    }
+
     // --- Fixed injection: agent_persona (independent token budget) ---
     // These define who the agent IS and are always injected regardless of query.
     // Uses fixedInjectionTokens budget, separate from search result budget.
     const fixedBudget = this.config.fixedInjectionTokens ?? 500;
     const fixedResults: SearchResult[] = [];
     const existingIds = new Set(results.map(r => r.id));
+    const excludeSet = req.exclude_ids?.length ? new Set(req.exclude_ids) : null;
 
     const { items: personaMemories } = listMemories({
       agent_id: req.agent_id,
@@ -357,6 +376,7 @@ export class MemoryGate {
       orderDir: 'desc',
     });
     for (const pm of personaMemories) {
+      if (excludeSet?.has(pm.id)) continue;
       if (existingIds.has(pm.id)) {
         // Already in search results — move to fixed bucket to use fixed budget
         results = results.filter(r => r.id !== pm.id);
@@ -396,10 +416,31 @@ export class MemoryGate {
     }
     const injectedCount = context ? context.split('\n').filter(l => l.startsWith('[')).length : 0;
 
-    // Check recall timeout before relation injection
+    // Check recall timeout before relation injection — return formatted results so far
     if (checkTimeout()) {
-      log.warn({ latency_ms: Date.now() - start, stage: 'pre-relations', results: results.length }, 'Recall timeout exceeded, returning partial results');
-      return this._buildResponse(req, query, recallId, start, results, true);
+      const latency = Date.now() - start;
+      log.warn({ latency_ms: latency, stage: 'pre-relations', results: results.length }, 'Recall timeout exceeded, returning partial results');
+      recallSessions.set(recallId, {
+        query,
+        memory_ids: results.map(r => r.id),
+        agent_id: req.agent_id || 'default',
+        created_at: Date.now(),
+      });
+      return {
+        context,
+        memories: results,
+        meta: {
+          query,
+          recall_id: recallId,
+          total_found: results.length,
+          injected_count: injectedCount,
+          relations_count: 0,
+          skipped: false,
+          reason: 'recall_timeout' as string | undefined,
+          latency_ms: latency,
+          memory_ids: [...results.map(r => r.id), ...fixedResults.map(r => r.id)],
+        },
+      };
     }
 
     // Inject relevant relations (Neo4j multi-hop or SQLite fallback)
@@ -555,6 +596,7 @@ export class MemoryGate {
         relations_count: relationsCount,
         skipped: false,
         latency_ms: latency,
+        memory_ids: [...results.map(r => r.id), ...fixedResults.map(r => r.id)],
       },
     };
     } finally {
@@ -600,6 +642,7 @@ export class MemoryGate {
         skipped: false,
         reason: partial ? 'recall_timeout' : undefined,
         latency_ms: latency,
+        memory_ids: results.map(r => r.id),
       },
     };
   }

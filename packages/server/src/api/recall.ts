@@ -15,6 +15,7 @@ export function registerRecallRoutes(app: FastifyInstance, cortex: CortexApp): v
           max_tokens: { type: 'number' },
           layers: { type: 'array', items: { type: 'string', enum: ['working', 'core', 'archive'] } },
           skip_filters: { type: 'boolean' },
+          exclude_ids: { type: 'array', items: { type: 'string' } },
         },
       },
     },
@@ -33,6 +34,7 @@ export function registerRecallRoutes(app: FastifyInstance, cortex: CortexApp): v
       max_tokens: body.max_tokens,
       layers: body.layers,
       skip_filters: body.skip_filters,
+      exclude_ids: body.exclude_ids,
     });
     return result;
   });

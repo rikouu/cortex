@@ -139,17 +139,20 @@ async function cortexRecall(
   query: string,
   agentId: string,
   config: Record<string, any> = {},
-): Promise<{ context: string; count: number } | null> {
+  excludeIds?: string[],
+): Promise<{ context: string; count: number; memory_ids: string[] } | null> {
+  const body: any = { query, agent_id: agentId };
+  if (excludeIds?.length) body.exclude_ids = excludeIds;
   const res = await fetch(`${cortexUrl}/api/v1/recall`, {
     method: 'POST',
     headers: getHeaders(config),
-    body: JSON.stringify({ query, agent_id: agentId }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(RECALL_TIMEOUT),
   });
   if (!res.ok) return null;
-  const data = (await res.json()) as { context: string; meta: { injected_count: number } };
+  const data = (await res.json()) as { context: string; meta: { injected_count: number; memory_ids?: string[] } };
   if (data.context && data.meta.injected_count > 0) {
-    return { context: data.context, count: data.meta.injected_count };
+    return { context: data.context, count: data.meta.injected_count, memory_ids: data.meta.memory_ids || [] };
   }
   return null;
 }
@@ -619,6 +622,9 @@ export default {
     // HOOKS (best-effort — may not fire for kind:"tool" plugins)
     // ════════════════════════════════════════════════════════
 
+    // Session-level tracking of injected memory IDs to avoid re-injection across turns
+    const injectedMemoryIds: Record<string, Set<string>> = {};
+
     // ── Hook: before_agent_start → Recall memories ──────
     api.on('before_agent_start', async (event: any, ctx?: any) => {
       try {
@@ -630,17 +636,39 @@ export default {
         const query = cleanForIngestion(rawQuery).slice(0, 500);
         if (!query || query.length < 5) return;
 
+        // Get previously injected memory IDs for this agent
+        const previousIds = injectedMemoryIds[currentAgentId];
+        const excludeIds = previousIds ? [...previousIds] : undefined;
+
         // Try recall with one retry on timeout
-        let result = await cortexRecall(cortexUrl, query, currentAgentId, config).catch(() => null);
+        let result = await cortexRecall(cortexUrl, query, currentAgentId, config, excludeIds).catch(() => null);
         if (!result) {
           // Retry once after a short delay
           await new Promise(r => setTimeout(r, 500));
-          result = await cortexRecall(cortexUrl, query, currentAgentId, config).catch(() => null);
+          result = await cortexRecall(cortexUrl, query, currentAgentId, config, excludeIds).catch(() => null);
           if (result && debug) log.info(`[openclaw] Hook recall succeeded on retry`);
         }
 
         if (result) {
-          log.info(`[openclaw] Hook recalled ${result.count} memories`);
+          // Track injected memory IDs for dedup in subsequent turns
+          if (!injectedMemoryIds[currentAgentId]) {
+            injectedMemoryIds[currentAgentId] = new Set();
+          }
+          for (const id of result.memory_ids) {
+            injectedMemoryIds[currentAgentId].add(id);
+          }
+
+          // Cap: if tracking too many IDs, trim oldest entries (Set preserves insertion order)
+          if (injectedMemoryIds[currentAgentId].size > 200) {
+            const excess = injectedMemoryIds[currentAgentId].size - 150;
+            let i = 0;
+            for (const id of injectedMemoryIds[currentAgentId]) {
+              if (i++ >= excess) break;
+              injectedMemoryIds[currentAgentId].delete(id);
+            }
+          }
+
+          log.info(`[openclaw] Hook recalled ${result.count} memories (excluded ${excludeIds?.length ?? 0} previously injected)`);
           return { prependContext: result.context };
         }
       } catch (e) {
