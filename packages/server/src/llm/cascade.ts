@@ -45,8 +45,9 @@ export class CascadeLLM implements LLMProvider {
     const purpose = opts?.purpose || 'unknown';
     const failures: string[] = [];
     let totalAttempts = 0;
+    const primaryProvider = this.providers[0]?.name;
 
-    for (const provider of this.providers) {
+    for (const [providerIndex, provider] of this.providers.entries()) {
       let lastError: any = null;
       const maxAttempts = this.retryConfig.maxRetries + 1;
 
@@ -55,9 +56,32 @@ export class CascadeLLM implements LLMProvider {
         try {
           const start = Date.now();
           const result = await provider.complete(prompt, opts);
+          const latencyMs = Date.now() - start;
           metrics.inc('llm_calls_total', { provider: provider.name, purpose });
-          metrics.observe('llm_latency_ms', Date.now() - start);
+          metrics.observe('llm_latency_ms', latencyMs);
           this.lastAttemptMeta = { provider: provider.name, attempt, totalAttempts };
+
+          const logMeta = {
+            provider: provider.name,
+            attempt,
+            totalAttempts,
+            purpose,
+            latency_ms: latencyMs,
+          };
+          if (providerIndex > 0) {
+            log.info(
+              {
+                ...logMeta,
+                primary_provider: primaryProvider,
+              },
+              'LLM fallback provider succeeded',
+            );
+          } else if (attempt > 1) {
+            log.info(logMeta, 'LLM provider succeeded after retry');
+          } else {
+            log.info(logMeta, 'LLM provider succeeded');
+          }
+
           return result;
         } catch (e: any) {
           lastError = e;
