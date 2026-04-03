@@ -34,13 +34,14 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
   }, async (req, reply) => {
     const body = req.body as any;
     if (body.agent_id) ensureAgent(body.agent_id);
+    const runtime = cortex.getRuntime(body.agent_id);
 
     // Skip ingestion if agent has hooks disabled
     if (isHooksDisabled(body.agent_id)) {
       return { ok: true, skipped: true, reason: 'hooks_disabled' };
     }
 
-    const result = await cortex.sieve.ingest({
+    const result = await runtime.sieve.ingest({
       user_message: body.user_message,
       assistant_message: body.assistant_message,
       messages: body.messages,

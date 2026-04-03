@@ -11,6 +11,7 @@ import type { CortexApp } from '../app.js';
 import type { CortexConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 import { backupDb } from '../db/connection.js';
+import { listAgents } from '../db/agent-queries.js';
 
 const log = createLogger('scheduler');
 
@@ -45,16 +46,37 @@ export function startLifecycleScheduler(cortex: CortexApp): void {
       log.info({ schedule }, 'Lifecycle cron triggered');
       try { backupDb(); } catch (e: any) { log.warn({ error: e.message }, 'Pre-lifecycle backup failed'); }
       try {
-        const report = await cortex.lifecycle.run(false, 'scheduled');
-        log.info(
-          {
-            promoted: report.promoted,
-            archived: report.archived,
-            merged: report.merged,
-            decayUpdated: report.decayUpdated,
-          },
-          'Lifecycle cron completed',
-        );
+        const agents = listAgents();
+        if (agents.length === 0) {
+          const report = await cortex.lifecycle.run(false, 'scheduled');
+          log.info(
+            {
+              promoted: report.promoted,
+              archived: report.archived,
+              merged: report.merged,
+              importanceAdjusted: report.importanceAdjusted,
+            },
+            'Lifecycle cron completed',
+          );
+          return;
+        }
+
+        const totals = {
+          promoted: 0,
+          archived: 0,
+          merged: 0,
+          importanceAdjusted: 0,
+        };
+
+        for (const agent of agents) {
+          const report = await cortex.getRuntime(agent.id).lifecycle.run(false, 'scheduled', agent.id);
+          totals.promoted += report.promoted;
+          totals.archived += report.archived;
+          totals.merged += report.merged;
+          totals.importanceAdjusted += report.importanceAdjusted ?? 0;
+        }
+
+        log.info(totals, 'Lifecycle cron completed');
       } catch (e: any) {
         log.error({ error: e.message }, 'Lifecycle cron failed');
       }

@@ -502,6 +502,26 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | **Ollama** | qwen2.5, llama3.2 | 完全本地，零成本 |
 | **OpenRouter** | 100+ 模型 | 统一网关 |
 
+现在每个提取 / 生命周期 LLM 都支持配置主提供商、可选回退提供商、重试参数（`retry.maxRetries`、`retry.baseDelayMs`）以及每个提供商独立的 `timeoutMs`。
+
+```json
+{
+  "llm": {
+    "extraction": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "timeoutMs": 30000,
+      "retry": { "maxRetries": 2, "baseDelayMs": 200 },
+      "fallback": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-haiku-4-5",
+        "timeoutMs": 30000
+      }
+    }
+  }
+}
+```
+
 ### Embedding（用于向量搜索）
 
 | 提供商 | 推荐模型 | 备注 |

@@ -2,10 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { getStats, getDb } from '../db/index.js';
 import { getConfig, updateConfig } from '../utils/config.js';
 import { restartLifecycleScheduler } from '../core/scheduler.js';
+import { sanitizeLLMConfig } from '../llm/config-utils.js';
 import { createLogger, getLogLevel as _getLogLevel, setLogLevel as _setLogLevel, getLogBuffer } from '../utils/logger.js';
 import { metrics } from '../utils/metrics.js';
 import type { CortexApp } from '../app.js';
 import type { Memory } from '../db/queries.js';
+import type { SearchResult } from '../search/index.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -377,18 +379,8 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
         resolvedDbPath: config.storage.dbPath,
       },
       llm: {
-        extraction: {
-          provider: config.llm.extraction.provider,
-          model: config.llm.extraction.model,
-          baseUrl: config.llm.extraction.baseUrl,
-          hasApiKey: !!config.llm.extraction.apiKey,
-        },
-        lifecycle: {
-          provider: config.llm.lifecycle.provider,
-          model: config.llm.lifecycle.model,
-          baseUrl: config.llm.lifecycle.baseUrl,
-          hasApiKey: !!config.llm.lifecycle.apiKey,
-        },
+        extraction: sanitizeLLMConfig(config.llm.extraction),
+        lifecycle: sanitizeLLMConfig(config.llm.lifecycle),
       },
       embedding: {
         provider: config.embedding.provider,
@@ -433,13 +425,30 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     const body = req.body as any;
     const target: 'extraction' | 'lifecycle' = body?.target === 'lifecycle' ? 'lifecycle' : 'extraction';
     const provider = target === 'extraction' ? cortex.llmExtraction : cortex.llmLifecycle;
-    const providerName = cortex.config.llm[target].provider;
+    const providerConfig = cortex.config.llm[target];
+    const providerName = providerConfig.provider;
     const start = Date.now();
     try {
       await provider.complete('Reply with exactly: OK', { maxTokens: 10, temperature: 0 });
-      return { ok: true, provider: providerName, latency_ms: Date.now() - start };
+      const attemptMeta = typeof (provider as any).getLastAttemptMeta === 'function'
+        ? (provider as any).getLastAttemptMeta()
+        : null;
+      return {
+        ok: true,
+        provider: providerName,
+        fallback_provider: providerConfig.fallback?.provider,
+        latency_ms: Date.now() - start,
+        used_provider: attemptMeta?.provider,
+        attempts: attemptMeta?.totalAttempts,
+      };
     } catch (e: any) {
-      return { ok: false, provider: providerName, latency_ms: Date.now() - start, error: e.message };
+      return {
+        ok: false,
+        provider: providerName,
+        fallback_provider: providerConfig.fallback?.provider,
+        latency_ms: Date.now() - start,
+        error: e.message,
+      };
     }
   });
 
@@ -477,10 +486,65 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     const start = Date.now();
     try {
       // Create a minimal test: rerank 3 simple documents
-      const testResults = [
-        { id: '1', content: 'The weather is nice today', layer: 'core' as any, category: 'fact', agent_id: 'test', importance: 0.5, decay_score: 1, access_count: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_accessed: new Date().toISOString(), score: 0.5 },
-        { id: '2', content: 'Cortex is a memory system for AI', layer: 'core' as any, category: 'fact', agent_id: 'test', importance: 0.5, decay_score: 1, access_count: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_accessed: new Date().toISOString(), score: 0.5 },
-        { id: '3', content: 'Docker containers need regular cleanup', layer: 'core' as any, category: 'fact', agent_id: 'test', importance: 0.5, decay_score: 1, access_count: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), last_accessed: new Date().toISOString(), score: 0.5 },
+      const now = new Date().toISOString();
+      const testResults: SearchResult[] = [
+        {
+          id: '1',
+          content: 'The weather is nice today',
+          layer: 'core',
+          category: 'fact',
+          agent_id: 'test',
+          importance: 0.5,
+          decay_score: 1,
+          access_count: 1,
+          created_at: now,
+          textScore: 0.2,
+          vectorScore: 0.2,
+          rawVectorSim: 0.2,
+          fusedScore: 0.2,
+          layerWeight: 1,
+          recencyBoost: 1,
+          accessBoost: 1,
+          finalScore: 0.2,
+        },
+        {
+          id: '2',
+          content: 'Cortex is a memory system for AI',
+          layer: 'core',
+          category: 'fact',
+          agent_id: 'test',
+          importance: 0.5,
+          decay_score: 1,
+          access_count: 1,
+          created_at: now,
+          textScore: 0.9,
+          vectorScore: 0.9,
+          rawVectorSim: 0.9,
+          fusedScore: 0.9,
+          layerWeight: 1,
+          recencyBoost: 1,
+          accessBoost: 1,
+          finalScore: 0.9,
+        },
+        {
+          id: '3',
+          content: 'Docker containers need regular cleanup',
+          layer: 'core',
+          category: 'fact',
+          agent_id: 'test',
+          importance: 0.5,
+          decay_score: 1,
+          access_count: 1,
+          created_at: now,
+          textScore: 0.1,
+          vectorScore: 0.1,
+          rawVectorSim: 0.1,
+          fusedScore: 0.1,
+          layerWeight: 1,
+          recencyBoost: 1,
+          accessBoost: 1,
+          finalScore: 0.1,
+        },
       ];
       const { createReranker } = await import('../search/reranker.js');
       const reranker = createReranker(rerankerConfig, cortex.llmExtraction);

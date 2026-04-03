@@ -21,13 +21,14 @@ export function registerRecallRoutes(app: FastifyInstance, cortex: CortexApp): v
     },
   }, async (req, reply) => {
     const body = req.body as any;
+    const runtime = cortex.getRuntime(body.agent_id);
 
     // Skip recall if agent has hooks disabled
     if (isHooksDisabled(body.agent_id)) {
       return { context: '', count: 0, memories: [], skipped: true };
     }
 
-    const result = await cortex.gate.recall({
+    const result = await runtime.gate.recall({
       query: body.query,
       agent_id: body.agent_id,
       pairing_code: body.pairing_code,

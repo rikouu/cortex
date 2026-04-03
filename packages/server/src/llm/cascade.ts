@@ -1,14 +1,26 @@
-import type { LLMProvider, LLMCompletionOpts } from './interface.js';
+import type { LLMProvider, LLMCompletionOpts, LLMCascadeConfig, LLMProviderConfig } from './interface.js';
 import { OpenAILLMProvider } from './openai.js';
 import { AnthropicLLMProvider } from './anthropic.js';
 import { OllamaLLMProvider } from './ollama.js';
 import { GoogleLLMProvider } from './google.js';
 import { OpenRouterLLMProvider } from './openrouter.js';
 import { DeepSeekLLMProvider } from './deepseek.js';
+import { normalizeLLMRetryConfig } from './config-utils.js';
 import { createLogger } from '../utils/logger.js';
 import { metrics } from '../utils/metrics.js';
 
 const log = createLogger('llm-cascade');
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export interface CascadeAttemptMeta {
+  provider: string;
+  attempt: number;
+  totalAttempts: number;
+}
 
 /**
  * Cascade LLM provider — tries providers in order, falls back on failure.
@@ -16,26 +28,69 @@ const log = createLogger('llm-cascade');
 export class CascadeLLM implements LLMProvider {
   readonly name = 'cascade';
   private providers: LLMProvider[];
+  private retryConfig: ReturnType<typeof normalizeLLMRetryConfig>;
+  private lastAttemptMeta: CascadeAttemptMeta | null = null;
 
-  constructor(providers: LLMProvider[]) {
+  constructor(providers: LLMProvider[], retry?: LLMCascadeConfig['retry']) {
     this.providers = providers;
+    this.retryConfig = normalizeLLMRetryConfig(retry);
+  }
+
+  getLastAttemptMeta(): CascadeAttemptMeta | null {
+    return this.lastAttemptMeta;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
+    this.lastAttemptMeta = null;
+    const purpose = opts?.purpose || 'unknown';
+    const failures: string[] = [];
+    let totalAttempts = 0;
+
     for (const provider of this.providers) {
-      try {
-        const start = Date.now();
-        const result = await provider.complete(prompt, opts);
-        metrics.inc('llm_calls_total', { provider: provider.name, purpose: opts?.purpose || 'unknown' });
-        metrics.observe('llm_latency_ms', Date.now() - start);
-        return result;
-      } catch (e: any) {
-        log.warn({ provider: provider.name, error: e.message }, 'LLM provider failed, trying next');
-        continue;
+      let lastError: any = null;
+      const maxAttempts = this.retryConfig.maxRetries + 1;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        totalAttempts++;
+        try {
+          const start = Date.now();
+          const result = await provider.complete(prompt, opts);
+          metrics.inc('llm_calls_total', { provider: provider.name, purpose });
+          metrics.observe('llm_latency_ms', Date.now() - start);
+          this.lastAttemptMeta = { provider: provider.name, attempt, totalAttempts };
+          return result;
+        } catch (e: any) {
+          lastError = e;
+          const message = e?.message || String(e);
+          const willRetry = attempt < maxAttempts;
+
+          if (willRetry) {
+            const delayMs = this.retryConfig.baseDelayMs * (2 ** (attempt - 1));
+            metrics.inc('llm_retry_attempts_total', { provider: provider.name, purpose });
+            log.warn(
+              { provider: provider.name, attempt, maxAttempts, delayMs, error: message, purpose },
+              'LLM provider attempt failed, retrying',
+            );
+            await sleep(delayMs);
+            continue;
+          }
+
+          failures.push(`${provider.name}: ${message}`);
+          log.warn(
+            { provider: provider.name, attempts: maxAttempts, error: message, purpose },
+            'LLM provider failed, trying next',
+          );
+        }
+      }
+
+      if (lastError && provider !== this.providers[this.providers.length - 1]) {
+        metrics.inc('llm_failovers_total', { provider: provider.name, purpose });
       }
     }
-    log.error('All LLM providers failed');
-    throw new Error('All LLM providers failed');
+
+    const errorMessage = `All LLM providers failed after ${totalAttempts} attempts: ${failures.join(' | ')}`;
+    log.error({ totalAttempts, failures }, 'All LLM providers failed');
+    throw new Error(errorMessage);
   }
 }
 
@@ -45,21 +100,23 @@ export class NullLLMProvider implements LLMProvider {
   async complete(): Promise<string> { return ''; }
 }
 
-export function createLLMProvider(config: { provider: string; model?: string; apiKey?: string; baseUrl?: string }): LLMProvider {
+export function createLLMProvider(config: LLMProviderConfig): LLMProvider {
   switch (config.provider) {
     case 'openai':
-      return new OpenAILLMProvider(config);
+      return new OpenAILLMProvider({ ...config, providerName: config.provider });
     case 'anthropic':
       return new AnthropicLLMProvider(config);
     case 'google':
     case 'gemini':
-      return new GoogleLLMProvider(config);
+      return new GoogleLLMProvider({ ...config, providerName: config.provider });
     case 'deepseek':
       return new DeepSeekLLMProvider(config);
     case 'dashscope':
       return new OpenAILLMProvider({
         ...config,
+        apiKey: config.apiKey || process.env.DASHSCOPE_API_KEY || '',
         baseUrl: config.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        providerName: 'dashscope',
       });
     case 'openrouter':
       return new OpenRouterLLMProvider(config);
@@ -73,13 +130,13 @@ export function createLLMProvider(config: { provider: string; model?: string; ap
   }
 }
 
-export function createCascadeLLM(
-  primary: { provider: string; model?: string; apiKey?: string; baseUrl?: string },
-  fallback?: { provider: string; model?: string; apiKey?: string; baseUrl?: string }
-): CascadeLLM {
-  const providers: LLMProvider[] = [createLLMProvider(primary)];
-  if (fallback && fallback.provider !== 'none') {
-    providers.push(createLLMProvider(fallback));
+export function createCascadeLLM(config: LLMCascadeConfig): CascadeLLM {
+  const providers: LLMProvider[] = [];
+  if (config.provider !== 'none' || !config.fallback || config.fallback.provider === 'none') {
+    providers.push(createLLMProvider(config));
   }
-  return new CascadeLLM(providers);
+  if (config.fallback && config.fallback.provider !== 'none') {
+    providers.push(createLLMProvider(config.fallback));
+  }
+  return new CascadeLLM(providers, config.retry);
 }

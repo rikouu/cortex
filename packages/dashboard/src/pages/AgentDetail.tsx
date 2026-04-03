@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getAgent, updateAgent, deleteAgent, getAgentConfig, checkAuth } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
+import { LLM_PROVIDERS, EMBEDDING_PROVIDERS, CUSTOM_MODEL, type ProviderPreset } from './Settings/types.js';
 
 function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -20,78 +21,106 @@ function fallbackCopy(text: string) {
   document.body.removeChild(ta);
 }
 
-// ─── Provider & Model Presets (shared with Settings) ─────────────────────────
+const RETRY_FIELD_PATHS = [
+  'maxRetries',
+  'retries',
+  'retryCount',
+  'retryAttempts',
+  'retry.maxRetries',
+  'retry.maxAttempts',
+  'retry.count',
+  'retry.attempts',
+];
 
-interface ProviderPreset {
-  label: string;
-  defaultBaseUrl: string;
-  models: string[];
-  envKey: string;
+const RETRY_DELAY_FIELD_PATHS = [
+  'baseDelayMs',
+  'retry.baseDelayMs',
+  'retry.delayMs',
+];
+
+function getValueAtPath(obj: any, path: string): any {
+  return path.split('.').reduce((acc, key) => acc?.[key], obj);
 }
 
-const LLM_PROVIDERS: Record<string, ProviderPreset> = {
-  openai: {
-    label: 'OpenAI',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    models: ['gpt-4o-mini', 'gpt-5.2', 'gpt-5.3-chat-latest', 'gpt-5.4'],
-    envKey: 'OPENAI_API_KEY',
-  },
-  anthropic: {
-    label: 'Anthropic',
-    defaultBaseUrl: 'https://api.anthropic.com',
-    models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
-    envKey: 'ANTHROPIC_API_KEY',
-  },
-  google: {
-    label: 'Google Gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-3-pro-preview'],
-    envKey: 'GOOGLE_API_KEY',
-  },
-  openrouter: {
-    label: 'OpenRouter',
-    defaultBaseUrl: 'https://openrouter.ai/api/v1',
-    models: ['anthropic/claude-sonnet-4-6', 'anthropic/claude-opus-4-6', 'anthropic/claude-haiku-4-5', 'openai/gpt-5.2', 'openai/gpt-4o-mini', 'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'deepseek/deepseek-v4', 'deepseek/deepseek-chat-v3', 'meta-llama/llama-4-maverick', 'qwen/qwen3-235b-a22b'],
-    envKey: 'OPENROUTER_API_KEY',
-  },
-  ollama: {
-    label: 'Ollama (Local)',
-    defaultBaseUrl: 'http://localhost:11434',
-    models: ['qwen2.5:3b', 'qwen2.5:7b', 'qwen2.5:14b', 'llama3.2:3b', 'llama3.2:8b', 'mistral:7b', 'mistral-nemo:12b', 'deepseek-r1:7b', 'deepseek-r1:14b', 'gemma2:9b', 'phi3:14b'],
-    envKey: '',
-  },
-  none: { label: 'Disabled', defaultBaseUrl: '', models: [], envKey: '' },
-};
+function setValueAtPath(obj: any, path: string, value: any) {
+  const keys = path.split('.');
+  let current = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i]!;
+    if (!current[key] || typeof current[key] !== 'object') current[key] = {};
+    current = current[key];
+  }
+  current[keys[keys.length - 1]!] = value;
+}
 
-const EMBEDDING_PROVIDERS: Record<string, ProviderPreset> = {
-  openai: {
-    label: 'OpenAI',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    models: ['text-embedding-3-small', 'text-embedding-3-large', 'text-embedding-ada-002'],
-    envKey: 'OPENAI_API_KEY',
-  },
-  google: {
-    label: 'Google Gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    models: ['text-embedding-004', 'embedding-001'],
-    envKey: 'GOOGLE_API_KEY',
-  },
-  voyage: {
-    label: 'Voyage AI',
-    defaultBaseUrl: 'https://api.voyageai.com/v1',
-    models: ['voyage-3', 'voyage-3-lite', 'voyage-code-3'],
-    envKey: 'VOYAGE_API_KEY',
-  },
-  ollama: {
-    label: 'Ollama (Local)',
-    defaultBaseUrl: 'http://localhost:11434',
-    models: ['bge-m3', 'nomic-embed-text', 'mxbai-embed-large', 'all-minilm'],
-    envKey: '',
-  },
-  none: { label: 'Disabled', defaultBaseUrl: '', models: [], envKey: '' },
-};
+function getNumericConfig(raw: any, paths: string[], fallbackPath: string, fallbackValue = 0): { value: number; path: string } {
+  for (const path of paths) {
+    const candidate = getValueAtPath(raw, path);
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      const parsed = Number(candidate);
+      return { value: Number.isFinite(parsed) ? parsed : fallbackValue, path };
+    }
+  }
+  return { value: fallbackValue, path: fallbackPath };
+}
 
-const CUSTOM_MODEL = '__custom__';
+function buildProviderDraft(raw: any, providerMap: Record<string, ProviderPreset>, defaultProvider: string) {
+  const provider = raw?.provider ?? defaultProvider;
+  const model = raw?.model ?? '';
+  const isCustom = !!model && !(providerMap[provider]?.models ?? []).includes(model);
+
+  return {
+    provider,
+    model,
+    customModel: isCustom ? model : '',
+    useCustomModel: isCustom,
+    apiKey: '',
+    baseUrl: raw?.baseUrl ?? '',
+    timeoutMs: raw?.timeoutMs ?? '',
+    hasApiKey: raw?.hasApiKey ?? !!raw?.apiKey,
+    defaultProvider,
+  };
+}
+
+function buildLlmTargetDraft(raw: any) {
+  const usesPrimaryObject = !!raw?.primary;
+  const primary = usesPrimaryObject ? raw.primary : raw;
+  const retry = getNumericConfig(raw, RETRY_FIELD_PATHS, 'retry.maxRetries', 0);
+  const retryDelay = getNumericConfig(raw, RETRY_DELAY_FIELD_PATHS, 'retry.baseDelayMs', 200);
+
+  return {
+    ...buildProviderDraft(primary, LLM_PROVIDERS, 'openai'),
+    fallback: buildProviderDraft(raw?.fallback, LLM_PROVIDERS, 'none'),
+    maxRetries: retry.value,
+    baseDelayMs: retryDelay.value,
+    _retryPath: retry.path,
+    _retryDelayPath: retryDelay.path,
+    _usesPrimaryObject: usesPrimaryObject,
+  };
+}
+
+function buildProviderPayload(draftValue: any) {
+  const model = draftValue?.useCustomModel ? draftValue?.customModel : draftValue?.model;
+  const payload: any = {
+    provider: draftValue?.provider ?? draftValue?.defaultProvider ?? 'none',
+    model: model ?? '',
+  };
+  if (draftValue?.baseUrl) payload.baseUrl = draftValue.baseUrl;
+  if (draftValue?.timeoutMs !== '' && draftValue?.timeoutMs !== undefined && draftValue?.timeoutMs !== null) {
+    payload.timeoutMs = Number(draftValue.timeoutMs);
+  }
+  if (draftValue?.apiKey) payload.apiKey = draftValue.apiKey;
+  return payload;
+}
+
+function buildLlmTargetPayload(draftValue: any) {
+  const primaryPayload = buildProviderPayload(draftValue);
+  const payload: any = draftValue?._usesPrimaryObject ? { primary: primaryPayload } : { ...primaryPayload };
+  payload.fallback = buildProviderPayload(draftValue?.fallback);
+  setValueAtPath(payload, 'retry.maxRetries', Number(draftValue?.maxRetries ?? 0));
+  setValueAtPath(payload, 'retry.baseDelayMs', Number(draftValue?.baseDelayMs ?? 200));
+  return payload;
+}
 
 type TabKey = 'overview' | 'config' | 'integration';
 
@@ -209,6 +238,7 @@ export default function AgentDetail() {
   // Config editing
   const [editingConfig, setEditingConfig] = useState(false);
   const [configDraft, setConfigDraft] = useState<any>({});
+  const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
   const [authEnabled, setAuthEnabled] = useState(false);
 
   useEffect(() => {
@@ -271,10 +301,10 @@ export default function AgentDetail() {
     const override = agent.config_override || {};
     const mc = mergedConfig?.config || {};
 
-    const buildDraft = (section: string, mc: any, override: any, providerMap: Record<string, ProviderPreset>) => {
-      const provider = override?.provider ?? mc?.provider ?? 'openai';
-      const model = override?.model ?? mc?.model ?? '';
-      const preset = providerMap[provider];
+    const buildEmbeddingDraft = (effective: any, agentOverride: any) => {
+      const provider = agentOverride?.provider ?? effective?.provider ?? 'openai';
+      const model = agentOverride?.model ?? effective?.model ?? '';
+      const preset = EMBEDDING_PROVIDERS[provider];
       const isCustom = model && !(preset?.models ?? []).includes(model);
 
       return {
@@ -283,18 +313,47 @@ export default function AgentDetail() {
         customModel: isCustom ? model : '',
         useCustomModel: isCustom,
         apiKey: '',
-        baseUrl: override?.baseUrl ?? '',
-        hasApiKey: mc?.hasApiKey ?? false,
-        isOverridden: !!override?.provider || !!override?.model,
-        ...(section === 'embedding' ? { dimensions: override?.dimensions ?? mc?.dimensions ?? 1536 } : {}),
+        baseUrl: agentOverride?.baseUrl ?? '',
+        hasApiKey: effective?.hasApiKey ?? !!agentOverride?.apiKey,
+        isOverridden: !!agentOverride,
+        dimensions: agentOverride?.dimensions ?? effective?.dimensions ?? 1536,
+        defaultProvider: 'openai',
       };
     };
 
-    setConfigDraft({
-      extraction: buildDraft('extraction', mc.llm?.extraction, override.llm?.extraction, LLM_PROVIDERS),
-      lifecycle: buildDraft('lifecycle', mc.llm?.lifecycle, override.llm?.lifecycle, LLM_PROVIDERS),
-      embedding: buildDraft('embedding', mc.embedding, override.embedding, EMBEDDING_PROVIDERS),
+    const nextDraft = {
+      extraction: buildLlmTargetDraft(override.llm?.extraction ? {
+        ...mc.llm?.extraction,
+        ...override.llm.extraction,
+        fallback: override.llm.extraction.fallback ?? mc.llm?.extraction?.fallback,
+        primary: override.llm.extraction.primary ?? mc.llm?.extraction?.primary,
+      } : mc.llm?.extraction),
+      lifecycle: buildLlmTargetDraft(override.llm?.lifecycle ? {
+        ...mc.llm?.lifecycle,
+        ...override.llm.lifecycle,
+        fallback: override.llm.lifecycle.fallback ?? mc.llm?.lifecycle?.fallback,
+        primary: override.llm.lifecycle.primary ?? mc.llm?.lifecycle?.primary,
+      } : mc.llm?.lifecycle),
+      embedding: buildEmbeddingDraft(mc.embedding, override.embedding),
+    };
+
+    setSavedKeys(prev => {
+      const next = { ...prev };
+      for (const [prefix, sub] of [
+        ['extraction', nextDraft.extraction],
+        ['extraction.fallback', nextDraft.extraction?.fallback],
+        ['lifecycle', nextDraft.lifecycle],
+        ['lifecycle.fallback', nextDraft.lifecycle?.fallback],
+        ['embedding', nextDraft.embedding],
+      ] as const) {
+        if (sub?.hasApiKey && !next[`${prefix}::${sub.provider}`]) {
+          next[`${prefix}::${sub.provider}`] = '__CONFIGURED__';
+        }
+      }
+      return next;
     });
+
+    setConfigDraft(nextDraft);
     setEditingConfig(true);
   };
 
@@ -311,20 +370,35 @@ export default function AgentDetail() {
 
   const saveConfig = async () => {
     try {
-      const buildPayload = (d: any) => {
-        const out: any = { provider: d.provider, model: d.useCustomModel ? d.customModel : d.model };
-        if (d.apiKey) out.apiKey = d.apiKey;
-        if (d.baseUrl) out.baseUrl = d.baseUrl;
-        return out;
-      };
+      for (const key of ['extraction', 'lifecycle'] as const) {
+        const retryCount = Number(configDraft[key]?.maxRetries ?? 0);
+        if (!Number.isInteger(retryCount) || retryCount < 0 || retryCount > 10) {
+          setToast({ message: t('agentDetail.validationRetryRange'), type: 'error' });
+          return;
+        }
+        const retryDelay = Number(configDraft[key]?.baseDelayMs ?? 200);
+        if (!Number.isInteger(retryDelay) || retryDelay < 0 || retryDelay > 5000) {
+          setToast({ message: t('agentDetail.validationRetryDelayRange'), type: 'error' });
+          return;
+        }
+        for (const branch of [configDraft[key], configDraft[key]?.fallback]) {
+          const timeoutRaw = branch?.timeoutMs;
+          if (timeoutRaw === '' || timeoutRaw === undefined || timeoutRaw === null) continue;
+          const timeoutMs = Number(timeoutRaw);
+          if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 300000) {
+            setToast({ message: t('agentDetail.validationTimeoutRange'), type: 'error' });
+            return;
+          }
+        }
+      }
 
       const config_override: any = {
         llm: {
-          extraction: buildPayload(configDraft.extraction),
-          lifecycle: buildPayload(configDraft.lifecycle),
+          extraction: buildLlmTargetPayload(configDraft.extraction),
+          lifecycle: buildLlmTargetPayload(configDraft.lifecycle),
         },
         embedding: {
-          ...buildPayload(configDraft.embedding),
+          ...buildProviderPayload(configDraft.embedding),
           dimensions: Number(configDraft.embedding.dimensions),
         },
       };
@@ -362,19 +436,33 @@ export default function AgentDetail() {
     for (const k of keys) d = d?.[k];
     if (!d) return null;
 
-    const provider = d.provider ?? 'openai';
+    const provider = d.provider ?? d.defaultProvider ?? 'openai';
     const preset = providerMap[provider];
     const models = preset?.models ?? [];
     const isCustomModel = d.useCustomModel;
     const isDisabled = provider === 'none';
 
     const handleProviderChange = (newProvider: string) => {
+      const currentKey = d.apiKey;
+      if (currentKey) {
+        setSavedKeys(prev => ({ ...prev, [`${prefix}::${provider}`]: currentKey }));
+      } else if (d.hasApiKey) {
+        setSavedKeys(prev => ({ ...prev, [`${prefix}::${provider}`]: prev[`${prefix}::${provider}`] || '__CONFIGURED__' }));
+      }
       updateDraft(`${prefix}.provider`, newProvider);
       const newPreset = providerMap[newProvider];
       updateDraft(`${prefix}.model`, newPreset?.models?.[0] ?? '');
       updateDraft(`${prefix}.useCustomModel`, false);
       updateDraft(`${prefix}.customModel`, '');
       updateDraft(`${prefix}.baseUrl`, '');
+      const restoredKey = savedKeys[`${prefix}::${newProvider}`] ?? '';
+      if (restoredKey === '__CONFIGURED__') {
+        updateDraft(`${prefix}.apiKey`, '');
+        updateDraft(`${prefix}.hasApiKey`, true);
+      } else {
+        updateDraft(`${prefix}.apiKey`, restoredKey);
+        updateDraft(`${prefix}.hasApiKey`, !!restoredKey);
+      }
     };
 
     const handleModelSelectChange = (val: string) => {
@@ -477,8 +565,86 @@ export default function AgentDetail() {
                 onChange={e => updateDraft(`${prefix}.baseUrl`, e.target.value)}
               />
             </div>
+
+            <div className="form-group">
+              <label>
+                {t('agentDetail.timeoutMs')}
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t('common.optional')}</span>
+              </label>
+              <input
+                type="number"
+                min={100}
+                max={300000}
+                value={d.timeoutMs ?? ''}
+                placeholder={provider === 'ollama' ? '60000' : '30000'}
+                onChange={e => updateDraft(`${prefix}.timeoutMs`, e.target.value)}
+              />
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4, lineHeight: 1.5 }}>
+                {t('agentDetail.timeoutMsDesc')}
+              </div>
+            </div>
           </>
         )}
+      </div>
+    );
+  };
+
+  const renderLlmStrategyBlock = (title: string, prefix: 'extraction' | 'lifecycle') => (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{title}</div>
+      {renderProviderBlock(t('agentDetail.primaryProvider'), prefix, LLM_PROVIDERS)}
+      <div className="form-group" style={{ marginBottom: 20 }}>
+        <label>{t('agentDetail.retryAttempts')}</label>
+        <input
+          type="number"
+          min={0}
+          max={10}
+          value={configDraft?.[prefix]?.maxRetries ?? 0}
+          onChange={e => updateDraft(`${prefix}.maxRetries`, e.target.value)}
+          style={{ width: 160 }}
+        />
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4, lineHeight: 1.5 }}>
+          {t('agentDetail.retryAttemptsDesc')}
+        </div>
+      </div>
+      <div className="form-group" style={{ marginBottom: 20 }}>
+        <label>{t('agentDetail.retryDelayMs')}</label>
+        <input
+          type="number"
+          min={0}
+          max={5000}
+          value={configDraft?.[prefix]?.baseDelayMs ?? 200}
+          onChange={e => updateDraft(`${prefix}.baseDelayMs`, e.target.value)}
+          style={{ width: 160 }}
+        />
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4, lineHeight: 1.5 }}>
+          {t('agentDetail.retryDelayMsDesc')}
+        </div>
+      </div>
+      {renderProviderBlock(t('agentDetail.fallbackProvider'), `${prefix}.fallback`, LLM_PROVIDERS)}
+    </div>
+  );
+
+  const getRetryCount = (llmConfig: any) => getNumericConfig(llmConfig, RETRY_FIELD_PATHS, 'retry.maxRetries', 0).value;
+  const getRetryDelay = (llmConfig: any) => getNumericConfig(llmConfig, RETRY_DELAY_FIELD_PATHS, 'retry.baseDelayMs', 200).value;
+
+  const formatProviderSummary = (providerConfig: any) => {
+    if (!providerConfig?.provider || providerConfig.provider === 'none') return t('agentDetail.fallbackDisabled');
+    return `${providerConfig.provider}${providerConfig.model ? ` / ${providerConfig.model}` : ''}`;
+  };
+
+  const renderLlmSummary = (llmConfig: any) => {
+    const primary = llmConfig?.primary ?? llmConfig;
+    const fallback = llmConfig?.fallback;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span>{formatProviderSummary(primary)}</span>
+        <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          {t('agentDetail.fallbackSummary', { value: formatProviderSummary(fallback) })}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          {t('agentDetail.retryAttemptsSummary', { count: getRetryCount(llmConfig) })} · {t('agentDetail.retryDelaySummary', { value: getRetryDelay(llmConfig) })}
+        </span>
       </div>
     );
   };
@@ -979,8 +1145,8 @@ def ingest(user_msg: str, assistant_msg: str):
               )}
               <table>
                 <tbody>
-                  <tr><td style={{ width: '30%' }}>{t('agentDetail.extractionLlm')}</td><td>{mc.llm?.extraction?.provider} / {mc.llm?.extraction?.model}</td></tr>
-                  <tr><td>{t('agentDetail.lifecycleLlm')}</td><td>{mc.llm?.lifecycle?.provider} / {mc.llm?.lifecycle?.model}</td></tr>
+                  <tr><td style={{ width: '30%' }}>{t('agentDetail.extractionLlm')}</td><td>{renderLlmSummary(mc.llm?.extraction)}</td></tr>
+                  <tr><td>{t('agentDetail.lifecycleLlm')}</td><td>{renderLlmSummary(mc.llm?.lifecycle)}</td></tr>
                   <tr><td>{t('agentDetail.embedding')}</td><td>{mc.embedding?.provider} / {mc.embedding?.model}</td></tr>
                 </tbody>
               </table>
@@ -1059,8 +1225,8 @@ def ingest(user_msg: str, assistant_msg: str):
 
             {editingConfig ? (
               <>
-                {renderProviderBlock(t('agentDetail.extractionLlm'), 'extraction', LLM_PROVIDERS)}
-                {renderProviderBlock(t('agentDetail.lifecycleLlm'), 'lifecycle', LLM_PROVIDERS)}
+                {renderLlmStrategyBlock(t('agentDetail.extractionLlm'), 'extraction')}
+                {renderLlmStrategyBlock(t('agentDetail.lifecycleLlm'), 'lifecycle')}
                 {renderProviderBlock(t('agentDetail.embedding'), 'embedding', EMBEDDING_PROVIDERS)}
               </>
             ) : (
@@ -1071,7 +1237,7 @@ def ingest(user_msg: str, assistant_msg: str):
                       <tr>
                         <td style={{ width: '30%' }}>{t('agentDetail.extractionLlm')}</td>
                         <td>
-                          {mc.llm?.extraction?.provider} / {mc.llm?.extraction?.model}
+                          {renderLlmSummary(mc.llm?.extraction)}
                           {mergedConfig?.has_override && agent.config_override?.llm?.extraction && (
                             <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>{t('agentDetail.overridden')}</span>
                           )}
@@ -1080,7 +1246,7 @@ def ingest(user_msg: str, assistant_msg: str):
                       <tr>
                         <td>{t('agentDetail.lifecycleLlm')}</td>
                         <td>
-                          {mc.llm?.lifecycle?.provider} / {mc.llm?.lifecycle?.model}
+                          {renderLlmSummary(mc.llm?.lifecycle)}
                           {mergedConfig?.has_override && agent.config_override?.llm?.lifecycle && (
                             <span style={{ marginLeft: 8, fontSize: 11, color: '#c084fc' }}>{t('agentDetail.overridden')}</span>
                           )}

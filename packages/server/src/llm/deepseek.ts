@@ -8,11 +8,13 @@ export class DeepSeekLLMProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
   private baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number }) {
     this.apiKey = opts.apiKey || process.env.DEEPSEEK_API_KEY || '';
     this.model = opts.model || 'deepseek-chat';
     this.baseUrl = opts.baseUrl || 'https://api.deepseek.com/v1';
+    this.timeoutMs = opts.timeoutMs || 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -36,7 +38,7 @@ export class DeepSeekLLMProvider implements LLMProvider {
         max_tokens: opts?.maxTokens || 500,
         temperature: opts?.temperature ?? 0.3,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!res.ok) {

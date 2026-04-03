@@ -7,6 +7,7 @@ export interface Agent {
   name: string;
   description: string | null;
   config_override: string | null;
+  metadata: string | null;
   created_at: string;
   updated_at: string;
 }

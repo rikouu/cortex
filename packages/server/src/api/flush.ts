@@ -31,13 +31,14 @@ export function registerFlushRoutes(app: FastifyInstance, cortex: CortexApp): vo
   }, async (req) => {
     const body = req.body as any;
     if (body.agent_id) ensureAgent(body.agent_id);
+    const runtime = cortex.getRuntime(body.agent_id);
 
     // Skip flush if agent has hooks disabled
     if (isHooksDisabled(body.agent_id)) {
       return { ok: true, skipped: true, reason: 'hooks_disabled' };
     }
 
-    const result = await cortex.flush.flush({
+    const result = await runtime.flush.flush({
       messages: body.messages,
       agent_id: body.agent_id,
       session_id: body.session_id,

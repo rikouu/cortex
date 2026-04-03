@@ -16,7 +16,8 @@ const VALID_MCP_CATEGORIES = new Set<string>([
 export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void {
   const deps: MCPServerDeps = {
     recall: async (query, agentId, maxResults) => {
-      const result = await cortex.gate.recall({
+      const runtime = cortex.getRuntime(agentId || 'mcp');
+      const result = await runtime.gate.recall({
         query,
         agent_id: agentId || 'mcp',
       });
@@ -29,8 +30,9 @@ export function registerMCPRoutes(app: FastifyInstance, cortex: CortexApp): void
       const validCategory = (category && VALID_MCP_CATEGORIES.has(category) ? category : 'fact') as MemoryCategory;
       const aid = agentId || 'mcp';
       ensureAgent(aid);
+      const runtime = cortex.getRuntime(aid);
 
-      const writer = new MemoryWriter(cortex.llmExtraction, cortex.embeddingProvider, cortex.vectorBackend, cortex.config);
+      const writer = new MemoryWriter(runtime.llmExtraction, cortex.embeddingProvider, cortex.vectorBackend, cortex.config);
       const extraction = {
         content,
         category: validCategory,

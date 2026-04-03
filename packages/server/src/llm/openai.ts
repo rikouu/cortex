@@ -4,15 +4,18 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('llm-openai');
 
 export class OpenAILLMProvider implements LLMProvider {
-  readonly name = 'openai';
+  readonly name: string;
   private apiKey: string;
   private model: string;
   private baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number; providerName?: string }) {
+    this.name = opts.providerName || 'openai';
     this.apiKey = opts.apiKey || process.env.OPENAI_API_KEY || '';
     this.model = opts.model || 'gpt-4o-mini';
     this.baseUrl = opts.baseUrl || 'https://api.openai.com/v1';
+    this.timeoutMs = opts.timeoutMs || 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -36,7 +39,7 @@ export class OpenAILLMProvider implements LLMProvider {
         max_tokens: opts?.maxTokens || 500,
         temperature: opts?.temperature ?? 0.3,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!res.ok) {

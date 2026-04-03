@@ -3,12 +3,35 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 
+const LLMRetrySchema = z.object({
+  maxRetries: z.number().int().min(0).max(10).optional(),
+  baseDelayMs: z.number().int().min(0).max(5000).optional(),
+});
+
 const LLMProviderSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'google', 'gemini', 'deepseek', 'openrouter', 'ollama', 'none']),
+  provider: z.enum(['openai', 'anthropic', 'google', 'gemini', 'deepseek', 'dashscope', 'openrouter', 'ollama', 'none']),
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
   timeoutMs: z.number().optional(),
+});
+
+const LLMCascadeSchema = LLMProviderSchema.extend({
+  fallback: LLMProviderSchema.optional(),
+  retry: LLMRetrySchema.optional(),
+  // Legacy flat retry fields kept for backward compatibility with older config exports/imports.
+  maxRetries: z.number().int().min(0).max(10).optional(),
+  baseDelayMs: z.number().int().min(0).max(5000).optional(),
+}).transform(({ maxRetries, baseDelayMs, retry, ...rest }) => {
+  const mergedRetry = {
+    ...(retry ?? {}),
+    ...(maxRetries !== undefined ? { maxRetries } : {}),
+    ...(baseDelayMs !== undefined ? { baseDelayMs } : {}),
+  };
+  return {
+    ...rest,
+    ...(Object.keys(mergedRetry).length > 0 ? { retry: mergedRetry } : {}),
+  };
 });
 
 const EmbeddingProviderSchema = z.object({
@@ -53,8 +76,8 @@ const CortexConfigSchema = z.object({
     walMode: z.boolean().default(true),
   }).default({}),
   llm: z.object({
-    extraction: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o' }),
-    lifecycle: LLMProviderSchema.default({ provider: 'openai', model: 'gpt-4o-mini' }),
+    extraction: LLMCascadeSchema.default({ provider: 'openai', model: 'gpt-4o' }),
+    lifecycle: LLMCascadeSchema.default({ provider: 'openai', model: 'gpt-4o-mini' }),
   }).default({}),
   embedding: EmbeddingProviderSchema.default({
     provider: 'openai',

@@ -26,6 +26,19 @@ function maskSensitive(obj: any): any {
   return obj;
 }
 
+function stripHasApiKey(obj: any): any {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(stripHasApiKey);
+
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'hasApiKey') continue;
+    if (key === 'apiKey' && (value === '' || value === null || value === undefined)) continue;
+    result[key] = stripHasApiKey(value);
+  }
+  return result;
+}
+
 export default function DataManagement({ config, setConfig, setToast, t }: DataManagementProps) {
   const [showConfig, setShowConfig] = useState(false);
   const [reindexing, setReindexing] = useState(false);
@@ -116,7 +129,7 @@ export default function DataManagement({ config, setConfig, setToast, t }: DataM
                   if (!file) return;
                   try {
                     const text = await file.text();
-                    const parsed = JSON.parse(text);
+                    const parsed = stripHasApiKey(JSON.parse(text));
                     delete parsed.port;
                     delete parsed.host;
                     delete parsed.storage;
@@ -124,16 +137,6 @@ export default function DataManagement({ config, setConfig, setToast, t }: DataM
                     delete parsed.cors;
                     delete parsed.rateLimit;
                     delete parsed.vectorBackend;
-                    for (const key of ['extraction', 'lifecycle']) {
-                      if (parsed.llm?.[key]?.hasApiKey !== undefined) {
-                        delete parsed.llm[key].hasApiKey;
-                        if (!parsed.llm[key].apiKey) delete parsed.llm[key].apiKey;
-                      }
-                    }
-                    if (parsed.embedding?.hasApiKey !== undefined) {
-                      delete parsed.embedding.hasApiKey;
-                      if (!parsed.embedding.apiKey) delete parsed.embedding.apiKey;
-                    }
                     if (!confirm(t('settings.confirmImportConfig'))) return;
                     await updateConfig(parsed);
                     const refreshed = await getConfig();

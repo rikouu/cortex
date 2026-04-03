@@ -33,6 +33,114 @@ function formatUptime(seconds: number): string {
   return `${m}m`;
 }
 
+const RETRY_FIELD_PATHS = [
+  'maxRetries',
+  'retries',
+  'retryCount',
+  'retryAttempts',
+  'retry.maxRetries',
+  'retry.maxAttempts',
+  'retry.count',
+  'retry.attempts',
+];
+
+const RETRY_DELAY_FIELD_PATHS = [
+  'baseDelayMs',
+  'retry.baseDelayMs',
+  'retry.delayMs',
+];
+
+function getValueAtPath(obj: any, path: string): any {
+  return path.split('.').reduce((acc, key) => acc?.[key], obj);
+}
+
+function setValueAtPath(obj: any, path: string, value: any) {
+  const keys = path.split('.');
+  let current = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i]!;
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    current = current[key];
+  }
+  current[keys[keys.length - 1]!] = value;
+}
+
+function getNumericConfig(raw: any, paths: string[], fallbackPath: string, fallbackValue = 0): { value: number; path: string } {
+  for (const path of paths) {
+    const candidate = getValueAtPath(raw, path);
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      const parsed = Number(candidate);
+      return { value: Number.isFinite(parsed) ? parsed : fallbackValue, path };
+    }
+  }
+  return { value: fallbackValue, path: fallbackPath };
+}
+
+function buildProviderDraft(
+  raw: any,
+  providerMap: Record<string, ProviderPreset>,
+  defaultProvider: string,
+) {
+  const provider = raw?.provider ?? defaultProvider;
+  const model = raw?.model ?? '';
+  const presets = providerMap[provider]?.models ?? [];
+  const useCustomModel = !!model && !presets.includes(model);
+
+  return {
+    provider,
+    model,
+    customModel: useCustomModel ? model : '',
+    useCustomModel,
+    apiKey: '',
+    baseUrl: raw?.baseUrl ?? '',
+    timeoutMs: raw?.timeoutMs ?? '',
+    hasApiKey: raw?.hasApiKey ?? !!raw?.apiKey,
+    defaultProvider,
+  };
+}
+
+function buildLlmTargetDraft(raw: any) {
+  const usesPrimaryObject = !!raw?.primary;
+  const primary = usesPrimaryObject ? raw.primary : raw;
+  const retry = getNumericConfig(raw, RETRY_FIELD_PATHS, 'retry.maxRetries', 0);
+  const retryDelay = getNumericConfig(raw, RETRY_DELAY_FIELD_PATHS, 'retry.baseDelayMs', 200);
+
+  return {
+    ...buildProviderDraft(primary, LLM_PROVIDERS, 'openai'),
+    fallback: buildProviderDraft(raw?.fallback, LLM_PROVIDERS, 'none'),
+    maxRetries: retry.value,
+    baseDelayMs: retryDelay.value,
+    _retryPath: retry.path,
+    _retryDelayPath: retryDelay.path,
+    _usesPrimaryObject: usesPrimaryObject,
+  };
+}
+
+function buildProviderPayload(draftValue: any) {
+  const model = draftValue?.useCustomModel ? draftValue?.customModel : draftValue?.model;
+  const payload: any = {
+    provider: draftValue?.provider ?? draftValue?.defaultProvider ?? 'none',
+    model: model ?? '',
+    baseUrl: draftValue?.baseUrl || '',
+  };
+  if (draftValue?.timeoutMs !== '' && draftValue?.timeoutMs !== undefined && draftValue?.timeoutMs !== null) {
+    payload.timeoutMs = Number(draftValue.timeoutMs);
+  }
+  if (draftValue?.apiKey) payload.apiKey = draftValue.apiKey;
+  return payload;
+}
+
+function buildLlmTargetPayload(draftValue: any) {
+  const primaryPayload = buildProviderPayload(draftValue);
+  const payload: any = draftValue?._usesPrimaryObject ? { primary: primaryPayload } : { ...primaryPayload };
+  payload.fallback = buildProviderPayload(draftValue?.fallback);
+  setValueAtPath(payload, 'retry.maxRetries', Number(draftValue?.maxRetries ?? 0));
+  setValueAtPath(payload, 'retry.baseDelayMs', Number(draftValue?.baseDelayMs ?? 200));
+  return payload;
+}
+
 export default function Settings() {
   const [config, setConfig] = useState<any>(null);
   const [error, setError] = useState('');
@@ -81,24 +189,8 @@ export default function Settings() {
   const startEdit = (section: SectionKey) => {
     const sectionDrafts: Record<SectionKey, () => any> = {
       llm: () => ({
-        extraction: {
-          provider: config.llm?.extraction?.provider ?? 'openai',
-          model: config.llm?.extraction?.model ?? '',
-          customModel: '',
-          useCustomModel: false,
-          apiKey: '',
-          baseUrl: config.llm?.extraction?.baseUrl ?? '',
-          hasApiKey: config.llm?.extraction?.hasApiKey ?? false,
-        },
-        lifecycle: {
-          provider: config.llm?.lifecycle?.provider ?? 'openai',
-          model: config.llm?.lifecycle?.model ?? '',
-          customModel: '',
-          useCustomModel: false,
-          apiKey: '',
-          baseUrl: config.llm?.lifecycle?.baseUrl ?? '',
-          hasApiKey: config.llm?.lifecycle?.hasApiKey ?? false,
-        },
+        extraction: buildLlmTargetDraft(config.llm?.extraction),
+        lifecycle: buildLlmTargetDraft(config.llm?.lifecycle),
         embedding: {
           provider: config.embedding?.provider ?? 'openai',
           model: config.embedding?.model ?? '',
@@ -197,11 +289,14 @@ export default function Settings() {
     // For LLM section, check if current model is in presets
     if (section === 'llm') {
       for (const key of ['extraction', 'lifecycle'] as const) {
-        const prov = d[key].provider;
-        const presets = LLM_PROVIDERS[prov]?.models ?? [];
-        if (d[key].model && !presets.includes(d[key].model)) {
-          d[key].useCustomModel = true;
-          d[key].customModel = d[key].model;
+        for (const branch of [d[key], d[key]?.fallback]) {
+          if (!branch) continue;
+          const prov = branch.provider;
+          const presets = LLM_PROVIDERS[prov]?.models ?? [];
+          if (branch.model && !presets.includes(branch.model)) {
+            branch.useCustomModel = true;
+            branch.customModel = branch.model;
+          }
         }
       }
       const embProv = d.embedding.provider;
@@ -224,7 +319,9 @@ export default function Settings() {
         const next = { ...prev };
         for (const [prefix, sub] of [
           ['extraction', d.extraction],
+          ['extraction.fallback', d.extraction?.fallback],
           ['lifecycle', d.lifecycle],
+          ['lifecycle.fallback', d.lifecycle?.fallback],
           ['embedding', d.embedding],
           ['reranker', d.reranker],
         ] as const) {
@@ -249,6 +346,28 @@ export default function Settings() {
   const saveSection = async (section: SectionKey) => {
     // ── Validation ──
     const errors: string[] = [];
+
+    if (section === 'llm') {
+      for (const key of ['extraction', 'lifecycle'] as const) {
+        const retryCount = Number(draft[key]?.maxRetries ?? 0);
+        if (!Number.isInteger(retryCount) || retryCount < 0 || retryCount > 10) {
+          errors.push(t('settings.validationRetryRange'));
+        }
+        const retryDelay = Number(draft[key]?.baseDelayMs ?? 200);
+        if (!Number.isInteger(retryDelay) || retryDelay < 0 || retryDelay > 5000) {
+          errors.push(t('settings.validationRetryDelayRange'));
+        }
+        for (const branch of [draft[key], draft[key]?.fallback]) {
+          const timeoutRaw = branch?.timeoutMs;
+          if (timeoutRaw === '' || timeoutRaw === undefined || timeoutRaw === null) continue;
+          const timeoutMs = Number(timeoutRaw);
+          if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 300000) {
+            errors.push(t('settings.validationTimeoutRange'));
+            break;
+          }
+        }
+      }
+    }
 
     if (section === 'search') {
       const vw = Number(draft.vectorWeight);
@@ -330,19 +449,9 @@ export default function Settings() {
       const payload: any = {};
 
       if (section === 'llm') {
-        const buildProviderPayload = (d: any) => {
-          const out: any = {
-            provider: d.provider,
-            model: d.useCustomModel ? d.customModel : d.model,
-            baseUrl: d.baseUrl || '',
-          };
-          if (d.apiKey) out.apiKey = d.apiKey;
-          return out;
-        };
-
         payload.llm = {
-          extraction: buildProviderPayload(draft.extraction),
-          lifecycle: buildProviderPayload(draft.lifecycle),
+          extraction: buildLlmTargetPayload(draft.extraction),
+          lifecycle: buildLlmTargetPayload(draft.lifecycle),
         };
 
         const embOut: any = {
@@ -742,7 +851,7 @@ export default function Settings() {
     for (const k of keys) d = d?.[k];
     if (!d) return null;
 
-    const provider = d.provider ?? 'openai';
+    const provider = d.provider ?? d.defaultProvider ?? 'openai';
     const preset = providerMap[provider];
     const models = preset?.models ?? [];
     const isCustomModel = d.useCustomModel;
@@ -920,11 +1029,51 @@ export default function Settings() {
                 onChange={e => updateDraft(`${prefix}.baseUrl`, e.target.value)}
               />
             </div>
+
+            <div className="form-group">
+              <label>
+                {t('settings.timeoutMs')}
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-secondary)' }}>{t('common.optional')}</span>
+              </label>
+              <input
+                type="number"
+                min={100}
+                max={300000}
+                value={d.timeoutMs ?? ''}
+                placeholder={provider === 'ollama' ? '60000' : '30000'}
+                onChange={e => updateDraft(`${prefix}.timeoutMs`, e.target.value)}
+              />
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4, lineHeight: 1.5 }}>
+                {t('settings.timeoutMsDesc')}
+              </div>
+            </div>
           </>
         )}
       </div>
     );
   };
+
+  const renderLlmStrategyBlock = (title: string, prefix: 'extraction' | 'lifecycle') => (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{title}</div>
+      {renderProviderBlock(t('settings.primaryProvider'), prefix, LLM_PROVIDERS)}
+      {renderNumberField(
+        t('settings.retryAttempts'),
+        t('settings.retryAttemptsDesc'),
+        `${prefix}.maxRetries`,
+        0,
+        10,
+      )}
+      {renderNumberField(
+        t('settings.retryDelayMs'),
+        t('settings.retryDelayMsDesc'),
+        `${prefix}.baseDelayMs`,
+        0,
+        5000,
+      )}
+      {renderProviderBlock(t('settings.fallbackProvider'), `${prefix}.fallback`, LLM_PROVIDERS)}
+    </div>
+  );
 
   // ─── Read-only display row ─────────────────────────────────────────────────
 
@@ -1022,6 +1171,7 @@ export default function Settings() {
         config={config}
         editing={isEditing('llm')}
         sectionHeader={sectionHeader}
+        renderLlmStrategyBlock={renderLlmStrategyBlock}
         renderProviderBlock={renderProviderBlock}
         testState={testState}
         handleTestLLM={handleTestLLM}

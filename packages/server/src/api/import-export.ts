@@ -96,8 +96,7 @@ export function registerImportExportRoutes(app: FastifyInstance, cortex: CortexA
       }
 
       case 'sqlite': {
-        const config = cortex['config' as any] || {};
-        const dbPath = (config as any)?.storage?.dbPath;
+        const dbPath = cortex.config.storage?.dbPath;
         if (!dbPath || dbPath === ':memory:') {
           reply.code(400);
           return { error: 'Cannot export in-memory database as SQLite dump' };

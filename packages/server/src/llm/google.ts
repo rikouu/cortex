@@ -4,15 +4,18 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('llm-google');
 
 export class GoogleLLMProvider implements LLMProvider {
-  readonly name = 'google';
+  readonly name: string;
   private apiKey: string;
   private model: string;
   private baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number; providerName?: string }) {
+    this.name = opts.providerName || 'google';
     this.apiKey = opts.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
     this.model = opts.model || 'gemini-2.0-flash';
     this.baseUrl = (opts.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+    this.timeoutMs = opts.timeoutMs || 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -35,7 +38,7 @@ export class GoogleLLMProvider implements LLMProvider {
             temperature: opts?.temperature ?? 0.3,
           },
         }),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(this.timeoutMs),
       },
     );
 

@@ -585,6 +585,26 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | **Ollama** | qwen2.5, llama3.2 | Fully local, zero cost |
 | **OpenRouter** | Any of 100+ models | Unified gateway |
 
+Each extraction/lifecycle LLM can be configured with a primary provider, an optional fallback provider, retry settings, and per-provider timeout.
+
+```json
+{
+  "llm": {
+    "extraction": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "timeoutMs": 30000,
+      "retry": { "maxRetries": 2, "baseDelayMs": 200 },
+      "fallback": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-haiku-4-5",
+        "timeoutMs": 30000
+      }
+    }
+  }
+}
+```
+
 ### Embedding (for vector search)
 
 | Provider | Recommended Models | Notes |
