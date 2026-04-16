@@ -12,7 +12,7 @@ export class OllamaLLMProvider implements LLMProvider {
   constructor(opts: { model?: string; baseUrl?: string; timeoutMs?: number }) {
     this.model = opts.model || 'qwen2.5:3b';
     this.baseUrl = opts.baseUrl || 'http://localhost:11434';
-    this.timeoutMs = opts.timeoutMs || 60000;
+    this.timeoutMs = opts.timeoutMs ?? 60000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {

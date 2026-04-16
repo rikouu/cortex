@@ -14,7 +14,7 @@ export class AnthropicLLMProvider implements LLMProvider {
     this.apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY || '';
     this.model = opts.model || 'claude-haiku-4-5';
     this.baseUrl = (opts.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
-    this.timeoutMs = opts.timeoutMs || 30000;
+    this.timeoutMs = opts.timeoutMs ?? 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {

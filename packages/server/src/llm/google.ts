@@ -15,7 +15,7 @@ export class GoogleLLMProvider implements LLMProvider {
     this.apiKey = opts.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
     this.model = opts.model || 'gemini-2.0-flash';
     this.baseUrl = (opts.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
-    this.timeoutMs = opts.timeoutMs || 30000;
+    this.timeoutMs = opts.timeoutMs ?? 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {

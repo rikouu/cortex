@@ -13,7 +13,7 @@ const LLMProviderSchema = z.object({
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
-  timeoutMs: z.number().optional(),
+  timeoutMs: z.number().int().min(100).max(300000).optional(),
 });
 
 const LLMCascadeSchema = LLMProviderSchema.extend({
@@ -40,7 +40,7 @@ const EmbeddingProviderSchema = z.object({
   dimensions: z.number().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
-  timeoutMs: z.number().optional(),
+  timeoutMs: z.number().int().min(100).max(300000).optional(),
 });
 
 const VectorBackendSchema = z.object({

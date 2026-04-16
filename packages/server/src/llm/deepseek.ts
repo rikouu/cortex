@@ -14,7 +14,7 @@ export class DeepSeekLLMProvider implements LLMProvider {
     this.apiKey = opts.apiKey || process.env.DEEPSEEK_API_KEY || '';
     this.model = opts.model || 'deepseek-chat';
     this.baseUrl = opts.baseUrl || 'https://api.deepseek.com/v1';
-    this.timeoutMs = opts.timeoutMs || 30000;
+    this.timeoutMs = opts.timeoutMs ?? 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
