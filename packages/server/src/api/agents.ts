@@ -1,9 +1,35 @@
 import type { FastifyInstance } from 'fastify';
 import { listAgents, getAgentById, getAgentStats, insertAgent, updateAgent, deleteAgent } from '../db/agent-queries.js';
+import { mergeLLMConfig, preserveLLMApiKeys, sanitizeLLMConfig } from '../llm/config-utils.js';
 import { getConfig } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('agents');
+
+function deepMerge<T>(target: T, source: any): T {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return (source === undefined ? target : source) as T;
+  }
+
+  const result: any = Array.isArray(target) ? [...target] : { ...(target as any) };
+  for (const key of Object.keys(source)) {
+    const sourceValue = source[key];
+    const targetValue = (target as any)?.[key];
+    if (
+      sourceValue !== null &&
+      typeof sourceValue === 'object' &&
+      !Array.isArray(sourceValue) &&
+      targetValue !== null &&
+      typeof targetValue === 'object' &&
+      !Array.isArray(targetValue)
+    ) {
+      result[key] = deepMerge(targetValue, sourceValue);
+    } else {
+      result[key] = sourceValue;
+    }
+  }
+  return result;
+}
 
 export function registerAgentRoutes(app: FastifyInstance): void {
   // List all agents
@@ -50,7 +76,10 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         config_override: body.config_override,
       });
       reply.code(201);
-      return agent;
+      return {
+        ...agent,
+        config_override: agent.config_override ? maskConfigKeys(JSON.parse(agent.config_override)) : null,
+      };
     } catch (e: any) {
       const isDuplicate = e.message?.includes('UNIQUE constraint') || e.message?.includes('PRIMARY KEY');
       reply.code(isDuplicate ? 409 : 400);
@@ -110,28 +139,19 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
     const globalConfig = getConfig();
     const override = agent.config_override ? JSON.parse(agent.config_override) : {};
+    const effective = deepMerge(globalConfig, override);
 
     const merged = {
       llm: {
-        extraction: {
-          provider: override.llm?.extraction?.provider ?? globalConfig.llm.extraction.provider,
-          model: override.llm?.extraction?.model ?? globalConfig.llm.extraction.model,
-          baseUrl: override.llm?.extraction?.baseUrl ?? globalConfig.llm.extraction.baseUrl,
-          hasApiKey: !!(override.llm?.extraction?.apiKey ?? globalConfig.llm.extraction.apiKey),
-        },
-        lifecycle: {
-          provider: override.llm?.lifecycle?.provider ?? globalConfig.llm.lifecycle.provider,
-          model: override.llm?.lifecycle?.model ?? globalConfig.llm.lifecycle.model,
-          baseUrl: override.llm?.lifecycle?.baseUrl ?? globalConfig.llm.lifecycle.baseUrl,
-          hasApiKey: !!(override.llm?.lifecycle?.apiKey ?? globalConfig.llm.lifecycle.apiKey),
-        },
+        extraction: sanitizeLLMConfig(mergeLLMConfig(globalConfig.llm.extraction, override.llm?.extraction)),
+        lifecycle: sanitizeLLMConfig(mergeLLMConfig(globalConfig.llm.lifecycle, override.llm?.lifecycle)),
       },
       embedding: {
-        provider: override.embedding?.provider ?? globalConfig.embedding.provider,
-        model: override.embedding?.model ?? globalConfig.embedding.model,
-        dimensions: override.embedding?.dimensions ?? globalConfig.embedding.dimensions,
-        baseUrl: override.embedding?.baseUrl ?? globalConfig.embedding.baseUrl,
-        hasApiKey: !!(override.embedding?.apiKey ?? globalConfig.embedding.apiKey),
+        provider: effective.embedding?.provider,
+        model: effective.embedding?.model,
+        dimensions: effective.embedding?.dimensions,
+        baseUrl: effective.embedding?.baseUrl,
+        hasApiKey: !!effective.embedding?.apiKey,
       },
     };
 
@@ -148,9 +168,8 @@ function maskConfigKeys(config: any): any {
     if (!result[section]) continue;
     if (section === 'llm') {
       for (const sub of ['extraction', 'lifecycle']) {
-        if (result.llm[sub]?.apiKey !== undefined) {
-          result.llm[sub] = { ...result.llm[sub], hasApiKey: !!result.llm[sub].apiKey };
-          delete result.llm[sub].apiKey;
+        if (result.llm[sub]) {
+          result.llm[sub] = sanitizeLLMConfig(result.llm[sub]);
         }
       }
     } else {
@@ -183,8 +202,9 @@ function preserveApiKeys(incoming: any, existing: any): void {
       exRef = exRef[key];
     }
     if (inRef && exRef) {
-      // Empty apiKey means "keep existing"; explicit empty string "" means clear
-      if (inRef.apiKey === undefined && exRef.apiKey) {
+      if (path[0] === 'llm') {
+        preserveLLMApiKeys(inRef, exRef);
+      } else if (inRef.apiKey === undefined && exRef.apiKey) {
         inRef.apiKey = exRef.apiKey;
       }
     }

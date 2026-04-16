@@ -7,10 +7,12 @@ export class OllamaLLMProvider implements LLMProvider {
   readonly name = 'ollama';
   private model: string;
   private baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(opts: { model?: string; baseUrl?: string }) {
+  constructor(opts: { model?: string; baseUrl?: string; timeoutMs?: number }) {
     this.model = opts.model || 'qwen2.5:3b';
     this.baseUrl = opts.baseUrl || 'http://localhost:11434';
+    this.timeoutMs = opts.timeoutMs || 60000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -26,7 +28,7 @@ export class OllamaLLMProvider implements LLMProvider {
           num_predict: opts?.maxTokens || 500,
         },
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!res.ok) {

@@ -1,10 +1,11 @@
 import React from 'react';
-import { SectionKey, LLM_PROVIDERS, EMBEDDING_PROVIDERS, RERANKER_PROVIDERS, ProviderPreset } from '../types.js';
+import { SectionKey, EMBEDDING_PROVIDERS, RERANKER_PROVIDERS, ProviderPreset } from '../types.js';
 
 interface LlmSectionProps {
   config: any;
   editing: boolean;
   sectionHeader: (title: string, section: SectionKey) => React.ReactNode;
+  renderLlmStrategyBlock: (title: string, prefix: 'extraction' | 'lifecycle') => React.ReactNode;
   renderProviderBlock: (title: string, prefix: string, providerMap: Record<string, ProviderPreset>) => React.ReactNode;
   testState: Record<string, { status: 'idle' | 'testing' | 'success' | 'error'; message?: string; latency?: number }>;
   handleTestLLM: (target: 'extraction' | 'lifecycle') => void;
@@ -14,15 +15,75 @@ interface LlmSectionProps {
 }
 
 export default function LlmSection({
-  config, editing, sectionHeader, renderProviderBlock, testState, handleTestLLM, handleTestEmbedding, handleTestReranker, t,
+  config, editing, sectionHeader, renderLlmStrategyBlock, renderProviderBlock, testState, handleTestLLM, handleTestEmbedding, handleTestReranker, t,
 }: LlmSectionProps) {
+  const getRetryCount = (llmConfig: any) => {
+    const candidates = [
+      llmConfig?.maxRetries,
+      llmConfig?.retries,
+      llmConfig?.retryCount,
+      llmConfig?.retryAttempts,
+      llmConfig?.retry?.maxRetries,
+      llmConfig?.retry?.maxAttempts,
+      llmConfig?.retry?.count,
+      llmConfig?.retry?.attempts,
+    ];
+    for (const candidate of candidates) {
+      if (candidate !== undefined && candidate !== null && candidate !== '') {
+        const parsed = Number(candidate);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+    return 0;
+  };
+
+  const getRetryDelay = (llmConfig: any) => {
+    const candidates = [
+      llmConfig?.baseDelayMs,
+      llmConfig?.retry?.baseDelayMs,
+      llmConfig?.retry?.delayMs,
+    ];
+    for (const candidate of candidates) {
+      if (candidate !== undefined && candidate !== null && candidate !== '') {
+        const parsed = Number(candidate);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+    return 200;
+  };
+
+  const formatProvider = (providerConfig: any, disabledLabel: string) => {
+    if (!providerConfig?.provider || providerConfig.provider === 'none') return disabledLabel;
+    return `${providerConfig.provider}${providerConfig.model ? ` / ${providerConfig.model}` : ''}`;
+  };
+
+  const renderLlmSummary = (target: 'extraction' | 'lifecycle') => {
+    const llmConfig = config.llm?.[target];
+    const primary = llmConfig?.primary ?? llmConfig;
+    const fallback = llmConfig?.fallback;
+    const retryCount = getRetryCount(llmConfig);
+    const retryDelay = getRetryDelay(llmConfig);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span>{formatProvider(primary, t('settings.fallbackDisabled'))}</span>
+        <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          {t('settings.fallbackSummary', { value: formatProvider(fallback, t('settings.fallbackDisabled')) })}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          {t('settings.retryAttemptsSummary', { count: retryCount })} · {t('settings.retryDelaySummary', { value: retryDelay })}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="card">
       {sectionHeader(t('settings.llmEmbedding'), 'llm')}
       {editing ? (
         <>
-          {renderProviderBlock(t('settings.extractionLlm'), 'extraction', LLM_PROVIDERS)}
-          {renderProviderBlock(t('settings.lifecycleLlm'), 'lifecycle', LLM_PROVIDERS)}
+          {renderLlmStrategyBlock(t('settings.extractionLlm'), 'extraction')}
+          {renderLlmStrategyBlock(t('settings.lifecycleLlm'), 'lifecycle')}
           {renderProviderBlock(t('settings.embedding'), 'embedding', EMBEDDING_PROVIDERS)}
           {renderProviderBlock(t('settings.rerankerTitle'), 'reranker', RERANKER_PROVIDERS)}
         </>
@@ -31,8 +92,8 @@ export default function LlmSection({
           <tbody>
             <tr>
               <td>{t('settings.extractionLlm')}</td>
-              <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>{config.llm?.extraction?.provider} / {config.llm?.extraction?.model}</span>
+              <td style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                {renderLlmSummary('extraction')}
                 <button
                   className="btn"
                   style={{ fontSize: 11, padding: '2px 8px' }}
@@ -51,8 +112,8 @@ export default function LlmSection({
             </tr>
             <tr>
               <td>{t('settings.lifecycleLlm')}</td>
-              <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>{config.llm?.lifecycle?.provider} / {config.llm?.lifecycle?.model}</span>
+              <td style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                {renderLlmSummary('lifecycle')}
                 <button
                   className="btn"
                   style={{ fontSize: 11, padding: '2px 8px' }}

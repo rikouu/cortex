@@ -12,11 +12,13 @@ export class OpenRouterLLMProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
   private baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number }) {
     this.apiKey = opts.apiKey || process.env.OPENROUTER_API_KEY || '';
     this.model = opts.model || 'anthropic/claude-haiku-4-5';
     this.baseUrl = (opts.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    this.timeoutMs = opts.timeoutMs || 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -42,7 +44,7 @@ export class OpenRouterLLMProvider implements LLMProvider {
         max_tokens: opts?.maxTokens || 500,
         temperature: opts?.temperature ?? 0.3,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!res.ok) {

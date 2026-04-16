@@ -1,4 +1,4 @@
-import { type CortexConfig, getConfig } from './utils/config.js';
+import { type CortexConfig } from './utils/config.js';
 import { createLogger } from './utils/logger.js';
 import { MemoryGate } from './core/gate.js';
 import { MemorySieve } from './core/sieve.js';
@@ -8,14 +8,26 @@ import { HybridSearchEngine } from './search/hybrid.js';
 import { MarkdownExporter } from './export/markdown.js';
 import { createVectorBackend } from './vector/index.js';
 import { createCascadeLLM } from './llm/cascade.js';
+import { hasLLMConfigOverride, mergeLLMConfig } from './llm/config-utils.js';
 import { createCascadeEmbedding } from './embedding/cascade.js';
 import { CachedEmbeddingProvider } from './embedding/cache.js';
 import { createReranker } from './search/reranker.js';
+import { getAgentById } from './db/agent-queries.js';
 import type { VectorBackend } from './vector/interface.js';
+import type { LLMCascadeConfig } from './llm/interface.js';
 import type { LLMProvider } from './llm/interface.js';
 import type { EmbeddingProvider } from './embedding/interface.js';
 
 const log = createLogger('app');
+
+export interface CortexRuntime {
+  llmExtraction: LLMProvider;
+  llmLifecycle: LLMProvider;
+  gate: MemoryGate;
+  sieve: MemorySieve;
+  flush: MemoryFlush;
+  lifecycle: LifecycleEngine;
+}
 
 export class CortexApp {
   gate: MemoryGate;
@@ -28,6 +40,7 @@ export class CortexApp {
   llmExtraction: LLMProvider;
   llmLifecycle: LLMProvider;
   embeddingProvider: EmbeddingProvider;
+  private agentRuntimeCache = new Map<string, { cacheKey: string; runtime: CortexRuntime }>();
 
   constructor(public config: CortexConfig) {
     // Initialize providers
@@ -131,6 +144,7 @@ export class CortexApp {
     }
 
     if (reloaded.length > 0) {
+      this.agentRuntimeCache.clear();
       log.info({ reloaded }, 'Rebuilt changed engines');
     }
 
@@ -148,17 +162,80 @@ export class CortexApp {
     await this.vectorBackend.close();
     log.info('CortexApp shut down');
   }
+
+  getRuntime(agentId?: string): CortexRuntime {
+    if (!agentId) {
+      return this.getGlobalRuntime();
+    }
+
+    const override = this.getAgentOverride(agentId);
+    const extractionOverride = override?.llm?.extraction;
+    const lifecycleOverride = override?.llm?.lifecycle;
+
+    if (!hasLLMConfigOverride(extractionOverride) && !hasLLMConfigOverride(lifecycleOverride)) {
+      return this.getGlobalRuntime();
+    }
+
+    const extractionConfig = mergeLLMConfig(this.config.llm.extraction, extractionOverride);
+    const lifecycleConfig = mergeLLMConfig(this.config.llm.lifecycle, lifecycleOverride);
+    const cacheKey = JSON.stringify({
+      extractionConfig,
+      lifecycleConfig,
+      gate: this.config.gate,
+      searchReranker: this.config.search.reranker,
+      sieve: this.config.sieve,
+      flush: this.config.flush,
+      lifecycle: this.config.lifecycle,
+    });
+
+    const cached = this.agentRuntimeCache.get(agentId);
+    if (cached?.cacheKey === cacheKey) {
+      return cached.runtime;
+    }
+
+    const llmExtraction = createCascadeLLM(extractionConfig);
+    const llmLifecycle = createCascadeLLM(lifecycleConfig);
+    const reranker = createReranker(this.config.search.reranker, llmExtraction);
+    const runtime: CortexRuntime = {
+      llmExtraction,
+      llmLifecycle,
+      gate: new MemoryGate(this.searchEngine, this.config.gate, llmExtraction, reranker, this.config.search.reranker?.weight),
+      sieve: new MemorySieve(llmExtraction, this.embeddingProvider, this.vectorBackend, this.config),
+      flush: new MemoryFlush(llmExtraction, this.embeddingProvider, this.vectorBackend, this.config),
+      lifecycle: new LifecycleEngine(llmLifecycle, this.embeddingProvider, this.vectorBackend, this.config),
+    };
+
+    this.agentRuntimeCache.set(agentId, { cacheKey, runtime });
+    return runtime;
+  }
+
+  private getGlobalRuntime(): CortexRuntime {
+    return {
+      llmExtraction: this.llmExtraction,
+      llmLifecycle: this.llmLifecycle,
+      gate: this.gate,
+      sieve: this.sieve,
+      flush: this.flush,
+      lifecycle: this.lifecycle,
+    };
+  }
+
+  private getAgentOverride(agentId: string): any | null {
+    const agent = getAgentById(agentId);
+    if (!agent?.config_override) return null;
+    try {
+      return JSON.parse(agent.config_override);
+    } catch (e: any) {
+      log.warn({ agentId, error: e.message }, 'Failed to parse agent config override');
+      return null;
+    }
+  }
 }
 
 /** Compare old vs new provider config to decide if provider needs recreation */
 function hasProviderChanged(
-  oldCfg: { provider?: string; model?: string; apiKey?: string; baseUrl?: string },
-  newCfg: { provider?: string; model?: string; apiKey?: string; baseUrl?: string },
+  oldCfg: LLMCascadeConfig | { provider?: string; model?: string; apiKey?: string; baseUrl?: string; dimensions?: number; timeoutMs?: number },
+  newCfg: LLMCascadeConfig | { provider?: string; model?: string; apiKey?: string; baseUrl?: string; dimensions?: number; timeoutMs?: number },
 ): boolean {
-  if (newCfg.provider !== oldCfg.provider) return true;
-  if (newCfg.model !== oldCfg.model) return true;
-  if (newCfg.baseUrl !== oldCfg.baseUrl) return true;
-  // Only compare apiKey if the new config actually provides one (non-empty)
-  if (newCfg.apiKey && newCfg.apiKey !== oldCfg.apiKey) return true;
-  return false;
+  return JSON.stringify(oldCfg) !== JSON.stringify(newCfg);
 }

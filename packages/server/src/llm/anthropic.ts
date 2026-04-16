@@ -8,11 +8,13 @@ export class AnthropicLLMProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
   private baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string }) {
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number }) {
     this.apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY || '';
     this.model = opts.model || 'claude-haiku-4-5';
     this.baseUrl = (opts.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
+    this.timeoutMs = opts.timeoutMs || 30000;
   }
 
   async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
@@ -34,7 +36,7 @@ export class AnthropicLLMProvider implements LLMProvider {
           : undefined,
         messages: [{ role: 'user', content: prompt }],
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!res.ok) {

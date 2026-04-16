@@ -6,14 +6,16 @@ export function registerLifecycleRoutes(app: FastifyInstance, cortex: CortexApp)
   app.post('/api/v1/lifecycle/run', async (req) => {
     const body = req.body as any || {};
     const agentId = body.agent_id || undefined;
-    const report = await cortex.lifecycle.run(body.dry_run || false, 'manual', agentId);
+    const runtime = cortex.getRuntime(agentId);
+    const report = await runtime.lifecycle.run(body.dry_run || false, 'manual', agentId);
     return report;
   });
 
   // Preview (dry-run)
   app.get('/api/v1/lifecycle/preview', async (req) => {
     const q = req.query as any;
-    return cortex.lifecycle.preview(q.agent_id || undefined);
+    const agentId = q.agent_id || undefined;
+    return cortex.getRuntime(agentId).lifecycle.preview(agentId);
   });
 
   // Get logs
