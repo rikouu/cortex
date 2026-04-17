@@ -2,20 +2,20 @@ import React, { useEffect, useState, useRef } from 'react';
 import { getStats, getHealth, getComponentHealth, listMemories, testConnections, recall as recallApi, listAgents } from '../api/client.js';
 import { useI18n } from '../i18n/index.js';
 
-function fmtNum(n: number): string {
-  if (n >= 100_000_000) return (n / 100_000_000).toFixed(1).replace(/\.0$/, '') + '亿';
-  if (n >= 10_000) return (n / 10_000).toFixed(1).replace(/\.0$/, '') + '万';
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+function fmtNum(n: number, t: (key: string, params?: Record<string, string | number>) => string): string {
+  if (n >= 100_000_000) return t('stats.fmtHundredMillion', { value: (n / 100_000_000).toFixed(1).replace(/\.0$/, '') });
+  if (n >= 10_000) return t('stats.fmtTenThousand', { value: (n / 10_000).toFixed(1).replace(/\.0$/, '') });
+  if (n >= 1_000) return t('stats.fmtThousand', { value: (n / 1_000).toFixed(1).replace(/\.0$/, '') });
   return String(n);
 }
 
-function timeAgo(dateStr: string, future = false): string {
+function timeAgo(dateStr: string, t: (key: string, params?: Record<string, string | number>) => string, future = false): string {
   const diff = future ? new Date(dateStr).getTime() - Date.now() : Date.now() - new Date(dateStr).getTime();
   const abs = Math.abs(diff);
-  if (abs < 60_000) return future ? '即将' : '刚刚';
-  if (abs < 3600_000) return Math.floor(abs / 60_000) + '分钟' + (future ? '后' : '前');
-  if (abs < 86400_000) return Math.floor(abs / 3600_000) + '小时' + (future ? '后' : '前');
-  return Math.floor(abs / 86400_000) + '天' + (future ? '后' : '前');
+  if (abs < 60_000) return future ? t('stats.timeSoon') : t('stats.timeJustNow');
+  if (abs < 3600_000) { const count = Math.floor(abs / 60_000); return future ? t('stats.timeMinutesLater', { count }) : t('stats.timeMinutesAgo', { count }); }
+  if (abs < 86400_000) { const count = Math.floor(abs / 3600_000); return future ? t('stats.timeHoursLater', { count }) : t('stats.timeHoursAgo', { count }); }
+  const count = Math.floor(abs / 86400_000); return future ? t('stats.timeDaysLater', { count }) : t('stats.timeDaysAgo', { count });
 }
 
 // ─── Mini Canvas Bar Chart ──────────────────────────────────────────────────
@@ -267,7 +267,7 @@ export default function Stats() {
       <div className="card-grid">
         <div className="stat-card">
           <div className="label">{t('stats.totalMemories')}</div>
-          <div className="value">{fmtNum(stats.total_memories || 0)}</div>
+          <div className="value">{fmtNum(stats.total_memories || 0, t)}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.core')}</div>
@@ -283,11 +283,11 @@ export default function Stats() {
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.relations')}</div>
-          <div className="value">{fmtNum(stats.total_relations || 0)}</div>
+          <div className="value">{fmtNum(stats.total_relations || 0, t)}</div>
         </div>
         <div className="stat-card">
           <div className="label">{t('stats.accessLogs')}</div>
-          <div className="value">{fmtNum(stats.total_access_logs || 0)}</div>
+          <div className="value">{fmtNum(stats.total_access_logs || 0, t)}</div>
         </div>
       </div>
 
@@ -369,7 +369,7 @@ export default function Stats() {
               disabled={testing}
               style={{ fontSize: 11, padding: '4px 12px' }}
             >
-              {testing ? '测试中...' : '测试连接'}
+              {testing ? t('settings.testing') : t('settings.testConnection')}
             </button>
           </div>
           {connTest && !connTest._error && (
@@ -386,7 +386,7 @@ export default function Stats() {
                   <span className={`status-dot ${val.ok ? 'ok' : 'error'}`} style={{ marginRight: 0 }} />
                   <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 11 }}>{key}</span>
                   <span style={{ color: val.ok ? 'var(--color-success)' : 'var(--color-danger)', fontFamily: 'var(--font-mono)' }}>
-                    {val.ok ? `${val.latencyMs}ms` : val.error || '失败'}
+                    {val.ok ? `${val.latencyMs}ms` : val.error || t('common.error')}
                   </span>
                 </div>
               ))}
@@ -404,10 +404,10 @@ export default function Stats() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-3)' }}>
             {components.map((c: any) => {
               const statusClass = c.status === 'ok' ? 'ok' : c.status === 'warning' ? 'warning' : c.status === 'error' || c.status === 'stopped' ? 'error' : 'inactive';
-              const statusLabel = c.status === 'ok' ? '正常' : c.status === 'warning' ? '警告' : c.status === 'error' ? '错误' : c.status === 'stopped' ? '停止' : c.status === 'not_configured' ? '未配置' : '未知';
+              const statusLabel = c.status === 'ok' ? t('stats.statusOk') : c.status === 'warning' ? t('stats.statusWarning') : c.status === 'error' ? t('stats.statusError') : c.status === 'stopped' ? t('stats.statusStopped') : c.status === 'not_configured' ? t('stats.statusNotConfigured') : t('stats.statusUnknown');
               const statusBg = c.status === 'ok' ? 'var(--color-success-muted)' : c.status === 'warning' ? 'var(--color-warning-muted)' : c.status === 'error' || c.status === 'stopped' ? 'var(--color-danger-muted)' : 'var(--color-overlay)';
               const statusFg = c.status === 'ok' ? 'var(--color-success)' : c.status === 'warning' ? 'var(--color-warning)' : c.status === 'error' || c.status === 'stopped' ? 'var(--color-danger)' : 'var(--color-text-tertiary)';
-              const ago = c.lastRun ? timeAgo(c.lastRun) : null;
+              const ago = c.lastRun ? timeAgo(c.lastRun, t) : null;
               return (
                 <div key={c.id} style={{
                   background: 'var(--color-base)',
@@ -437,30 +437,30 @@ export default function Stats() {
                   </div>
                   {ago && (
                     <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 'var(--space-1)', position: 'relative' }}>
-                      上次运行: <span style={{ fontFamily: 'var(--font-mono)' }}>{ago}</span>
+                      {t('stats.lastRun')}<span style={{ fontFamily: 'var(--font-mono)' }}>{ago}</span>
                     </div>
                   )}
                   {c.latencyMs != null && (
                     <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 'var(--space-1)', position: 'relative' }}>
-                      延迟: <span style={{ fontFamily: 'var(--font-mono)' }}>{c.latencyMs}ms</span>
+                      {t('stats.latency')}<span style={{ fontFamily: 'var(--font-mono)' }}>{c.latencyMs}ms</span>
                     </div>
                   )}
                   {c.details && (
                     <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', position: 'relative' }}>
                       {c.id === 'extraction_llm' && <>
-                        通道: {c.details.channel} · 24h: {c.details.last24h}次
-                        {c.details.errorsLast24h > 0 && <span style={{ color: 'var(--color-danger)' }}> · 错误: {c.details.errorsLast24h}</span>}
+                        {t('stats.channel')}{c.details.channel}{t('stats.last24h', { count: c.details.last24h })}
+                        {c.details.errorsLast24h > 0 && <span style={{ color: 'var(--color-danger)' }}>{t('stats.errors24h', { count: c.details.errorsLast24h })}</span>}
                       </>}
                       {c.id === 'lifecycle' && <>
-                        触发: {c.details.trigger === 'scheduled' ? '定时' : c.details.trigger === 'manual' ? '手动' : c.details.trigger || '-'}
-                        {' · '}升级: {c.details.promoted ?? 0} · 归档: {c.details.archived ?? 0}
+                        {t('stats.trigger')}{c.details.trigger === 'scheduled' ? t('stats.triggerScheduled') : c.details.trigger === 'manual' ? t('stats.triggerManual') : c.details.trigger || '-'}
+                        {' · '}{t('stats.promoted')}{c.details.promoted ?? 0} · {t('stats.archived')}{c.details.archived ?? 0}
                       </>}
                       {c.id === 'embedding' && <>
-                        模型: {c.details.model}
+                        {t('stats.modelLabel')}{c.details.model}
                       </>}
                       {c.id === 'scheduler' && <>
-                        计划: {c.details.schedule || '-'}
-                        {c.details.nextRun && <> · 下次: {timeAgo(c.details.nextRun, true)}</>}
+                        {t('stats.schedule')}{c.details.schedule || '-'}
+                        {c.details.nextRun && <>{t('stats.nextRun')}{timeAgo(c.details.nextRun, t, true)}</>}
                       </>}
                     </div>
                   )}

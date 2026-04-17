@@ -8,49 +8,21 @@ services:
       - "21100:21100"
     volumes:
       - cortex-data:/app/cortex
-      # Mount docker socket + compose file for one-click update
+      # Mount docker socket for one-click update (optional, requires write access)
+      # Remove this line if you don't need the self-update feature
       - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/cortex/docker-compose.yml:/app/docker-compose.yml:ro
-      # Docker auth for pulling private GHCR images
-      - /home/rigouu/.docker/config.json:/root/.docker/config.json:ro
     environment:
       - CORTEX_PORT=21100
       - CORTEX_HOST=0.0.0.0
       - CORTEX_DB_PATH=cortex/brain.db
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - CORTEX_AUTH_TOKEN=${CORTEX_AUTH_TOKEN:-}
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=cortex-graph-2026
-      - LOG_LEVEL=info
-      - TZ=Asia/Tokyo
-    restart: unless-stopped
-    depends_on:
-      neo4j:
-        condition: service_healthy
-
-  neo4j:
-    image: neo4j:5-community
-    ports:
-      - "7474:7474"   # Browser UI
-      - "7687:7687"   # Bolt protocol
-    volumes:
-      - neo4j-data:/data
-    environment:
-      - NEO4J_AUTH=neo4j/cortex-graph-2026
-      - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_server_memory_heap_initial__size=256m
-      - NEO4J_server_memory_heap_max__size=512m
-      - NEO4J_server_memory_pagecache_size=128m
-      - TZ=Asia/Tokyo
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      - NEO4J_URI=${NEO4J_URI:-}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TZ=${TZ:-UTC}
     restart: unless-stopped
 
 volumes:
   cortex-data:
-  neo4j-data:

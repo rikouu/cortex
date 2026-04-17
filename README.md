@@ -121,6 +121,15 @@ Conversation ──→ Fast Channel (regex, 0ms) ──→ Merge ──→ 4-tie
 - **Smart update**: preference changes are updates, not new entries
 - **Entity relations**: auto-extracted knowledge graph edges
 
+### 🔄 Self-Improvement
+
+Cortex learns from how you interact with its memories:
+
+- **Explicit feedback**: Mark memories as helpful, neutral, or wrong via Dashboard or API
+- **Implicit signals**: Memories used during recall get a usage boost
+- **Automatic tuning**: Importance scores adjust over lifecycle cycles based on accumulated feedback
+- Configure window size, min feedbacks, max delta, and signal weights in Dashboard → Settings → Self-Improvement
+
 ### 📊 Full Dashboard
 Every memory, searchable. Every extraction, auditable.
 
@@ -326,19 +335,17 @@ openssl rand -hex 24
 <details>
 <summary><b>With Neo4j (knowledge graph)</b></summary>
 
-Add to your `docker-compose.yml`:
+Use the included overlay file:
 
-```yaml
-neo4j:
-  image: neo4j:5-community
-  ports:
-    - "7474:7474"
-    - "7687:7687"
-  environment:
-    NEO4J_AUTH: neo4j/your-password
+```bash
+# Set your Neo4j password in .env
+echo "NEO4J_PASSWORD=your-secure-password" >> .env
+
+# Start with Neo4j
+docker compose -f docker-compose.yml -f docker-compose.neo4j.yml up -d
 ```
 
-Set env vars for Cortex:
+Or manually set env vars for Cortex:
 ```
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
@@ -640,17 +647,30 @@ Each extraction/lifecycle LLM can be configured with a primary provider, an opti
 | `POST` | `/api/v1/flush` | Emergency flush |
 | `POST` | `/api/v1/search` | Hybrid search with debug |
 | `CRUD` | `/api/v1/memories` | Memory management |
+| `POST` | `/api/v1/memories/:id/rollback` | Rollback to previous version |
+| `GET` | `/api/v1/memories/:id/chain` | Version chain |
+| `POST` | `/api/v1/memories/:id/feedback` | Submit memory feedback |
+| `GET` | `/api/v1/memories/:id/feedback` | Get memory feedback |
+| `POST` | `/api/v1/recall/:id/usage` | Track recall usage |
+| `GET` | `/api/v1/feedback/overview` | Feedback overview stats |
 | `CRUD` | `/api/v1/relations` | Entity relations |
 | `GET` | `/api/v1/relations/traverse` | Multi-hop graph traversal |
+| `GET` | `/api/v1/relations/path` | Shortest path between entities |
 | `GET` | `/api/v1/relations/stats` | Graph statistics |
 | `CRUD` | `/api/v1/agents` | Agent management |
 | `GET` | `/api/v1/agents/:id/config` | Agent merged config |
 | `GET` | `/api/v1/extraction-logs` | Extraction audit logs |
 | `POST` | `/api/v1/lifecycle/run` | Trigger lifecycle |
 | `GET` | `/api/v1/lifecycle/preview` | Dry-run preview |
+| `GET` | `/api/v1/lifecycle/log` | Lifecycle event history |
 | `GET` | `/api/v1/health` | Health check |
+| `GET` | `/api/v1/health/components` | Component-level health |
+| `POST` | `/api/v1/health/test` | Test all connections |
 | `GET` | `/api/v1/stats` | Statistics |
 | `GET/PATCH` | `/api/v1/config` | Global config |
+| `POST` | `/api/v1/import` | Import memories |
+| `POST` | `/api/v1/export` | Export memories |
+| `POST` | `/api/v1/reindex` | Rebuild vector index |
 
 ## Cost
 

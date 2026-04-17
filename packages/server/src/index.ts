@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -63,6 +65,24 @@ async function main() {
     origin: config.cors?.origin ?? true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
+
+  // OpenAPI / Swagger docs (dev or opt-in via env)
+  const enableDocs = process.env.NODE_ENV !== 'production' || !!process.env.CORTEX_ENABLE_DOCS;
+  if (enableDocs) {
+    await app.register(fastifySwagger, {
+      openapi: {
+        info: {
+          title: 'Cortex API',
+          description: 'Universal AI Agent Memory Service API',
+          version: '0.1.0',
+        },
+      },
+    });
+    await app.register(fastifySwaggerUi, {
+      routePrefix: '/api/docs',
+    });
+    log.info('Swagger UI enabled at /api/docs');
+  }
 
   // Auth config
   const authConfig = {

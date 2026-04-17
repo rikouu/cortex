@@ -123,6 +123,15 @@
 - **智能更新**：偏好变更是更新，不是新增
 - **实体关系**：自动提取知识图谱边
 
+### 🔄 自我改进
+
+Cortex 从你与记忆的互动中学习：
+
+- **显式反馈**：在面板或 API 中标记记忆为"有帮助""没帮助"或"错误/过时"
+- **隐式信号**：在召回中被使用的记忆自动获得使用加成
+- **自动调优**：重要性分数在生命周期循环中根据积累的反馈自动调整
+- 在面板 → 设置 → 自我改进中配置窗口大小、最少反馈数、最大变化量、信号权重
+
 ### 📊 全功能管理面板
 
 每条记忆可搜索，每次提取可审计。
@@ -251,7 +260,7 @@ git clone https://github.com/rikouu/cortex.git
 cd cortex
 pnpm install
 pnpm build        # 构建服务器 + 控制台
-pnpm start        # → http://localhost:21100
+pnpm dev          # → http://localhost:21100
 ```
 
 **开发模式**（开发者/贡献者）：
@@ -264,7 +273,7 @@ cd packages/dashboard && pnpm dev  # → http://localhost:5173
 
 > ⚠️ 开发模式下，浏览器访问 `http://localhost:21100` 会显示 404 —— 这是正常的。控制台开发服务器运行在单独的端口。
 
-**依赖：** Node.js ≥ 18, pnpm ≥ 8
+**依赖：** Node.js ≥ 20, pnpm ≥ 8
 
 </details>
 
@@ -329,19 +338,17 @@ openssl rand -hex 24
 <details>
 <summary><b>启用知识图谱 (Neo4j)</b></summary>
 
-在 `docker-compose.yml` 中添加：
+使用附带的 overlay 文件：
 
-```yaml
-neo4j:
-  image: neo4j:5-community
-  ports:
-    - "7474:7474"
-    - "7687:7687"
-  environment:
-    NEO4J_AUTH: neo4j/your-password
+```bash
+# 在 .env 中设置 Neo4j 密码
+echo "NEO4J_PASSWORD=your-secure-password" >> .env
+
+# 连同 Neo4j 一起启动
+docker compose -f docker-compose.yml -f docker-compose.neo4j.yml up -d
 ```
 
-为 Cortex 设置环境变量：
+或手动设置 Cortex 环境变量：
 ```
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
@@ -460,6 +467,28 @@ CORTEX_AUTH_TOKEN=你的令牌 CORTEX_AGENT_ID=my-agent \
 ```
 </details>
 
+#### Pairing Code — 多实例隔离
+
+如果你运行了**多个 OpenClaw 实例**（例如 Harry 的 Mac mini + Sarah 的笔记本），并且都使用相同的默认 `agent_id`（如 `"main"`），它们的记忆会混在一起。`pairing_code` 可以解决这个问题。
+
+为每个实例设置唯一的 `CORTEX_PAIRING_CODE` 环境变量：
+
+```json
+{
+  "cortexUrl": "http://localhost:21100",
+  "pairingCode": "harry-mac-mini-2026"
+}
+```
+
+或通过环境变量：
+```
+CORTEX_PAIRING_CODE=harry-mac-mini-2026
+```
+
+- 带有 pairing code 的请求只能看到带有相同 code 的记忆
+- 不带 pairing code 的请求使用原来的 `agent_id` 行为（向后兼容）
+- 每个 OpenClaw 实例应使用唯一的 code
+
 ### REST API
 
 ```bash
@@ -473,6 +502,11 @@ curl -X POST http://localhost:21100/api/v1/ingest \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer 你的令牌" \
   -d '{"user_message":"我喜欢寿司","assistant_message":"记住了！","agent_id":"default"}'
+
+# 带 pairing_code
+curl -X POST http://localhost:21100/api/v1/recall \
+  -H "Content-Type: application/json" \
+  -d '{"query":"偏好","agent_id":"main","pairing_code":"harry-mac-mini-2026"}'
 ```
 
 ---
@@ -483,6 +517,7 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 |---|---|
 | `cortex_recall` | 搜索记忆，优先注入约束和人设 |
 | `cortex_remember` | 存储一条特定记忆 |
+| `cortex_relations` | 列出记忆中的实体关系 |
 | `cortex_forget` | 删除或修正记忆 |
 | `cortex_search_debug` | 调试搜索评分 |
 | `cortex_stats` | 记忆统计 |
@@ -541,8 +576,8 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | **LLM** | （使用提取模型）| — | 质量最高，延迟 ~2-3s |
 | **Cohere** | rerank-v3.5 | 1000次/月 | 老牌稳定 |
 | **Voyage AI** | rerank-2.5 | 2亿 token | 免费额度最大 |
-| **Jina AI** | jina-reranker-v2 | 100万 token | 中文/多语言最佳 |
-| **SiliconFlow** | bge-reranker-v2-m3 | 有免费额度 | 开源模型，延迟低 |
+| **Jina AI** | jina-reranker-v2-base-multilingual | 100万 token | 中文/多语言最佳 |
+| **SiliconFlow** | BAAI/bge-reranker-v2-m3 | 有免费额度 | 开源模型，延迟低 |
 
 > 💡 专用重排序比 LLM 重排序快 **10-50 倍**（~100ms vs ~2s）。在面板 → 设置 → 搜索中配置。
 
@@ -557,17 +592,30 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | `POST` | `/api/v1/flush` | 紧急刷盘 |
 | `POST` | `/api/v1/search` | 带调试信息的混合搜索 |
 | `CRUD` | `/api/v1/memories` | 记忆管理 |
+| `POST` | `/api/v1/memories/:id/rollback` | 回滚到历史版本 |
+| `GET` | `/api/v1/memories/:id/chain` | 版本链 |
+| `POST` | `/api/v1/memories/:id/feedback` | 提交记忆反馈 |
+| `GET` | `/api/v1/memories/:id/feedback` | 获取记忆反馈 |
+| `POST` | `/api/v1/recall/:id/usage` | 追踪召回使用 |
+| `GET` | `/api/v1/feedback/overview` | 反馈概览统计 |
 | `CRUD` | `/api/v1/relations` | 实体关系 |
 | `GET` | `/api/v1/relations/traverse` | 多跳图遍历 |
+| `GET` | `/api/v1/relations/path` | 实体间最短路径 |
 | `GET` | `/api/v1/relations/stats` | 图统计 |
 | `CRUD` | `/api/v1/agents` | Agent 管理 |
 | `GET` | `/api/v1/agents/:id/config` | Agent 合并配置 |
 | `GET` | `/api/v1/extraction-logs` | 提取审计日志 |
 | `POST` | `/api/v1/lifecycle/run` | 触发生命周期 |
 | `GET` | `/api/v1/lifecycle/preview` | 干跑预览 |
+| `GET` | `/api/v1/lifecycle/log` | 生命周期事件历史 |
 | `GET` | `/api/v1/health` | 健康检查 |
+| `GET` | `/api/v1/health/components` | 组件级健康状态 |
+| `POST` | `/api/v1/health/test` | 测试所有连接 |
 | `GET` | `/api/v1/stats` | 统计信息 |
 | `GET/PATCH` | `/api/v1/config` | 全局配置 |
+| `POST` | `/api/v1/import` | 导入记忆 |
+| `POST` | `/api/v1/export` | 导出记忆 |
+| `POST` | `/api/v1/reindex` | 重建向量索引 |
 
 ## 成本
 
