@@ -13,6 +13,7 @@ function deepMerge<T>(target: T, source: any): T {
 
   const result: any = Array.isArray(target) ? [...target] : { ...(target as any) };
   for (const key of Object.keys(source)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     const sourceValue = source[key];
     const targetValue = (target as any)?.[key];
     if (

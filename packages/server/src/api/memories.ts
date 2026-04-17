@@ -1,10 +1,30 @@
 import type { FastifyInstance } from 'fastify';
 import { listMemories, getMemoryById, insertMemory, updateMemory, deleteMemory, ensureAgent, getMemoryVersionChain } from '../db/index.js';
 import type { CortexApp } from '../app.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('memories');
 
 export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp): void {
   // List memories
-  app.get('/api/v1/memories', async (req) => {
+  app.get('/api/v1/memories', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          layer: { type: 'string', enum: ['working', 'core', 'archive'] },
+          category: { type: 'string' },
+          agent_id: { type: 'string' },
+          limit: { type: 'string' },
+          offset: { type: 'string' },
+          order_by: { type: 'string', enum: ['created_at', 'updated_at', 'importance', 'decay_score', 'id', 'category', 'layer', 'access_count', 'last_accessed'] },
+          order_dir: { type: 'string', enum: ['asc', 'desc'] },
+          include_superseded: { type: 'string', enum: ['true', 'false'] },
+          has_versions: { type: 'string', enum: ['true', 'false'] },
+        },
+      },
+    },
+  }, async (req) => {
     const q = req.query as any;
     return listMemories({
       layer: q.layer,
@@ -75,7 +95,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
       if (embedding.length > 0) {
         await cortex.vectorBackend.upsert(mem.id, embedding);
       }
-    } catch { /* best effort */ }
+    } catch (err: any) { log.debug({ error: err?.message }, 'Vector operation failed (best effort)'); }
 
     reply.code(201);
     return mem;
@@ -95,7 +115,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
         if (embedding.length > 0) {
           await cortex.vectorBackend.upsert(mem.id, embedding);
         }
-      } catch { /* best effort */ }
+      } catch (err: any) { log.debug({ error: err?.message }, 'Vector operation failed (best effort)'); }
     }
 
     return mem;
@@ -130,7 +150,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
       if (embedding.length > 0) {
         await cortex.vectorBackend.upsert(restored.id, embedding);
       }
-    } catch { /* best effort */ }
+    } catch (err: any) { log.debug({ error: err?.message }, 'Vector operation failed (best effort)'); }
 
     return { ok: true, restored: restored };
   });
@@ -142,7 +162,7 @@ export function registerMemoriesRoutes(app: FastifyInstance, cortex: CortexApp):
     if (!existing) { reply.code(404); return { error: 'Memory not found' }; }
 
     deleteMemory(id);
-    try { await cortex.vectorBackend.delete([id]); } catch { /* best effort */ }
+    try { await cortex.vectorBackend.delete([id]); } catch (err: any) { log.debug({ error: err?.message }, 'Vector operation failed (best effort)'); }
     return { ok: true, id };
   });
 }

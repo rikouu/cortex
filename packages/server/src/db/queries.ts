@@ -185,8 +185,9 @@ export function listMemories(opts: {
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const orderBy = opts.orderBy || 'created_at';
-  const orderDir = opts.orderDir || 'desc';
+  const ORDERABLE = new Set(['created_at', 'updated_at', 'importance', 'decay_score', 'id', 'category', 'layer', 'access_count', 'last_accessed']);
+  const orderBy = ORDERABLE.has(opts.orderBy ?? '') ? opts.orderBy! : 'created_at';
+  const orderDir = opts.orderDir === 'asc' ? 'asc' : 'desc';
   const limit = opts.limit || 50;
   const offset = opts.offset || 0;
 
@@ -203,8 +204,9 @@ export function updateMemory(id: string, updates: Partial<Pick<Memory, 'layer' |
   const sets: string[] = [];
   const params: any[] = [];
 
+  const UPDATABLE = new Set(['layer', 'category', 'content', 'importance', 'confidence', 'decay_score', 'expires_at', 'superseded_by', 'metadata', 'is_pinned', 'source']);
   for (const [key, val] of Object.entries(updates)) {
-    if (val !== undefined) {
+    if (val !== undefined && UPDATABLE.has(key)) {
       sets.push(`${key} = ?`);
       params.push(val);
     }

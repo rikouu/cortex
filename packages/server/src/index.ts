@@ -45,6 +45,7 @@ async function main() {
   // 4. Create Fastify server
   const app = Fastify({
     logger: false,  // We use our own pino logger
+    trustProxy: !!process.env.CORTEX_TRUST_PROXY,
   });
 
 
@@ -90,6 +91,17 @@ async function main() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const dashboardPath = path.resolve(__dirname, '../../dashboard/dist');
   if (fs.existsSync(dashboardPath)) {
+    // CSP + cache headers for dashboard
+    app.addHook('onSend', async (req, reply, payload) => {
+      if (!req.url.startsWith('/api/') && !req.url.startsWith('/mcp/')) {
+        reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'");
+        if (req.url === '/' || req.url === '/index.html') {
+          reply.header('Cache-Control', 'no-store');
+        }
+      }
+      return payload;
+    });
+
     await app.register(fastifyStatic, {
       root: dashboardPath,
       prefix: '/',

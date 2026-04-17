@@ -374,7 +374,7 @@ export class MemoryWriter {
     const { smartUpdate, exactDupThreshold } = this.config.sieve;
 
     // During lifecycle runs, skip smart update to avoid data races with deduplicateCore
-    const effectiveSmartUpdate = smartUpdate && !isLifecycleActive();
+    const effectiveSmartUpdate = smartUpdate && !isLifecycleActive(agentId);
 
     const effectiveThreshold = this.getEffectiveThreshold(extraction.category);
     const searchCategories = this.getSearchCategories(extraction.category);

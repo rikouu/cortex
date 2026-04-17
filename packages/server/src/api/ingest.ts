@@ -52,8 +52,8 @@ export function registerIngestRoutes(app: FastifyInstance, cortex: CortexApp): v
 
     // Write extraction logs (fast + deep channels)
     if (cortex.config.sieve.extractionLogging && result.extraction_logs.length > 0) {
-      for (const log of result.extraction_logs) {
-        insertExtractionLog(body.agent_id || 'default', body.session_id, log);
+      for (const entry of result.extraction_logs) {
+        insertExtractionLog(body.agent_id || 'default', body.session_id, entry);
       }
     }
 

@@ -115,7 +115,7 @@ export class MarkdownExporter {
 
     const outputPath = path.join(this.exportPath, 'MEMORY.md');
     this.ensureDir(path.dirname(outputPath));
-    fs.writeFileSync(outputPath, lines.join('\n'), 'utf-8');
+    this.atomicWrite(outputPath, lines.join('\n'), 'utf-8');
     log.debug({ path: outputPath, entries: memories.length }, 'Core memory exported');
   }
 
@@ -148,7 +148,7 @@ export class MarkdownExporter {
 
     const outputDir = path.join(this.exportPath, 'working');
     this.ensureDir(outputDir);
-    fs.writeFileSync(path.join(outputDir, `${today}.md`), lines.join('\n'), 'utf-8');
+    this.atomicWrite(path.join(outputDir, `${today}.md`), lines.join('\n'), 'utf-8');
   }
 
   private async exportArchiveToMonthly(): Promise<void> {
@@ -183,8 +183,14 @@ export class MarkdownExporter {
 
       const outputDir = path.join(this.exportPath, 'archive');
       this.ensureDir(outputDir);
-      fs.writeFileSync(path.join(outputDir, `${month}.md`), lines.join('\n'), 'utf-8');
+      this.atomicWrite(path.join(outputDir, `${month}.md`), lines.join('\n'), 'utf-8');
     }
+  }
+
+  private atomicWrite(filePath: string, content: string, encoding: BufferEncoding = 'utf-8'): void {
+    const tmpPath = filePath + `.tmp-${Date.now()}`;
+    fs.writeFileSync(tmpPath, content, encoding);
+    fs.renameSync(tmpPath, filePath);
   }
 
   private ensureDir(dir: string): void {

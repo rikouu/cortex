@@ -68,12 +68,21 @@ export function startLifecycleScheduler(cortex: CortexApp): void {
           importanceAdjusted: 0,
         };
 
+        const errors: string[] = [];
         for (const agent of agents) {
-          const report = await cortex.getRuntime(agent.id).lifecycle.run(false, 'scheduled', agent.id);
-          totals.promoted += report.promoted;
-          totals.archived += report.archived;
-          totals.merged += report.merged;
-          totals.importanceAdjusted += report.importanceAdjusted ?? 0;
+          try {
+            const report = await cortex.getRuntime(agent.id).lifecycle.run(false, 'scheduled', agent.id);
+            totals.promoted += report.promoted;
+            totals.archived += report.archived;
+            totals.merged += report.merged;
+            totals.importanceAdjusted += report.importanceAdjusted ?? 0;
+          } catch (agentErr: any) {
+            log.error({ agentId: agent.id, error: agentErr.message }, 'Lifecycle cron failed for agent');
+            errors.push(`${agent.id}: ${agentErr.message}`);
+          }
+        }
+        if (errors.length > 0) {
+          log.warn({ errors }, `Lifecycle cron completed with ${errors.length} agent error(s)`);
         }
 
         log.info(totals, 'Lifecycle cron completed');

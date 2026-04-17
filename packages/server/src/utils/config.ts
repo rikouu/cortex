@@ -243,6 +243,7 @@ export function getConfig(): CortexConfig {
 function deepMerge(target: any, source: any): any {
   const result = { ...target };
   for (const key of Object.keys(source)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     if (
       source[key] !== null &&
       typeof source[key] === 'object' &&

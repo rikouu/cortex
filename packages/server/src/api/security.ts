@@ -311,51 +311,69 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
-export function registerRateLimiting(
-  app: FastifyInstance,
-  opts: { windowMs?: number; maxRequests?: number } = {},
-): void {
-  const windowMs = opts.windowMs || 60_000; // 1 minute
-  const maxRequests = opts.maxRequests || 120; // 120 req/min
+function createRateLimiter(windowMs: number, maxRequests: number): Map<string, RateLimitEntry> {
   const store = new Map<string, RateLimitEntry>();
-
-  // Cleanup stale entries every 5 minutes
   const cleanup = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of store) {
       if (entry.resetAt < now) store.delete(key);
     }
   }, 300_000);
-
-  // Ensure cleanup doesn't prevent process exit
   if (cleanup.unref) cleanup.unref();
+  return store;
+}
+
+function checkRateLimit(
+  store: Map<string, RateLimitEntry>,
+  key: string,
+  windowMs: number,
+  maxRequests: number,
+  reply: FastifyReply,
+): boolean {
+  const now = Date.now();
+  let entry = store.get(key);
+  if (!entry || entry.resetAt < now) {
+    entry = { count: 0, resetAt: now + windowMs };
+    store.set(key, entry);
+  }
+  entry.count++;
+  reply.header('X-RateLimit-Limit', maxRequests);
+  reply.header('X-RateLimit-Remaining', Math.max(0, maxRequests - entry.count));
+  reply.header('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
+  if (entry.count > maxRequests) {
+    log.warn({ ip: key, count: entry.count }, 'Rate limit exceeded');
+    reply.code(429).send({
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded. Try again in ${Math.ceil((entry.resetAt - now) / 1000)}s`,
+    });
+    return true;
+  }
+  return false;
+}
+
+export function registerRateLimiting(
+  app: FastifyInstance,
+  opts: { windowMs?: number; maxRequests?: number } = {},
+): void {
+  const windowMs = opts.windowMs || 60_000;
+  const maxRequests = opts.maxRequests || 120;
+  const globalStore = createRateLimiter(windowMs, maxRequests);
+
+  // Stricter limiter for auth endpoints (10 req/min)
+  const authWindowMs = 60_000;
+  const authMaxRequests = 10;
+  const authStore = createRateLimiter(authWindowMs, authMaxRequests);
 
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Only rate-limit API routes
     if (!req.url.startsWith('/api/')) return;
 
     const key = req.ip;
-    const now = Date.now();
-    let entry = store.get(key);
 
-    if (!entry || entry.resetAt < now) {
-      entry = { count: 0, resetAt: now + windowMs };
-      store.set(key, entry);
+    // Auth endpoints get a stricter limit
+    if (req.url.startsWith('/api/v1/auth/')) {
+      if (checkRateLimit(authStore, key, authWindowMs, authMaxRequests, reply)) return;
     }
 
-    entry.count++;
-
-    reply.header('X-RateLimit-Limit', maxRequests);
-    reply.header('X-RateLimit-Remaining', Math.max(0, maxRequests - entry.count));
-    reply.header('X-RateLimit-Reset', Math.ceil(entry.resetAt / 1000));
-
-    if (entry.count > maxRequests) {
-      log.warn({ ip: req.ip, count: entry.count }, 'Rate limit exceeded');
-      reply.code(429).send({
-        error: 'Too Many Requests',
-        message: `Rate limit exceeded. Try again in ${Math.ceil((entry.resetAt - now) / 1000)}s`,
-      });
-      return;
-    }
+    if (checkRateLimit(globalStore, key, windowMs, maxRequests, reply)) return;
   });
 }

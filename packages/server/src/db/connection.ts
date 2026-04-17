@@ -72,7 +72,7 @@ function runMigrations(db: Database.Database): void {
   if (dbPath && dbPath !== ':memory:') {
     const backupPath = `${dbPath}.backup-${Date.now()}`;
     try {
-      db.backup(backupPath).catch((e: any) => log.warn({ error: e.message }, 'Async backup failed'));
+      fs.copyFileSync(dbPath, backupPath);
       log.info({ backupPath }, `Pre-migration backup created (${pending.length} migrations pending)`);
 
       // Cleanup old backups, keep latest 3

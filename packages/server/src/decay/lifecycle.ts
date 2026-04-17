@@ -67,9 +67,12 @@ export interface LifecycleReport {
 const profileCache = new Map<string, { text: string; timestamp: number }>();
 const PROFILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Global lifecycle active flag — used by sieve to skip smart update during lifecycle
-let _lifecycleActive = false;
-export function isLifecycleActive(): boolean { return _lifecycleActive; }
+// Per-agent lifecycle active flags — used by sieve to skip smart update during lifecycle
+const _activeAgents = new Set<string>();
+export function isLifecycleActive(agentId?: string): boolean {
+  if (!agentId) return _activeAgents.size > 0;
+  return _activeAgents.has(agentId);
+}
 
 export class LifecycleEngine {
   private running = false;
@@ -95,7 +98,7 @@ export class LifecycleEngine {
     }
 
     this.running = true;
-    _lifecycleActive = true;
+    _activeAgents.add(agentId || '__global__');
     const start = Date.now();
     const report: LifecycleReport = {
       promoted: 0,
@@ -185,7 +188,7 @@ export class LifecycleEngine {
       report.errors.push(e.message);
     } finally {
       this.running = false;
-      _lifecycleActive = false;
+      _activeAgents.delete(agentId || '__global__');
     }
 
     report.completedAt = new Date().toISOString();

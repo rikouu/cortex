@@ -1,9 +1,18 @@
 import pino from 'pino';
 import { Transform } from 'node:stream';
 
-// Ring buffer for in-memory log viewing
+// Ring buffer for in-memory log viewing (O(1) insert)
 const LOG_BUFFER_SIZE = 500;
-const logBuffer: { level: string; time: number; module?: string; msg: string }[] = [];
+type LogEntry = { level: string; time: number; module?: string; msg: string };
+const _ringBuf: LogEntry[] = new Array(LOG_BUFFER_SIZE);
+let _ringHead = 0;
+let _ringCount = 0;
+
+function ringPush(entry: LogEntry): void {
+  _ringBuf[_ringHead] = entry;
+  _ringHead = (_ringHead + 1) % LOG_BUFFER_SIZE;
+  if (_ringCount < LOG_BUFFER_SIZE) _ringCount++;
+}
 
 // Tee stream: captures JSON lines into ring buffer, passes through to stdout
 const tee = new Transform({
@@ -12,13 +21,12 @@ const tee = new Transform({
       const line = chunk.toString().trim();
       if (line.startsWith('{')) {
         const parsed = JSON.parse(line);
-        logBuffer.push({
+        ringPush({
           level: pino.levels.labels[parsed.level] || 'info',
           time: parsed.time || Date.now(),
           module: parsed.module,
           msg: parsed.msg || '',
         });
-        if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
       }
     } catch {}
     cb(null, chunk);
@@ -54,10 +62,14 @@ export function getLogLevel(): string {
   return logger.level;
 }
 
-export function getLogBuffer(limit = 100, level?: string): typeof logBuffer {
-  let logs = logBuffer.slice(-Math.min(limit, LOG_BUFFER_SIZE));
-  if (level) {
-    logs = logs.filter(l => l.level === level);
+export function getLogBuffer(limit = 100, level?: string): LogEntry[] {
+  // Read from ring buffer in insertion order (oldest first)
+  const result: LogEntry[] = [];
+  const start = _ringCount < LOG_BUFFER_SIZE ? 0 : _ringHead;
+  for (let i = 0; i < _ringCount; i++) {
+    const entry = _ringBuf[(start + i) % LOG_BUFFER_SIZE]!;
+    if (!level || entry.level === level) result.push(entry);
   }
-  return logs.reverse(); // newest first
+  // Return newest first, capped at limit
+  return result.reverse().slice(0, Math.min(limit, LOG_BUFFER_SIZE));
 }
