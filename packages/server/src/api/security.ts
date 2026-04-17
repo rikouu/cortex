@@ -369,9 +369,10 @@ export function registerRateLimiting(
 
     const key = req.ip;
 
-    // Auth endpoints get a stricter limit
+    // Auth endpoints get a stricter dedicated limit
     if (req.url.startsWith('/api/v1/auth/')) {
       if (checkRateLimit(authStore, key, authWindowMs, authMaxRequests, reply)) return;
+      return; // auth endpoints only use the auth limiter
     }
 
     if (checkRateLimit(globalStore, key, windowMs, maxRequests, reply)) return;

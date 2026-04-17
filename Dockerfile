@@ -9,7 +9,7 @@ COPY packages/server/package.json packages/server/
 COPY packages/dashboard/package.json packages/dashboard/
 COPY packages/cortex-bridge/package.json packages/cortex-bridge/
 COPY packages/mcp-client/package.json packages/mcp-client/
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm -r build
@@ -33,7 +33,7 @@ COPY packages/server/package.json packages/server/
 COPY packages/dashboard/package.json packages/dashboard/
 COPY packages/cortex-bridge/package.json packages/cortex-bridge/
 COPY packages/mcp-client/package.json packages/mcp-client/
-RUN pnpm install --frozen-lockfile --prod || pnpm install --prod
+RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/packages/server/dist packages/server/dist/
 COPY --from=builder /app/packages/dashboard/dist packages/dashboard/dist/
@@ -41,7 +41,7 @@ COPY --from=builder /app/packages/dashboard/dist packages/dashboard/dist/
 ENV NODE_ENV=production
 ENV CORTEX_HOST=0.0.0.0
 ENV CORTEX_PORT=21100
-ENV TZ=Asia/Tokyo
+ENV TZ=UTC
 
 EXPOSE 21100
 

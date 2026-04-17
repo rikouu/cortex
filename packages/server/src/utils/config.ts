@@ -275,7 +275,9 @@ function persistConfig(config: CortexConfig): void {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(_configFilePath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    const tmpPath = _configFilePath + `.tmp-${Date.now()}`;
+    fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    fs.renameSync(tmpPath, _configFilePath);
   } catch {
     // best-effort: don't crash if write fails
   }

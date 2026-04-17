@@ -149,7 +149,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
       const hostname = (await import('node:os')).hostname();
 
       // Validate path to prevent injection
-      const isValidPath = (p: string) => /^\/[A-Za-z0-9_/.\-]+$/.test(p);
+      const isValidPath = (p: string) => /^\/[A-Za-z0-9_/.\-]+$/.test(p) && !p.includes('..');
 
       // Detect compose project name + config file path on host
       let project = 'cortex';
@@ -402,7 +402,7 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
     const redact = (obj: any) => {
       if (!obj || typeof obj !== 'object') return;
       for (const key of Object.keys(obj)) {
-        if (/^(apiKey|api_key|token)$/i.test(key) && typeof obj[key] === 'string') {
+        if (/^(apiKey|api_key|token|password|secret)$/i.test(key) && typeof obj[key] === 'string') {
           obj[key] = '***REDACTED***';
         } else if (typeof obj[key] === 'object') {
           redact(obj[key]);
@@ -416,6 +416,9 @@ export function registerSystemRoutes(app: FastifyInstance, cortex: CortexApp): v
   // Hot update config
   app.patch('/api/v1/config', async (req) => {
     const body = req.body as any;
+    // Strip immutable/sensitive keys — auth has dedicated routes
+    const IMMUTABLE_KEYS = ['auth', 'port', 'host', 'storage', 'cors', 'rateLimit'];
+    for (const key of IMMUTABLE_KEYS) delete body[key];
     const updated = updateConfig(body);
     const reloaded = await cortex.reloadProviders(updated);
     // Restart lifecycle scheduler if schedule changed
