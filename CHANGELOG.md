@@ -1,3 +1,15 @@
+## v0.10.7 — 2026-06-09
+
+### Features
+- **Native Hermes Agent memory provider** — Cortex can now be used as a first-class Hermes `memory.provider` (a self-hosted alternative to Mem0) with automatic pre-turn recall and post-turn ingestion, instead of only the manual MCP path. A zero-dependency reference implementation targeting Hermes' `agent/memory_provider.py` ABC ships in [`integrations/hermes/cortex`](integrations/hermes/cortex/), exposing `cortex_search` / `cortex_remember` / `cortex_forget` tools and `hermes memory setup` config. (requested by @Yat-mo, #23)
+
+### Bug Fixes
+- **sqlite-vec dimension change now actually rebuilds the vec0 table** — Switching embedding models to a different dimension (e.g. default 1536 → bge-m3 1024) silently left the old `FLOAT[1536]` virtual table in place, so every subsequent upsert/search failed with a dimension mismatch and semantic recall fell back to plain text. The dimension check read a non-existent `dimensions` key from vec0's `_info` shadow table and never matched, so the rebuild never ran — this is why a manual database wipe was the only workaround. The check now reads the declared dimension straight from the table's `CREATE` statement in `sqlite_master`. Completes the partial v0.10.4 fix. (reported by @Miantiao1231, #21)
+- **OpenClaw plugin install no longer blocked by the security scanner** — `@cortexmem/openclaw` tripped OpenClaw's "environment variable access combined with network send — possible credential harvesting" install scanner because the bundled plugin read `process.env.*` (including `CORTEX_AUTH_TOKEN`) in the same file as its `fetch` calls. The plugin now sources **all** configuration from OpenClaw's sanctioned `pluginConfig` channel and reads no environment variables, so the heuristic no longer fires. New `authToken` and `pairingCode` config keys replace the former `CORTEX_AUTH_TOKEN` / `CORTEX_PAIRING_CODE` env vars. (reported by @southxs, #22)
+
+### Packages
+- @cortexmem/openclaw@0.6.7 published (security-scanner fix; config-only, no env var reads)
+
 ## v0.10.4 — 2026-03-28
 
 ### Bug Fixes
