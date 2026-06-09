@@ -9,8 +9,12 @@
  */
 
 // ── Plugin version ──────────────────────────────────────
-const CORTEX_PAIRING_CODE = typeof process !== 'undefined' ? (process.env.CORTEX_PAIRING_CODE || '') : '';
-const PLUGIN_VERSION = '0.6.6';
+// NOTE: This plugin intentionally reads ALL configuration from OpenClaw's
+// `api.pluginConfig` channel and never touches `process.env`. Reading
+// environment variables here would (a) trip OpenClaw's "env access + network
+// send → credential harvesting" install scanner (see issue #22) and (b) bypass
+// the sanctioned plugin config flow. Configure via OpenClaw plugin settings.
+const PLUGIN_VERSION = '0.6.7';
 
 // ── Timeouts ────────────────────────────────────────────
 const RECALL_TIMEOUT = 8000;
@@ -115,12 +119,17 @@ function isUsefulForIngestion(text: string): boolean {
 }
 
 // ── Cortex HTTP helpers ─────────────────────────────────
+// All config comes from OpenClaw's pluginConfig — see note at top of file.
 function getCortexUrl(config: Record<string, any>): string {
-  return config.cortexUrl || process.env.CORTEX_URL || 'http://localhost:21100';
+  return config.cortexUrl || 'http://localhost:21100';
 }
 
 function getAuthToken(config: Record<string, any>): string {
-  return (config.authToken as string) || process.env.CORTEX_AUTH_TOKEN || '';
+  return (config.authToken as string) || '';
+}
+
+function getPairingCode(config: Record<string, any>): string {
+  return (config.pairingCode as string) || '';
 }
 
 function getHeaders(config: Record<string, any>): Record<string, string> {
@@ -131,7 +140,7 @@ function getHeaders(config: Record<string, any>): Record<string, string> {
 }
 
 function isDebug(config: Record<string, any>): boolean {
-  return config.debug === true || process.env.CORTEX_DEBUG === 'true';
+  return config.debug === true;
 }
 
 async function cortexRecall(
@@ -166,11 +175,12 @@ async function cortexIngest(
   config: Record<string, any> = {},
 ): Promise<{ ok: boolean; extracted?: number; deduplicated?: number; error?: string }> {
   try {
+    const pairingCode = getPairingCode(config);
     const payload: any = {
       user_message: userMessage,
       assistant_message: assistantMessage,
       agent_id: agentId,
-          ...(CORTEX_PAIRING_CODE && { pairing_code: CORTEX_PAIRING_CODE }),
+      ...(pairingCode && { pairing_code: pairingCode }),
     };
     if (messages && messages.length > 0) {
       payload.messages = messages;
@@ -237,7 +247,9 @@ export default {
     type: 'object',
     properties: {
       cortexUrl: { type: 'string', default: 'http://localhost:21100' },
+      authToken: { type: 'string', default: '' },
       agentId: { type: 'string', default: 'openclaw' },
+      pairingCode: { type: 'string', default: '' },
       debug: { type: 'boolean', default: false },
       contextMessages: { type: 'number', default: 4, minimum: 2, maximum: 20 },
     },
@@ -246,7 +258,7 @@ export default {
   register(api: PluginApi) {
     const config = api.pluginConfig ?? {};
     const cortexUrl = getCortexUrl(config);
-    const defaultAgentId = (config.agentId as string) || process.env.CORTEX_AGENT_ID || 'openclaw';
+    const defaultAgentId = (config.agentId as string) || 'openclaw';
     const debug = isDebug(config);
     const log = api.logger;
 

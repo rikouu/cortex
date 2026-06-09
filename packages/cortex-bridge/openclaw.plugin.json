@@ -18,6 +18,10 @@
         "type": "string",
         "default": "openclaw"
       },
+      "pairingCode": {
+        "type": "string",
+        "default": ""
+      },
       "debug": {
         "type": "boolean",
         "default": false
@@ -32,6 +36,7 @@
     "cortexUrl": { "label": "Cortex Server URL" },
     "authToken": { "label": "Auth Token (optional)" },
     "agentId": { "label": "Agent ID" },
+    "pairingCode": { "label": "Pairing Code (optional)" },
     "debug": { "label": "Enable Debug Logging" },
     "contextMessages": { "label": "Context Messages for Ingestion" }
   }

@@ -12,13 +12,20 @@ openclaw plugins install @cortexmem/openclaw
 
 ## Configure
 
-Plugin config via OpenClaw settings or environment variables:
+Configure the plugin through **OpenClaw plugin settings** (the `pluginConfig` channel).
+The plugin does **not** read environment variables — reading env vars inside a plugin
+that also makes network calls trips OpenClaw's install-time security scanner
+("environment variable access combined with network send"), so all configuration is
+passed via OpenClaw's sanctioned plugin config instead.
 
-| Config Key | Env Variable | Default | Description |
-|------------|-------------|---------|-------------|
-| `cortexUrl` | `CORTEX_URL` | `http://localhost:21100` | Cortex server URL |
-| `agentId` | — | `openclaw` | Agent identifier for memory isolation |
-| `debug` | `CORTEX_DEBUG` | `false` | Enable debug logging |
+| Config Key | Default | Description |
+|------------|---------|-------------|
+| `cortexUrl` | `http://localhost:21100` | Cortex server URL |
+| `authToken` | `''` | Bearer token for an authenticated Cortex server (optional) |
+| `agentId` | `openclaw` | Agent identifier for memory isolation |
+| `pairingCode` | `''` | Instance pairing code for ingestion scoping (optional) |
+| `debug` | `false` | Enable debug logging |
+| `contextMessages` | `4` | Recent messages used for auto-ingestion |
 
 ## Tools
 
