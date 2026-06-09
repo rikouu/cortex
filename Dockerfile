@@ -1,6 +1,6 @@
 # ============ Build Stage ============
 FROM node:22-slim AS builder
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 WORKDIR /app
 
 # Install dependencies first (cache layer)
@@ -16,7 +16,7 @@ RUN pnpm -r build
 
 # ============ Runtime Stage ============
 FROM node:22-slim AS runtime
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 
 # Minimal runtime deps (curl for healthcheck, docker CLI for self-update)
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \

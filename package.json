@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.10.7",
   "description": "Cortex - Universal AI Agent Memory Service",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "dev": "pnpm --filter @cortex/server dev",
     "build": "pnpm -r build",
