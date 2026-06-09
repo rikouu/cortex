@@ -1,0 +1,21 @@
+name: cortex
+version: 0.1.0
+description: Self-hosted Cortex memory provider for Hermes Agent. Automatic recall + ingestion and explicit remember/search/forget tools over the Cortex REST API.
+homepage: https://github.com/rikouu/cortex
+
+type: memory_provider
+
+requires_env:
+  - name: CORTEX_URL
+    description: "Cortex server URL (e.g. http://127.0.0.1:21100)"
+    url: https://github.com/rikouu/cortex
+    secret: false
+  - name: CORTEX_AUTH_TOKEN
+    description: Bearer token for an authenticated Cortex server (optional)
+    secret: true
+  - name: CORTEX_AGENT_ID
+    description: Agent identifier for memory attribution (default "hermes")
+    secret: false
+  - name: CORTEX_PAIRING_CODE
+    description: Instance pairing code for namespace isolation (optional)
+    secret: false

@@ -7,6 +7,10 @@ dist/
 .env.*
 !.env.example
 *.tsbuildinfo
-cortex/
+# Root-level runtime data dir only — not directories named "cortex" elsewhere
+# (e.g. integrations/hermes/cortex, the Hermes memory-provider plugin).
+/cortex/
 node_modules/
 .pnpm-store/
+__pycache__/
+*.pyc

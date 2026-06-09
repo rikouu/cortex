@@ -146,6 +146,7 @@ Every memory, searchable. Every extraction, auditable.
 | Integration | Setup |
 |---|---|
 | **OpenClaw** | `openclaw plugins install @cortexmem/openclaw` |
+| **Hermes Agent** | Native `MemoryProvider` — see [`integrations/hermes/cortex`](integrations/hermes/cortex/) |
 | **Claude Desktop** | Add MCP config → restart |
 | **Cursor / Windsurf** | Add MCP server in settings |
 | **Claude Code** | `claude mcp add cortex -- npx @cortexmem/mcp` |
@@ -387,6 +388,28 @@ The plugin auto-hooks into OpenClaw's lifecycle:
 | `before_compaction` | Before context compression | Emergency save before info is lost |
 
 Plus `cortex_recall` and `cortex_remember` tools for on-demand use.
+
+### Hermes Agent (native memory provider)
+
+Use Cortex as a first-class Hermes `memory.provider` (a self-hosted alternative to
+Mem0), with automatic pre-turn recall and post-turn ingestion instead of the manual
+MCP path. A zero-dependency reference provider lives in
+[`integrations/hermes/cortex`](integrations/hermes/cortex/):
+
+```bash
+mkdir -p "$HERMES_HOME/plugins/memory/cortex"
+cp integrations/hermes/cortex/{__init__.py,plugin.yaml} "$HERMES_HOME/plugins/memory/cortex/"
+```
+
+```yaml
+# ~/.hermes/config.yaml
+memory:
+  provider: cortex
+```
+
+Configure via `hermes memory setup` (or `CORTEX_URL` / `CORTEX_AUTH_TOKEN` /
+`CORTEX_AGENT_ID` / `CORTEX_PAIRING_CODE` in `~/.hermes/.env`). See the
+[integration README](integrations/hermes/cortex/README.md) for details.
 
 ### Claude Desktop (MCP)
 
