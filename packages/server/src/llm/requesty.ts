@@ -1,0 +1,58 @@
+import type { LLMProvider, LLMCompletionOpts } from './interface.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('llm-requesty');
+
+/**
+ * Requesty LLM Provider — routes to any model via Requesty's unified API.
+ * Uses OpenAI-compatible format.
+ */
+export class RequestyLLMProvider implements LLMProvider {
+  readonly name = 'requesty';
+  private apiKey: string;
+  private model: string;
+  private baseUrl: string;
+  private timeoutMs: number;
+
+  constructor(opts: { apiKey?: string; model?: string; baseUrl?: string; timeoutMs?: number }) {
+    this.apiKey = opts.apiKey || process.env.REQUESTY_API_KEY || '';
+    this.model = opts.model || 'openai/gpt-4o-mini';
+    this.baseUrl = (opts.baseUrl || 'https://router.requesty.ai/v1').replace(/\/+$/, '');
+    this.timeoutMs = opts.timeoutMs ?? 30000;
+  }
+
+  async complete(prompt: string, opts?: LLMCompletionOpts): Promise<string> {
+    if (!this.apiKey) throw new Error('Requesty API key not configured');
+
+    const messages: any[] = [];
+    if (opts?.systemPrompt) {
+      messages.push({ role: 'system', content: opts.systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+        'HTTP-Referer': 'https://github.com/rikouu/cortex',
+        'X-Title': 'Cortex Memory Service',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        max_tokens: opts?.maxTokens || 500,
+        temperature: opts?.temperature ?? 0.3,
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Requesty API error ${res.status}: ${body}`);
+    }
+
+    const data = (await res.json()) as any;
+    return data.choices?.[0]?.message?.content || '';
+  }
+}

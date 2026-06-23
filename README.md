@@ -614,6 +614,7 @@ curl -X POST http://localhost:21100/api/v1/ingest \
 | **DashScope** | qwen-plus, qwen-turbo | 通义千问, OpenAI-compatible |
 | **Ollama** | qwen2.5, llama3.2 | Fully local, zero cost |
 | **OpenRouter** | Any of 100+ models | Unified gateway |
+| **Requesty** | Any of 300+ models | OpenAI-compatible gateway |
 
 Each extraction/lifecycle LLM can be configured with a primary provider, an optional fallback provider, retry settings, and per-provider timeout.
 

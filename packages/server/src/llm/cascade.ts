@@ -4,6 +4,7 @@ import { AnthropicLLMProvider } from './anthropic.js';
 import { OllamaLLMProvider } from './ollama.js';
 import { GoogleLLMProvider } from './google.js';
 import { OpenRouterLLMProvider } from './openrouter.js';
+import { RequestyLLMProvider } from './requesty.js';
 import { DeepSeekLLMProvider } from './deepseek.js';
 import { normalizeLLMRetryConfig } from './config-utils.js';
 import { createLogger } from '../utils/logger.js';
@@ -144,6 +145,8 @@ export function createLLMProvider(config: LLMProviderConfig): LLMProvider {
       });
     case 'openrouter':
       return new OpenRouterLLMProvider(config);
+    case 'requesty':
+      return new RequestyLLMProvider(config);
     case 'ollama':
       return new OllamaLLMProvider(config);
     case 'none':

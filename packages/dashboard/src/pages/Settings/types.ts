@@ -67,6 +67,21 @@ export const LLM_PROVIDERS: Record<string, ProviderPreset> = {
     ],
     envKey: 'OPENROUTER_API_KEY',
   },
+  requesty: {
+    label: 'Requesty',
+    defaultBaseUrl: 'https://router.requesty.ai/v1',
+    models: [
+      'openai/gpt-4o-mini',
+      'openai/gpt-5.2',
+      'anthropic/claude-haiku-4-5',
+      'anthropic/claude-sonnet-4-6',
+      'google/gemini-2.5-flash',
+      'google/gemini-2.5-pro',
+      'deepseek/deepseek-chat',
+      'meta-llama/llama-4-maverick',
+    ],
+    envKey: 'REQUESTY_API_KEY',
+  },
   ollama: {
     label: 'Ollama (Local)',
     defaultBaseUrl: 'http://localhost:11434',
