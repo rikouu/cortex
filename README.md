@@ -150,6 +150,7 @@ Every memory, searchable. Every extraction, auditable.
 | **Claude Desktop** | Add MCP config → restart |
 | **Cursor / Windsurf** | Add MCP server in settings |
 | **Claude Code** | `claude mcp add cortex -- npx @cortexmem/mcp` |
+| **Hermes Agent** | Native memory provider or MCP server |
 | **Any app** | REST API: `/api/v1/recall` + `/api/v1/ingest` |
 
 ---
@@ -431,6 +432,50 @@ Settings → Developer → Edit Config:
 ```
 
 > Without auth: remove the `CORTEX_AUTH_TOKEN` line from `env`.
+
+
+### Hermes Agent
+
+Hermes Agent can connect to Cortex in two ways:
+
+1. **Native memory provider** for automatic pre-turn recall and post-turn ingestion.
+2. **MCP server** for explicit `cortex_*` tools in sessions where you prefer MCP-only access.
+
+#### Native memory provider
+
+Set Hermes config:
+
+```bash
+hermes config set memory.provider cortex
+```
+
+Add Cortex connection settings to the environment used by Hermes, typically `~/.hermes/.env`:
+
+```bash
+CORTEX_URL=http://127.0.0.1:21100
+CORTEX_AUTH_TOKEN=your-token-here
+CORTEX_AGENT_ID=hermes
+# Optional, useful when multiple Hermes instances share the same Cortex server
+CORTEX_PAIRING_CODE=your-instance-id
+```
+
+Restart Hermes after changing config or environment. Verify with:
+
+```bash
+hermes memory status
+```
+
+Expected result: provider `cortex`, plugin installed, status available.
+
+#### MCP tools
+
+If you only want explicit Cortex tools, configure Cortex as an MCP server in Hermes:
+
+```bash
+hermes mcp add cortex --command npx --args '@cortexmem/mcp --server-url http://127.0.0.1:21100'
+```
+
+For authenticated Cortex servers, include `CORTEX_AUTH_TOKEN` and `CORTEX_AGENT_ID` in the MCP server environment. After changing MCP config, restart Hermes or reload MCP if your current session supports it.
 
 ### Other MCP Clients
 

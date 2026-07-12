@@ -1,0 +1,3 @@
+name: cortex
+version: 1.0.0
+description: "Cortex — native Hermes MemoryProvider using Cortex REST APIs for automatic recall, turn ingestion, and explicit memory tools."

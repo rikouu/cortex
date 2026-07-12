@@ -152,6 +152,7 @@ Cortex 从你与记忆的互动中学习：
 | **Claude Desktop** | 添加 MCP 配置 → 重启 |
 | **Cursor / Windsurf** | 在设置中添加 MCP 服务器 |
 | **Claude Code** | `claude mcp add cortex -- npx @cortexmem/mcp` |
+| **Hermes Agent** | 原生记忆提供商或 MCP 服务器 |
 | **任何应用** | REST API: `/api/v1/recall` + `/api/v1/ingest` |
 
 ---
@@ -410,6 +411,50 @@ openclaw plugins install @cortexmem/openclaw
 ```
 
 > 不用认证：删除 `env` 中的 `CORTEX_AUTH_TOKEN` 行。
+
+
+### Hermes Agent
+
+Hermes Agent 有两种方式接入 Cortex：
+
+1. **原生记忆提供商**：每轮对话前自动 recall，每轮对话后自动 ingest。
+2. **MCP 服务器**：只暴露显式 `cortex_*` 工具，适合只想按需调用的场景。
+
+#### 原生记忆提供商
+
+设置 Hermes 配置：
+
+```bash
+hermes config set memory.provider cortex
+```
+
+把 Cortex 连接信息加入 Hermes 使用的环境文件，通常是 `~/.hermes/.env`：
+
+```bash
+CORTEX_URL=http://127.0.0.1:21100
+CORTEX_AUTH_TOKEN=你的令牌
+CORTEX_AGENT_ID=hermes
+# 可选：多个 Hermes 实例共用同一个 Cortex 服务时使用
+CORTEX_PAIRING_CODE=你的实例标识
+```
+
+修改配置或环境变量后重启 Hermes。用下面命令验证：
+
+```bash
+hermes memory status
+```
+
+预期结果：provider 为 `cortex`，plugin installed，status available。
+
+#### MCP 工具
+
+如果只需要显式 Cortex 工具，可以在 Hermes 里把 Cortex 配成 MCP 服务器：
+
+```bash
+hermes mcp add cortex --command npx --args '@cortexmem/mcp --server-url http://127.0.0.1:21100'
+```
+
+如果 Cortex 服务启用了认证，需要在 MCP server 环境里加入 `CORTEX_AUTH_TOKEN` 和 `CORTEX_AGENT_ID`。修改 MCP 配置后，重启 Hermes，或在当前会话支持时 reload MCP。
 
 ### 其他 MCP 客户端
 
